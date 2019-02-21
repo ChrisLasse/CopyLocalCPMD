@@ -1,0 +1,20 @@
+#INFO#
+#INFO# Configuration to build a  parrallel cpmd executable for Meggie
+#INFO# using the INTEL compilers (version 18, intel MPI 2018), openMPI 3.1.x, ELPA 2017.11.001
+#INFO# T. Kloeffel
+#INFO#
+
+     IRAT=2
+     FC='mpif90'
+     CC='mpicc'
+     LD='mpif90'
+     CPP='/lib/cpp -P -traditional'
+     CPPFLAGS="-D__HAS_BF_STREAM_IO -D__Linux  -D__PARALLEL -DLINUX_IFC -D__NO_MEMSIZE -D__HASNT_F08_ISO_FORTRAN_ENV"
+     CPPFLAGS=""${CPPFLAGS}" -D__HAS_LIBELPA"
+     CPPFLAGS=""${CPPFLAGS}" -D__HAS_LIBGRIMMEVDW"
+     CPPFLAGS=""${CPPFLAGS}" -D__HAS_FFT_FFTW3 -D__FFT_HAS_SPECIAL_COPY -D__FFT_HAS_LOW_LEVEL_TIMERS"
+     CPPFLAGS=""${CPPFLAGS}" -D__VECTOR "
+     FFLAGS="-O2 -g -traceback -qopenmp -r8 -pc64 -axCORE-AVX2,AVX -msse4.2 -unroll -funroll-loops -align -heap-arrays 64 -falign-loops=64 -falign-functions -align all -align array64byte -IPO"
+     LFLAGS="-O2 -g -traceback -qopenmp -mkl=parallel -lmkl_scalapack_lp64 -lmkl_blacs_openmpi_lp64 -lelpa_openmp  -L\${CPMDROOT}/vdw_lib -lgrimmevdw"
+     CFLAGS="-O2 -g -traceback -qopenmp -Wall -m64 "
+     OMP3_DISABLED=false

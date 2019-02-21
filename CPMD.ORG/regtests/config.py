@@ -1,0 +1,14 @@
+root='/home/hpc/pr28fa/lu64bag3/src/cpmd/CPMD.ORG/'
+arch='build/smuc'
+version='x'
+nproc=
+bin='${root}/${arch}/bin/cpmd.${version}'
+testsrc='${root}/regtests/tests'
+ppdir='${root}/regtests/tests/PP_LIBRARY/'
+make='make -j${nproc}'
+makedir='${root}/${arch}/'
+#cvs_update='cvs update -dP'
+nproc_mpi=2
+mpi_prefix='mpiexec -n %i'
+#mpi_suffix='-hostfile /sp/fd/teo/Hosts'
+mpi_suffix=''

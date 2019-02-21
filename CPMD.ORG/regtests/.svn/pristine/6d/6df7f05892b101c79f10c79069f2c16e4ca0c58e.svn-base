@@ -1,0 +1,5 @@
+atp_blyp_bo_capH_cnstr.inp       1
+atp_blyp_bo_oecp_cnstr.inp       1
+atp_blyp_cpmd_capH_cnstr.inp     1
+atp_blyp_cpmd_capH_fixonly.inp   1
+atp_blyp_cpmd_oecp_cnstr.inp     1

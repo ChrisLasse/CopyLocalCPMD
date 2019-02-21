@@ -1,0 +1,26 @@
+&ATOM
+ Z  =    1 
+ ZV =    1 
+ XC = 1110        .666667
+ TYPE = NORMCONSERVING CAR
+&END
+&INFO
+    ============================================================
+    |  hydrogen pseudopotential with                           |
+    |  Exchange-Correlation Functional :                       |
+    |     Slater exchange :   .6667                            |
+    |     LDA correlation : Perdew-Zunger                      |
+    |     Exchange GC     : Becke (1988)                       |
+    |     Correlation GC  : none                               |
+    |  Car normconserving PP (by P. Giannozzi)                 |
+    |  converted from H_GIAx Version 2 library style: 14.11.96 |
+    ============================================================
+&END
+&POTENTIAL
+    CAR
+              0.250156
+    0.283981 -1.962312  .537222
+    0.283981 -1.962312  .537222
+    0.283981 -1.962312  .537222
+&END
+

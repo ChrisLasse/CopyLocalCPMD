@@ -1,0 +1,110 @@
+&CPMD
+  USE_CUFFT 
+  FFT_N_STREAMS_PER_DEVICE
+  2
+  FFT_N_DEVICES_PER_TASK
+  1
+  USE_CUBLAS
+  BLAS_N_STREAMS_PER_DEVICE
+  2
+  BLAS_N_DEVICES_PER_TASK
+  1
+  optimize geometry wavefunction
+  MOLECULAR DYNAMICS BO
+  PARRINELLO-RAHMAN NPT
+  restart latest accumulators wavefunction coordinates velocities cell
+  restart nosep nosec nosee
+  INITIALIZE WAVEFUNCTION ATOMS
+  QUENCH BO ELECTRONS CELL
+  pcg minimize 
+  ODIIS
+   5
+  CONVERGENCE ORBITALS
+   0.00005
+  MAXSTEP
+   10
+  STORE
+   1000
+  TIMESTEP
+   3.0
+  EMASS
+   340.0
+  tempcontrol ions
+   300.0D0  30.0D0
+  NOSE PARAMETERS
+   4 4 4 6 7 1
+  nose ions   
+   300.0D0 1000.0D0
+  NOSE CELL
+   300.0D0  30.0D0
+  nose electrons
+   0.060  10000.0D0
+  PRINT COORDINATES FORCES
+   1000
+  REAL SPACE WFN KEEP
+  TRAJECTORY SAMPLE 
+   10
+  SUBTRACT COMVEL
+   10 
+  SPLINE RANGE
+   2.0
+&END
+
+&DFT
+  OLDCODE 
+  FUNCTIONAL HCTH
+  GC-CUTOFF
+   1.0D-08
+&END
+
+&SYSTEM
+  ANGSTROM
+  SYMMETRY
+   14
+  CELL ABSOLUTE DEGREE
+   10.860   10.860    5.430   90. 90. 90.
+  REFERENCE CELL ABSOLUTE DEGREE
+   10.860   10.860    5.430   90. 90. 90.
+  CUTOFF
+   10.0
+  PRESSURE
+  1.01325E-3
+&END
+ 
+&ATOMS
+*Si_MT_HCTH.psp KLEINMAN-BYLANDER
+   LMAX=D LOC=D
+   32
+   .000    .000    .000  
+   .000   2.715   2.715  
+  2.715   2.715    .000  
+  2.715    .000   2.715  
+  4.073   1.357   4.073  
+  1.357   1.357   1.357  
+  1.357   4.073   4.073  
+  4.073   4.073   1.357  
+   .000   5.430    .000  
+   .000   8.145   2.715  
+  2.715   8.145    .000  
+  2.715   5.430   2.715  
+  4.073   6.787   4.073  
+  1.357   6.787   1.357  
+  1.357   9.502   4.073  
+  4.073   9.502   1.357  
+  5.430    .000    .000  
+  5.430   2.715   2.715  
+  8.145   2.715    .000  
+  8.145    .000   2.715  
+  9.502   1.357   4.073  
+  6.787   1.357   1.357  
+  6.787   4.073   4.073  
+  9.502   4.073   1.357  
+  5.430   5.430    .000  
+  5.430   8.145   2.715  
+  8.145   8.145    .000  
+  8.145   5.430   2.715  
+  9.502   6.787   4.073  
+  6.787   6.787   1.357  
+  6.787   9.502   4.073  
+  9.502   9.502   1.357  
+&END

@@ -1,0 +1,5 @@
+QM/MM Regtests for AMBER force field:
+
+ Car-Parrinello MD within BLYP and optimized eff. core pot.   atp_blyp_cpmd_oecp.in
+ Born-Oppenheimer MD within BLYP and optimized eff. core pot. atp_blyp_bo_oecp.in
+ Born-Oppenheimer MD within BLYP and OECP + SPLIT option      atp_blyp_cpmd_oecp_split.in

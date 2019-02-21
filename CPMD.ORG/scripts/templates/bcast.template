@@ -1,0 +1,27 @@
+subroutine mp_bcast_${NAME}(data, ${ARG_LEN_NAME} root,comm)
+#ifdef __PARALLEL
+  use mpi
+#endif
+  ! Arguments
+  integer, intent(in) :: ${ARG_LEN_NAME} root,comm
+  ${TYPE}${KIND}, intent(inout) ${DIMENSION} :: data
+  ! Variables
+  integer :: ierr
+  character(*),parameter :: procedureN='mp_bcast_${NAME}'
+#ifdef __PARALLEL
+  integer,save :: size
+  logical :: first=.true.
+  real(real_8) :: tim1,tim2
+  if (first) then
+    call mpi_type_size(${MPI_TYPE},size,ierr)
+    first=.false.
+  end if
+  cmcal(ipar_cast)=cmcal(ipar_cast)+1.0d0
+  cmlen(ipar_cast)=cmlen(ipar_cast)+${MPI_LEN}*size
+  tim1=m_walltime()      
+  call mpi_bcast(data,${MPI_LEN},${MPI_TYPE},root,comm,ierr)
+  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+  tim2=m_walltime()
+  cmtim(ipar_cast)=cmtim(ipar_cast)+tim2-tim1
+#endif
+end subroutine mp_bcast_${NAME}
