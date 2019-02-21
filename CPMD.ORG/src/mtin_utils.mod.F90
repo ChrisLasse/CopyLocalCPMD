@@ -207,7 +207,7 @@ CONTAINS
           y=REAL(j-1,kind=real_8)*dy
           IF (y.GT.ay) y=2._real_8*ay-y
           DO ii=1,parm%nr1
-             i=ii+parap%nrxpl(1,parai%mepos)-1
+             i=ii+parap%nrxpl(parai%mepos,1)-1
              x=REAL(i-1,kind=real_8)*dx
              IF (x.GT.ax) x=2._real_8*ax-x
              r2=x*x+y*y+z*z

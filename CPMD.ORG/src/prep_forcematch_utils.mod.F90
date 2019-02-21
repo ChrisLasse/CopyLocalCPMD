@@ -1,11 +1,11 @@
 MODULE prep_forcematch_utils
   USE bsym,                            ONLY: bsfac
   USE ddip,                            ONLY: lenbk
-  USE distribution_utils,              ONLY: dist_size
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
   USE fnlalloc_utils,                  ONLY: fnlalloc,&
                                              fnldealloc
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8
   USE linres,                          ONLY: clrwf,&
                                              nlinr,&
@@ -25,8 +25,7 @@ MODULE prep_forcematch_utils
                                              c0old2
   USE system,                          ONLY: cnti,&
                                              cntl,&
-                                             nkpt,&
-                                             paraw
+                                             nkpt
   USE utils,                           ONLY: nxxfun
   USE zeroing_utils,                   ONLY: zeroing
 
@@ -137,7 +136,7 @@ CONTAINS
             __LINE__,__FILE__)
        clrwf => c1
        IF (cntl%tdmal) THEN
-          CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+          CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
           ! CALL MEMORY(IP_GAMX,NSTATE*NSTX*BSFAC,'GAMX') 
           ! CALL MEMORY(IP_GAMY,NSTATE*NSTX*BSFAC,'GAMY') 
           ALLOCATE(gamx(nstate*nstx*bsfac),STAT=ierr)

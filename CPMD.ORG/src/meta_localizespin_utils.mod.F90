@@ -129,7 +129,7 @@ CONTAINS
        ! rhos=abs(RHOE(IR,1) - 2.0_real_8*RHOE(IR,2))    ! spindensity justincase
        rhos=ABS(rhoe(i,j,k,1) - 2.0_real_8*rhoe(i,j,k,2))
 
-       tgbx=pi2*REAL(parap%nrxpl(1,parai%mepos)+i-1,kind=real_8)/REAL(spar%nr1s,kind=real_8)
+       tgbx=pi2*REAL(parap%nrxpl(parai%mepos,1)+i-1,kind=real_8)/REAL(spar%nr1s,kind=real_8)
        tgby=pi2*REAL(j-1,kind=real_8)/REAL(spar%nr2s,kind=real_8)
        tgbz=pi2*REAL(k-1,kind=real_8)/REAL(spar%nr3s,kind=real_8)
 
@@ -145,7 +145,7 @@ CONTAINS
              ! if (i.eq.NR1+1.OR.j.eq.NR2+1.OR.k.eq.NR3+1) CYCLE
              ! rhos=abs(RHOE(IR,1) - 2.0_real_8*RHOE(IR,2))    ! spindensity justincase
              rhos=ABS(rhoe(i,j,k,1) - 2.0_real_8*rhoe(i,j,k,2))
-             tgbx=pi2*REAL(parap%nrxpl(1,parai%mepos)+i-1,kind=real_8)/REAL(spar%nr1s,kind=real_8)
+             tgbx=pi2*REAL(parap%nrxpl(parai%mepos,1)+i-1,kind=real_8)/REAL(spar%nr1s,kind=real_8)
              tgby=pi2*REAL(j-1,kind=real_8)/REAL(spar%nr2s,kind=real_8)
              tgbz=pi2*REAL(k-1,kind=real_8)/REAL(spar%nr3s,kind=real_8)
 
@@ -244,7 +244,7 @@ CONTAINS
              j=1+INT(MOD(ir-1,nsrj)/nsri)
              k=1+INT((ir-1)/nsrj)
              IF (i.EQ.parm%nr1+1.OR.j.EQ.parm%nr2+1.OR.k.EQ.parm%nr3+1) CYCLE
-             tgbx=pi2*REAL(parap%nrxpl(1,parai%mepos)+i-1,kind=real_8)/REAL(spar%nr1s,kind=real_8)
+             tgbx=pi2*REAL(parap%nrxpl(parai%mepos,1)+i-1,kind=real_8)/REAL(spar%nr1s,kind=real_8)
              tgby=pi2*REAL(j,kind=real_8)/REAL(spar%nr2s,kind=real_8)
              tgbz=pi2*REAL(k,kind=real_8)/REAL(spar%nr3s,kind=real_8)
 

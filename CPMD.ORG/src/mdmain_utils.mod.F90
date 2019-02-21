@@ -369,7 +369,7 @@ CONTAINS
             WRITE(6,333) 'BROKEN SYMMETRY INIT SUCCESSFUL'
     ENDIF
     ! 
-    CALL mp_bcast(taup,SIZE(taup),parai%io_source,parai%cp_grp)
+    CALL mp_bcast(taup,SIZE(taup),parai%source,parai%allgrp)
     CALL dcopy(3*maxsys%nax*maxsys%nsx,taup,1,taui,1)
     ! INITIALIZE WF CENTERS & SPREAD
     IF (vdwl%vdwd) THEN
@@ -465,8 +465,8 @@ CONTAINS
     ENDIF
     ! >>>
     ! make sure the velocities are correctly replicated while using groups      
-    CALL mp_bcast(velp,SIZE(velp),parai%io_source,parai%cp_grp)
-    CALL mp_bcast(cm,ncpw%ngw*nstate*bsfac,parai%io_source,parai%cp_inter_grp)
+    CALL mp_bcast(velp,SIZE(velp),0,parai%cp_grp)
+    CALL mp_bcast(cm,ncpw%ngw*nstate*bsfac,0,parai%cp_inter_grp)
     ! <<<
     ! RESET ACCUMULATORS
     IF (paral%parent.AND.irec(irec_ac).EQ.0)&
@@ -800,7 +800,7 @@ CONTAINS
        ENDIF
        ! ==================================================================
        ! Meta Dynamics of Collective Variables
-       ! TODO: We should move this to forcedr_driver
+
        IF (lmeta%lcolvardyn) THEN
           lquench = .FALSE.
           lmetares= .FALSE.
@@ -866,20 +866,17 @@ CONTAINS
 
        ! ==================================================================
        ! IF (lmeta%lcolvardyn .AND. paral%parent) THEN ! bugfix
-       ! TODO: This should be moved to forcedr_driver!
-       IF (lmeta%lcolvardyn .AND. paral%parent) THEN
-          IF (paral%io_parent) THEN
+       IF (lmeta%lcolvardyn .AND. paral%io_parent) THEN
+
           ! Additional Contribution to FION due to the Metadynamics
           ! (from coupling pot.if extended Lagrangian, directly from V(S,t) if not)
-             DO is = 1,ions1%nsp
-                DO ia = 1,ions0%na(is)
-                   fion(1,ia,is) = fion(1,ia,is) + fhills(1,ia,is)
-                   fion(2,ia,is) = fion(2,ia,is) + fhills(2,ia,is)
-                   fion(3,ia,is) = fion(3,ia,is) + fhills(3,ia,is)
-                ENDDO
+          DO is = 1,ions1%nsp
+             DO ia = 1,ions0%na(is)
+                fion(1,ia,is) = fion(1,ia,is) + fhills(1,ia,is)
+                fion(2,ia,is) = fion(2,ia,is) + fhills(2,ia,is)
+                fion(3,ia,is) = fion(3,ia,is) + fhills(3,ia,is)
              ENDDO
-          ENDIF
-          CALL mp_bcast(fion,3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_inter_grp)
+          ENDDO
        ENDIF
 
 
@@ -1020,7 +1017,7 @@ CONTAINS
           ekinc=(scalhs*ekinc_hs)+(scalbs*ekinc_bs)
        ENDIF
        ! ENERGY OF THE NOSE THERMOSTATS
-       IF (paral%io_parent) THEN
+       IF (paral%parent) THEN
           bsclcs=1
           CALL noseng(iteropt%nfi,velp,enose,enosp,dummy(1),ipwalk)
           IF (cntl%bsymm)THEN
@@ -1031,7 +1028,7 @@ CONTAINS
              enose=(scalbs*enosbs)+(scalhs*enoshs)
           ENDIF
        ENDIF
-       IF (paral%io_parent) THEN
+       IF (paral%parent) THEN
           econs=ekinp+ener_com%etot+enose+enosp+ener_com%ecnstr+ener_com%erestr+ekincv+vharm+glepar%egle
           ! 
 #if defined (__QMECHCOUPL)

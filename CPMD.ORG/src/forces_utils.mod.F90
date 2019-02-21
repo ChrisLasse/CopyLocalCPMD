@@ -1,7 +1,7 @@
 MODULE forces_utils
-  USE distribution_utils,              ONLY: dist_size
   USE fft_maxfft,                      ONLY: maxfft
   USE fnonloc_utils,                   ONLY: give_scr_fnonloc
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE nlforce_utils,                   ONLY: give_scr_nlforce
   USE nlps,                            ONLY: imagp
   USE opeigr_utils,                    ONLY: give_scr_opeigr
@@ -14,8 +14,7 @@ MODULE forces_utils
   USE summat_utils,                    ONLY: give_scr_summat
   USE symtrz_utils,                    ONLY: give_scr_symvec
   USE system,                          ONLY: cnti,&
-                                             cntl,&
-                                             paraw
+                                             cntl
 
   IMPLICIT NONE
 
@@ -61,7 +60,7 @@ CONTAINS
     il_scrdip=0
     IF (cntl%tfield) CALL give_scr_opeigr(il_scrdip,tag,nstate)
     IF (cntl%tdmal) THEN
-       CALL dist_size(nstate,parai%nproc,paraw%NWA12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+       CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
        il_amat=3*nstate*nstx
     ELSE
        il_amat=0

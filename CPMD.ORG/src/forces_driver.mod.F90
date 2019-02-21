@@ -5,14 +5,12 @@ MODULE forces_driver
                                              cp_grp_get_sizes,&
                                              cp_grp_redist
   USE csize_utils,                     ONLY: csize
-  USE distribution_utils,              ONLY: dist_size
   USE dotp_utils,                      ONLY: dotp
   USE efield_utils,                    ONLY: extfield
   USE elct,                            ONLY: crge
   USE ener,                            ONLY: ener_com
   USE error_handling,                  ONLY: stopgm
   USE fft_maxfft,                      ONLY: maxfft
-  USE fft,                             ONLY: blocking_fft
   USE fnonloc_utils,                   ONLY: fnonloc,&
                                              give_scr_fnonloc
   USE func,                            ONLY: func1
@@ -23,6 +21,7 @@ MODULE forces_driver
   USE hnlmat_utils,                    ONLY: hnlmat
   USE hubbardu,                        ONLY: c2u0,hubbu
   USE hubbardu_utils,                  ONLY: add_hubbardu 
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8
   USE kpts,                            ONLY: tkpts
   USE mp_interface,                    ONLY: mp_sum
@@ -66,8 +65,7 @@ MODULE forces_driver
                                              tiset
   USE utils,                           ONLY: zclean,&
                                              zclean_k
-  USE vpsi_utils,                      ONLY: vpsi,&
-                                             vpsi_blocking
+  USE vpsi_utils,                      ONLY: vpsi
 !!use rotate_utils, only : rotate_c
 !!use ovlap_utils, only : ovlap_c
   USE zeroing_utils,                   ONLY: zeroing
@@ -139,11 +137,12 @@ CONTAINS
     ENDIF
     IF (cntl%tfield) CALL give_scr_opeigr(il_scrdip,tag,nstate)
     IF (cntl%tdmal) THEN
-       ALLOCATE(NWA12_grp(2,0:parai%cp_nproc-1),stat=ierr)
+       ALLOCATE(NWA12_grp(0:parai%cp_nproc-1,2),stat=ierr)
        IF (ierr.NE.0) CALL stopgm(procedureN,'Allocation problem',& 
             __LINE__,__FILE__)
-       CALL dist_size(nstate,parai%cp_nproc,NWA12_grp,nblock=cnti%nstblk,nbmax=NSTX_grp,fw=1)
-       CALL dist_size(nstate,parai%nproc,paraw%NWA12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+       CALL set_orbdist(nstate,cnti%nstblk,parai%cp_nproc,NSTX_grp)
+       NWA12_grp(0:parai%cp_nproc-1,1:2)=paraw%nwa12(0:parai%cp_nproc-1,1:2)
+       CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
        il_gam=1
     ELSE
        CALL give_scr_summat(lsummat,tag,nstate)
@@ -158,11 +157,7 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     DO ikind=1,nkpoint
        IF (nstate >0 ) THEN
-          IF (pslo_com%tivan) THEN
-             CALL rnlsm(c0(:,:,ikind),nstate,1,ikind,tfor,rdst=.FALSE.,packed_dfnl=.TRUE.)
-          ELSE
-             CALL rnlsm(c0(:,:,ikind),nstate,1,ikind,tfor,.TRUE.)
-          END IF
+          CALL rnlsm(c0(:,:,ikind),nstate,1,ikind,tfor)
        ENDIF
     ENDDO
     rsactive = cntl%krwfn
@@ -225,11 +220,7 @@ CONTAINS
     ENDIF
 
     DO ik=1,nkpoint
-       IF (blocking_fft) THEN
-          CALL vpsi_blocking(c0(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,redist_c2)
-       ELSE
-          CALL vpsi(c0(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,redist_c2)
-       END IF
+       CALL vpsi(c0(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,redist_c2)
        ! c2u0 is calculated in uprho or rscpot
        IF (hubbu%debug) THEN
             IF (paral%io_parent) write(6,*) procedureN,"| starting add_hubbardu"
@@ -261,7 +252,7 @@ CONTAINS
                 CALL rotate(-1.0_real_8,c0(:,:,ik),1.0_real_8,c2,gam,&
                      nstate,2*nkpt%ngwk,cntl%tlsd,spin_mod%nsup,spin_mod%nsdown)
              ENDIF
-             CALL nlforce(c2,crge%f,gam,nstate)
+             CALL nlforce(c2,crge%f,gam,auxc,ddia,nstate)
           ELSE
              CALL fnonloc(c2,crge%f,nstate,ik,clsd%nlsd,.TRUE.)
           ENDIF
@@ -343,8 +334,8 @@ CONTAINS
                            __LINE__,__FILE__)
                       DO i=1,nstate
                          fi= fsc(i)
-                         DO j=NWA12_grp(1,parai%cp_me),nwa12_grp(2,parai%cp_me)
-                            jj=j-NWA12_grp(1,parai%cp_me)+1
+                         DO j=NWA12_grp(parai%cp_me,1),nwa12_grp(parai%cp_me,2)
+                            jj=j-NWA12_grp(parai%cp_me,1)+1
                             fj= fsc(j)
                             a1mat(i,jj)=(fi*fj)*a1mat(i,jj)
                             ! >>>>
@@ -364,7 +355,7 @@ CONTAINS
 
                       CALL rotate_da(-1._real_8,c0(first_g,1,ik),1._real_8,&
                            c2(first_g,1),a1mat,2*ncpw%ngw,2*ngw_l,&
-                           nstate,NWA12_grp(1,0),nwa12_grp(2,0),&
+                           nstate,NWA12_grp(0,1),nwa12_grp(0,2),&
                            NSTX_grp,parai%cp_me,parap%pgroup,parai%cp_nproc,parai%cp_grp,&
                            cntl%tlsd,spin_mod%nsup,spin_mod%nsdown)
 

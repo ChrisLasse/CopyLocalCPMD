@@ -63,9 +63,9 @@ CONTAINS
                       lj=sgpp2%lpval(jv,is)
                       IF (l2.EQ.l.AND.li.EQ.lj) THEN
                          kj=sgpp2%lfval(jv,is)
-                         DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
+                         DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
                             tx=2.0_real_8*f(i)*sgpp2%hlsg(ki,kj,l,is)
-                            ii=i-parap%nst12(1,parai%mepos)+1
+                            ii=i-parap%nst12(parai%mepos,1)+1
                             IF (cntl%tfdist) THEN
                                tt=tt+tx*(&
                                     fnl3(iat,iv,ii)*dfnl(iat,jv,k,ii)+&
@@ -82,8 +82,8 @@ CONTAINS
              ELSE
                 DO iv=1,nlps_com%ngh(is)
                    temp=2._real_8*wsg(is,iv)
-                   DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                      ii=i-parap%nst12(1,parai%mepos)+1
+                   DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                      ii=i-parap%nst12(parai%mepos,1)+1
                       IF (cntl%tfdist) THEN
                          tt=tt+temp*f(i)*(&
                               fnl3(iat,iv,ii)*dfnl(iat,iv,k,ii)+&

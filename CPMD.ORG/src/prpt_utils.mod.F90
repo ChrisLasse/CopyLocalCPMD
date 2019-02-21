@@ -1,11 +1,11 @@
 MODULE prpt_utils
   USE atwf,                            ONLY: atwp
   USE ddip,                            ONLY: lenbk
-  USE distribution_utils,              ONLY: dist_size
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
   USE fnlalloc_utils,                  ONLY: fnlalloc,&
                                              fnldealloc
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8
   USE npt_md_utils,                    ONLY: npt_bomd,&
                                              npt_cpmd
@@ -19,8 +19,7 @@ MODULE prpt_utils
   USE system,                          ONLY: cnti,&
                                              cntl,&
                                              ncpw,&
-                                             nkpt,&
-                                             paraw
+                                             nkpt
   USE utils,                           ONLY: nxxfun
   USE vdwcmod,                         ONLY: vdwl
   USE zeroing_utils,                   ONLY: zeroing
@@ -146,7 +145,7 @@ CONTAINS
          __LINE__,__FILE__)
     CALL zeroing(vpp)
     IF (cntl%tdmal) THEN
-       CALL dist_size(nstate,parai%nproc,paraw%NWA12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+       CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
        ALLOCATE(gamx(nstate*nstx),STAT=ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
             __LINE__,__FILE__)

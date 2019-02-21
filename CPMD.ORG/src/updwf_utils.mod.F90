@@ -20,6 +20,7 @@ MODULE updwf_utils
   USE pcgrad_driver,                   ONLY: pcgrad
   USE pcgrad_utils,                    ONLY: give_scr_pcgrad
   USE pslo,                            ONLY: pslo_com
+  USE rnlsm_utils,                     ONLY: rnlsm
   USE ropt,                            ONLY: iteropt,&
                                              ropt_mod
   USE soft,                            ONLY: soft_com
@@ -143,10 +144,9 @@ CONTAINS
           ENDIF
        ELSE
           CALL preortho(c0,nstate)
-          !TK code cleaning: rnlsm moved into rgsvan
-          !IF (pslo_com%tivan) THEN
-          !   CALL rnlsm(c0,nstate,1,1,.FALSE.)
-          !ENDIF
+          IF (pslo_com%tivan) THEN
+             CALL rnlsm(c0,nstate,1,1,.FALSE.)
+          ENDIF
           CALL ortho(nstate,c0,c2)
        ENDIF
     ENDIF

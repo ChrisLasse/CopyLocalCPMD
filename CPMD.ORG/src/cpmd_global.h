@@ -70,41 +70,7 @@
 #define _HAS_LIBXC
 #endif
 
-!gm grimme lib for vdw
-#if defined(__HAS_LIBGRIMMEVDW)
-#define _HAS_LIBGRIMMEVDW
-#endif
 
-!gm elpa lib 
-#if defined(__HAS_LIBELPA)
-#define _HAS_LIBELPA
-#endif
-!tk debugging---------------------------------------------
-!tk force debugging: rpiiint, newd, potfor, cofor, rnlfor, rnlfl, vdw_grimme
-#if defined(__VERBOSE_FORCE_DBG)
-#define _VERBOSE_FORCE_DBG
-#endif
-!tk ionic positions: posupi
-#if defined(__VERBOSE_IONIC_POSITIONS_DBG)
-#define _VERBOSE_IONIC_POSITIONS_DBG
-#endif
-  !tk ionic velocities: velupi,noseup
-#if defined(__VERBOSE_IONIC_VELOCITIES_DBG)
-#define _VERBOSE_IONIC_VELOCITIES_DBG
-#endif
-!tk ------------------------------------------------------
-!tk use overlapping communication / computation (rnlsm1/2,nlforce,fft_blocking)
-#if defined(__USE_OVERLAPPING_COM_COMP)
-#define _USE_OVERLAPPING_COM_COMP)
-#endif
-!tk INTEL MKL needs special setting for nested calls
-#if defined(__INTEL_MKL)
-#define _INTEL_MKL
-#endif
-!tk use scratchmodule
-#if defined(__USE_SCRATCHLIBRARY)
-#define _USE_SCRATCHLIBRARY
-#endif
 !vw ------------------------------------------------------
 !vw CUDA 
 

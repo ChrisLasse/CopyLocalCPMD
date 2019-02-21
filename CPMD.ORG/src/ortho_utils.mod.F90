@@ -12,13 +12,13 @@ MODULE ortho_utils
                                              cp_cuwfn_finalize,&
                                              cp_cuwfn_init
   USE cp_grp_utils,                    ONLY: cp_grp_get_sizes
-  USE distribution_utils,              ONLY: dist_size
   USE disortho_utils,                  ONLY: disortho_new,&
                                              disortho_old
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
   USE geq0mod,                         ONLY: geq0
   USE gsortho_utils,                   ONLY: gs_ortho
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8
   USE kpts,                            ONLY: tkpts
   USE lowdin_utils,                    ONLY: give_scr_lowdin,&
@@ -31,12 +31,12 @@ MODULE ortho_utils
   USE rgs_utils,                       ONLY: rgs,&
                                              rgs_c
   USE rgsvan_utils,                    ONLY: rgsvan
+  USE sfac,                            ONLY: fnl
   USE spin,                            ONLY: spin_mod
   USE system,                          ONLY: cnti,&
                                              cntl,&
                                              ncpw,&
-                                             nkpt,&
-                                             paraw
+                                             nkpt
   USE td_input,                        ONLY: td_prop
   USE timer,                           ONLY: tihalt,&
                                              tiset
@@ -72,8 +72,7 @@ CONTAINS
     IF( cnti%disortho_bsize /= 0 ) THEN
        max_norbx = MIN(cnti%disortho_bsize,max_nstate)
     ELSE
-       CALL dist_size(max_nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=max_norbx,&
-            fw=1)
+       CALL set_orbdist(max_nstate,cnti%nstblk,parai%cp_nproc,max_norbx)
     ENDIF
 
 
@@ -132,9 +131,9 @@ CONTAINS
     CHARACTER(*), PARAMETER                  :: procedureN = 'ortho'
 
     COMPLEX(real_8), ALLOCATABLE             :: csmat(:)
-    REAL(real_8), ALLOCATABLE                :: smat(:)
     INTEGER                                  :: ierr, isub, lsmat
     LOGICAL                                  :: debug
+    REAL(real_8), ALLOCATABLE                :: smat(:)
 
     CALL tiset(procedureN,isub)
     ! ==--------------------------------------------------------------==
@@ -194,56 +193,69 @@ CONTAINS
        CALL lowdin(c0,cscr,nstate)
     ELSE
        IF (pslo_com%tivan) THEN
-          !TK spin case is handled inside rgsvan
-          lsmat=nstate*nstate
-          ALLOCATE(smat(lsmat), stat=ierr)
-          IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate smat',& 
-               __LINE__,__FILE__)
-          CALL rgsvan(c0,nstate,smat,.FALSE.)
-          DEALLOCATE(smat, stat=ierr)
-          IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate smat',& 
-               __LINE__,__FILE__)
+          IF (cntl%tlsd) THEN
+             lsmat=MAX(spin_mod%nsup,spin_mod%nsdown)**2
+             ALLOCATE(smat(lsmat),STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+                  __LINE__,__FILE__)
+             CALL rgsvan(c0(:,1:spin_mod%nsup),  &
+                  fnl(:,:,:,1:spin_mod%nsup,1),spin_mod%nsup,  smat)
+             CALL rgsvan(c0(:,spin_mod%nsup+1:spin_mod%nsup+spin_mod%nsdown),&
+                  fnl(:,:,:,spin_mod%nsup+1:,1),spin_mod%nsdown,smat)
+             DEALLOCATE(smat,STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+                  __LINE__,__FILE__)
+          ELSE
+             lsmat=nstate*nstate
+             ALLOCATE(smat(lsmat),STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+                  __LINE__,__FILE__)
+             CALL rgsvan(c0,fnl(:,:,:,:,1),nstate,smat)
+             DEALLOCATE(smat,STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+                  __LINE__,__FILE__)
+          ENDIF
        ELSE
           IF (cntl%tlsd) THEN
              IF (tkpts%tkpnt) THEN
                 lsmat=MAX(spin_mod%nsup,spin_mod%nsdown)**2
-                ALLOCATE(csmat(lsmat), stat=ierr)
-                IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate csmat',& 
+                ALLOCATE(csmat(lsmat),STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
                      __LINE__,__FILE__)
                 CALL rgs_c(c0(:,:),spin_mod%nsup,csmat)
                 CALL rgs_c(c0(:,spin_mod%nsup+1:spin_mod%nsup+spin_mod%nsdown),spin_mod%nsdown,csmat)
-                DEALLOCATE(csmat, stat=ierr)
-                IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate csmat',& 
+                DEALLOCATE(csmat,STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
                      __LINE__,__FILE__)
              ELSE
                 lsmat=MAX(spin_mod%nsup,spin_mod%nsdown)**2
-                ALLOCATE(smat(lsmat), stat=ierr)
-                IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate smat',& 
+                ALLOCATE(smat(lsmat),STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
                      __LINE__,__FILE__)
                 CALL rgs(c0,spin_mod%nsup,smat)
                 CALL rgs(c0(:,spin_mod%nsup+1:spin_mod%nsup+spin_mod%nsdown),spin_mod%nsdown,smat)
-                DEALLOCATE(smat, stat=ierr)
-                IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate smat',& 
+                DEALLOCATE(smat,STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
                      __LINE__,__FILE__)
              ENDIF
           ELSE
              IF (tkpts%tkpnt) THEN
                 lsmat=nstate*nstate
-                ALLOCATE(csmat(lsmat), stat=ierr)
-                IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate csmat',& 
+                ALLOCATE(csmat(lsmat),STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
                      __LINE__,__FILE__)
                 CALL rgs_c(c0,nstate,csmat)
-                DEALLOCATE(csmat, stat=ierr)
-                IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate csmat',& 
+                DEALLOCATE(csmat,STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
                      __LINE__,__FILE__)
              ELSE
                 lsmat=nstate*nstate
-                ALLOCATE(smat(lsmat), stat=ierr)
-                IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate smat',& 
+                ALLOCATE(smat(lsmat),STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
                      __LINE__,__FILE__)
                 CALL rgs(c0,nstate,smat)
-                DEALLOCATE(smat, stat=ierr)
-                IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate smat',& 
+                DEALLOCATE(smat,STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
                      __LINE__,__FILE__)
              ENDIF
           ENDIF
@@ -270,7 +282,7 @@ CONTAINS
     lgram=0
     llowdin=0
     IF (cntl%tdmal .AND.(.NOT.(cntl%tlowd .OR. pslo_com%tivan .OR. tkpts%tkpnt))) THEN
-       CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+       CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
        lgram=MAX(3*nstate*nstx,3*nstx*nstx*parai%nproc)
     ELSEIF (cntl%tlowd) THEN
        CALL give_scr_lowdin(llowdin,tag,nstate)

@@ -1,5 +1,3 @@
-#include "cpmd_global.h"
-
 SUBROUTINE mp_bcast_byte(DATA,n,root,comm)
   ! ==--------------------------------------------------------------==
   ! == Wrapper to mpi_bcast                                         ==
@@ -8,8 +6,6 @@ SUBROUTINE mp_bcast_byte(DATA,n,root,comm)
   USE error_handling, ONLY: stopgm
   USE timer, ONLY: tiset, tihalt
   USE mp_interface, ONLY: mp_mpi_error_assert
-  USE pstat
-  USE machine, ONLY: m_walltime
 #ifdef __PARALLEL
   USE mpi
 #endif
@@ -21,21 +17,9 @@ SUBROUTINE mp_bcast_byte(DATA,n,root,comm)
   INTEGER :: ierr
   CHARACTER(*),PARAMETER :: procedureN='mp_bcast_byte'
 #ifdef __PARALLEL
-  integer,save :: size
-  logical :: first=.true.
-  real(real_8) :: tim1,tim2
   ! ==--------------------------------------------------------------==
-  if (first) then
-    call mpi_type_size(mpi_byte,size,ierr)
-    first=.false.
-  end if
-  cmcal(ipar_cast)=cmcal(ipar_cast)+1.0d0
-  cmlen(ipar_cast)=cmlen(ipar_cast)+n*size
-  tim1=m_walltime()      
   CALL mpi_bcast(DATA,n,mpi_byte,root,comm,ierr)
   CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_cast)=cmtim(ipar_cast)+tim2-tim1
 #endif
   ! ==--------------------------------------------------------------==
   RETURN
@@ -81,8 +65,6 @@ SUBROUTINE my_concat(outmsg,inmsg,blklen,gid)
   USE utils, ONLY : icopy
 #ifdef __PARALLEL
   USE mpi
-  USE pstat
-  USE machine, ONLY: m_walltime
 #endif
   IMPLICIT NONE
   ! Arguments
@@ -90,25 +72,11 @@ SUBROUTINE my_concat(outmsg,inmsg,blklen,gid)
   CHARACTER(*),PARAMETER::procedureN='my_concat'
 #ifdef __PARALLEL
   ! Variables
-  INTEGER :: ierr,nnodes
-  integer,save :: size
-  logical :: first=.true.
-  real(real_8) :: tim1,tim2
-  ! ==--------------------------------------------------------------==
-  if (first) then
-    call mpi_type_size(mpi_double_precision,size,ierr)
-    first=.false.
-  end if
-  call mpi_comm_size ( gid, nnodes, ierr )
-  cmcal(ipar_agav)=cmcal(ipar_agav)+1.0d0
-  cmlen(ipar_agav)=cmlen(ipar_agav)+nnodes*size
-  tim1=m_walltime()      
+  INTEGER :: ierr
   ! ==--------------------------------------------------------------==
   CALL mpi_allgather(outmsg,blklen,mpi_byte,inmsg,blklen,&
        mpi_byte,gid,ierr)
   CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_agav)=cmtim(ipar_agav)+tim2-tim1
 #else
   ! Variables
   INTEGER :: len
@@ -120,110 +88,7 @@ SUBROUTINE my_concat(outmsg,inmsg,blklen,gid)
   RETURN
 END SUBROUTINE my_concat
 ! ==================================================================
-SUBROUTINE my_concat_inplace(inmsg,blklen,gid)
-  ! ==--------------------------------------------------------------==
-  ! == Concat all OUTMSG from GID group_ processor into INMSG        ==
-  ! ==--------------------------------------------------------------==
-  USE kinds, ONLY: real_4, real_8, int_1, int_2, int_4, int_8
-  USE error_handling, ONLY: stopgm
-  USE timer, ONLY: tiset, tihalt
-  USE mp_interface, ONLY: mp_mpi_error_assert
-  USE utils, ONLY : icopy
-#ifdef __PARALLEL
-  USE mpi
-  USE pstat
-  USE machine, ONLY: m_walltime
-#endif
-  IMPLICIT NONE
-  ! Arguments
-  real(real_8) :: inmsg(*)
-  integer :: blklen,gid
-  CHARACTER(*),PARAMETER::procedureN='my_concat'
-#ifdef __PARALLEL
-  ! Variables
-  INTEGER :: ierr,nnodes
-  integer,save :: size
-  logical :: first=.true.
-  real(real_8) :: tim1,tim2
-  ! ==--------------------------------------------------------------==
-  if (first) then
-    call mpi_type_size(mpi_double_precision,size,ierr)
-    first=.false.
-  end if
-  call mpi_comm_size ( gid, nnodes, ierr )
-  cmcal(ipar_agav)=cmcal(ipar_agav)+1.0d0
-  cmlen(ipar_agav)=cmlen(ipar_agav)+nnodes*size
-  tim1=m_walltime()      
-  CALL mpi_allgather(mpi_in_place,0,MPI_DATATYPE_NULL,inmsg,blklen,&
-       mpi_double_precision,gid,ierr)
-  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_agav)=cmtim(ipar_agav)+tim2-tim1
-#else
-  ! Variables
-  INTEGER :: len
-  ! ==--------------------------------------------------------------==
-  len = blklen/(8/2)
-  CALL icopy(len,outmsg,1,inmsg,1)
-#endif
-  ! ==--------------------------------------------------------------==
-  RETURN
-END SUBROUTINE my_concat_inplace
-! ==----------------------------------------------------------------==
 SUBROUTINE my_concatv(outmsg,inmsg,blklen,recvcnt,recvdispl,gid)
-  ! ==--------------------------------------------------------------==
-  ! == Concat all OUTMSG of different lengths from GID group_       ==
-  ! == processor into INMSG. NOTE DOUBLE PRECISION ARRAYS USED      ==
-  ! ==--------------------------------------------------------------==
-  USE kinds, ONLY: real_4, real_8, int_1, int_2, int_4, int_8
-  USE error_handling, ONLY: stopgm
-  USE timer, ONLY: tiset, tihalt
-  USE mp_interface, ONLY: mp_mpi_error_assert
-#ifdef __PARALLEL
-  USE mpi
-  USE pstat
-  USE machine, ONLY: m_walltime
-#endif
-  IMPLICIT NONE
-  ! Arguments
-  REAL(real_8) :: outmsg(*),inmsg(*)
-  INTEGER :: blklen,gid,recvcnt(*),recvdispl(*)
-  CHARACTER(*),PARAMETER::procedureN='my_concatv'
-#ifdef __PARALLEL
-  ! Variables
-  INTEGER :: ierr,nnodes,sum,i
-  integer,save :: size
-  logical :: first=.true.
-  real(real_8) :: tim1,tim2
-  ! ==--------------------------------------------------------------==
-  if (first) then
-    call mpi_type_size(mpi_double_precision,size,ierr)
-    first=.false.
-  end if
-  call mpi_comm_size ( gid, nnodes, ierr )
-  cmcal(ipar_agav)=cmcal(ipar_agav)+1.0d0
-  sum=0
-  do i=1,nnodes
-     sum=sum+recvcnt(i)
-  end do
-  cmlen(ipar_agav)=cmlen(ipar_agav)+sum*size
-  tim1=m_walltime()      
-  CALL mpi_allgatherv(outmsg,blklen,mpi_double_precision,inmsg,&
-       recvcnt,recvdispl,mpi_double_precision&
-       ,gid,ierr)
-  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_agav)=cmtim(ipar_agav)+tim2-tim1
-#else
-  ! ==--------------------------------------------------------------==
-  CALL dcopy(blklen,outmsg,1,inmsg(1+recvdispl(1)),1)
-#endif
-  ! ==--------------------------------------------------------------==
-  RETURN
-END SUBROUTINE my_concatv
-  ! ==--------------------------------------------------------------==
-  ! ==--------------------------------------------------------------==
-SUBROUTINE my_concatv_inplace(inmsg,recvcnt,recvdispl,gid)
   ! ==--------------------------------------------------------------==
   ! == Concat all OUTMSG of different lengths from GID group_        ==
   ! == processor into INMSG. NOTE DOUBLE PRECISION ARRAYS USED      ==
@@ -234,43 +99,27 @@ SUBROUTINE my_concatv_inplace(inmsg,recvcnt,recvdispl,gid)
   USE mp_interface, ONLY: mp_mpi_error_assert
 #ifdef __PARALLEL
   USE mpi
-  USE pstat
-  USE machine, ONLY: m_walltime
 #endif
   IMPLICIT NONE
   ! Arguments
-  REAL(real_8) :: inmsg(*)
+  REAL(real_8) :: outmsg(*),inmsg(*)
   INTEGER :: blklen,gid,recvcnt(*),recvdispl(*)
   CHARACTER(*),PARAMETER::procedureN='my_concatv'
 #ifdef __PARALLEL
   ! Variables
-  INTEGER :: ierr,nnodes,sum,i
-  integer,save :: size
-  logical :: first=.true.
-  real(real_8) :: tim1,tim2
+  INTEGER :: ierr
   ! ==--------------------------------------------------------------==
-  if (first) then
-    call mpi_type_size(mpi_double_precision,size,ierr)
-    first=.false.
-  end if
-  call mpi_comm_size ( gid, nnodes, ierr )
-  cmcal(ipar_agav)=cmcal(ipar_agav)+1.0d0
-  sum=0
-  do i=1,nnodes
-     sum=sum+recvcnt(i)
-  end do
-  cmlen(ipar_agav)=cmlen(ipar_agav)+sum*size
-  tim1=m_walltime()      
-  CALL mpi_allgatherv(mpi_in_place,0,MPI_DATATYPE_NULL,inmsg,&
+  CALL mpi_allgatherv(outmsg,blklen,mpi_double_precision,inmsg,&
        recvcnt,recvdispl,mpi_double_precision&
        ,gid,ierr)
   CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_agav)=cmtim(ipar_agav)+tim2-tim1
+#else
+  ! ==--------------------------------------------------------------==
+  CALL dcopy(blklen,outmsg,1,inmsg(1+recvdispl(1)),1)
 #endif
   ! ==--------------------------------------------------------------==
   RETURN
-END SUBROUTINE my_concatv_inplace
+END SUBROUTINE my_concatv
 ! ==================================================================
 ! ==================================================================
 SUBROUTINE my_source_concatv(outmsg,inmsg,blklen,recvcnt,&
@@ -442,332 +291,3 @@ SUBROUTINE my_shift(msend,mrecv,msglen,mep,ip,gid)
   ! ==--------------------------------------------------------------==
   RETURN
 END SUBROUTINE my_shift
-SUBROUTINE mp_allgatherv_intranode_inplace_real(data,lda,n,l_chunks,t_chunks,nproc,mypos,&
-                                                   comm)
-  ! ==--------------------------------------------------------------==
-  ! == Special allgatherv like routine using mpi shared memory      ==
-  ! == operations. l_chunks/t_chunks specifiy the first/last element==
-  ! == of the leading or trailing dimension for each proc           ==
-  ! ==--------------------------------------------------------------==
-  USE kinds, ONLY: real_8
-  USE error_handling, ONLY: stopgm
-  USE timer, ONLY: tiset, tihalt
-  USE mp_interface, ONLY: mp_win_alloc_shared_mem,mp_win_sync
-  USE pstat
-  USE machine, ONLY: m_walltime
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_PTR, C_F_POINTER
-
-  IMPLICIT NONE
-  ! Arguments
-  REAL(real_8),INTENT(INOUT) :: DATA(lda,n)
-  INTEGER,INTENT(IN) :: lda,l_chunks(2,0:nproc-1),t_chunks(2,0:nproc-1),n,comm,nproc,mypos
-  ! Variables
-  TYPE(C_PTR) :: baseptr(0:nproc-1)
-  TYPE CONTAINER
-     REAL(real_8),  POINTER __CONTIGUOUS :: shared_data(:,:)
-  END TYPE CONTAINER
-  TYPE(CONTAINER),ALLOCATABLE :: iproc(:)
-  CHARACTER(*),PARAMETER :: procedureN='mp_allgatherv_inplace'
-#ifdef __PARALLEL
-  REAL(real_8) :: tim1,tim2
-  INTEGER :: ierr,i,j,ii,jj,proc,ncount1,ncount2,arrayshape(2),stat
-  ! ==--------------------------------------------------------------==
-  if(nproc.eq.1) RETURN
-  cmcal(ipar_agav)=cmcal(ipar_agav)+1.0d0
-  cmlen(ipar_agav)=cmlen(ipar_agav)+n*lda*8
-  tim1=m_walltime()
-
-  ALLOCATE(iproc(0:nproc-1), stat=stat )
-  IF (stat.NE.0) CALL stopgm(procedureN,'Allocation problem',&
-       __LINE__,__FILE__)
-
-  ncount1=l_chunks(2,mypos)-l_chunks(1,mypos)+1
-  ncount2=t_chunks(2,mypos)-t_chunks(1,mypos)+1
-
-  CALL mp_win_alloc_shared_mem('r',ncount1,ncount2,baseptr,nproc,mypos,comm)
- 
-  do proc=0,nproc-1
-     ncount1=l_chunks(2,proc)-l_chunks(1,proc)+1
-     ncount2=t_chunks(2,proc)-t_chunks(1,proc)+1
-     arrayshape(1)=ncount1
-     arrayshape(2)=ncount2
-     CALL C_F_POINTER(baseptr(proc), iproc(proc)%shared_data,arrayshape)
-  end do
-  !copy local data into local window
-  ncount1=l_chunks(2,mypos)-l_chunks(1,mypos)+1
-  ncount2=t_chunks(2,mypos)-t_chunks(1,mypos)+1
-  !$omp parallel do private(i,ii,j,jj)  
-  do i=1,ncount2
-     ii=t_chunks(1,mypos)-1+i
-     do j=1,ncount1
-        jj=l_chunks(1,mypos)-1+j
-        iproc(mypos)%shared_data(j,i)=data(jj,ii)
-     end do
-  end do 
-  CALL mp_win_sync(comm)
-  !get data from other procs
-  do proc=0,nproc-1
-     if (proc.ne.mypos) then
-        ncount1=l_chunks(2,proc)-l_chunks(1,proc)+1
-        ncount2=t_chunks(2,proc)-t_chunks(1,proc)+1
-        !$omp parallel do private(i,ii,j,jj)
-        do i=1,ncount2
-           ii=t_chunks(1,proc)-1+i
-           do j=1,ncount1
-              jj=l_chunks(1,proc)-1+j
-              data(jj,ii)=iproc(proc)%shared_data(j,i)
-           end do
-        end do
-     end if
-  END DO
-  DEALLOCATE(iproc, stat=stat )
-  IF (stat.NE.0) CALL stopgm(procedureN,'Allocation problem',&
-       __LINE__,__FILE__)
-  CALL mp_win_sync(comm)
-  tim2=m_walltime()
-  cmtim(ipar_agav)=cmtim(ipar_agav)+tim2-tim1
-#endif
-  ! ==--------------------------------------------------------------==
-  RETURN
-END SUBROUTINE mp_allgatherv_intranode_inplace_real
-
-SUBROUTINE mp_allgatherv_intranode_inplace_complex(data,lda,n,l_chunks,t_chunks,nproc,mypos,&
-                                                   comm)
-  ! ==--------------------------------------------------------------==
-  ! == Special allgatherv like routine using mpi shared memory      ==
-  ! == operations. l_chunks/t_chunks specifiy the first/last element==
-  ! == of the leading or trailing dimension for each proc           ==
-  ! ==--------------------------------------------------------------==
-  USE kinds, ONLY: real_8
-  USE error_handling, ONLY: stopgm
-  USE timer, ONLY: tiset, tihalt
-  USE mp_interface, ONLY: mp_win_alloc_shared_mem,mp_win_sync
-  USE pstat
-  USE machine, ONLY: m_walltime
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_PTR, C_F_POINTER
-
-  IMPLICIT NONE
-  ! Arguments
-  COMPLEX(real_8),INTENT(INOUT) :: DATA(lda,n)
-  INTEGER,INTENT(IN) :: lda,l_chunks(2,0:nproc-1),t_chunks(2,0:nproc-1),n,comm,nproc,mypos
-  ! Variables
-  TYPE(C_PTR) :: baseptr(0:nproc-1)
-  TYPE CONTAINER
-     COMPLEX(real_8),  POINTER __CONTIGUOUS :: shared_data(:,:)
-  END TYPE CONTAINER
-  TYPE(CONTAINER),ALLOCATABLE :: iproc(:)
-  CHARACTER(*),PARAMETER :: procedureN='mp_allgatherv_inplace'
-#ifdef __PARALLEL
-  REAL(real_8) :: tim1,tim2
-  INTEGER :: ierr,i,j,ii,jj,proc,ncount1,ncount2,arrayshape(2),stat
-  ! ==--------------------------------------------------------------==
-  if(nproc.eq.1) RETURN
-  cmcal(ipar_agav)=cmcal(ipar_agav)+1.0d0
-  cmlen(ipar_agav)=cmlen(ipar_agav)+n*lda*16
-  tim1=m_walltime()
-
-  ALLOCATE(iproc(0:nproc-1), stat=stat )
-  IF (stat.NE.0) CALL stopgm(procedureN,'Allocation problem',&
-       __LINE__,__FILE__)
-
-  CALL mp_win_alloc_shared_mem('c',lda,n,baseptr,nproc,mypos,comm)
- 
-  do proc=0,nproc-1
-     ncount1=l_chunks(2,proc)-l_chunks(1,proc)+1
-     ncount2=t_chunks(2,proc)-t_chunks(1,proc)+1
-     arrayshape(1)=ncount1
-     arrayshape(2)=ncount2
-     CALL C_F_POINTER(baseptr(proc), iproc(proc)%shared_data,arrayshape)
-  end do
-  !copy local data into local window
-  ncount1=l_chunks(2,mypos)-l_chunks(1,mypos)+1
-  ncount2=t_chunks(2,mypos)-t_chunks(1,mypos)+1
-  !$omp parallel do private(i,ii,j,jj)  
-  do i=1,ncount2
-     ii=t_chunks(1,mypos)-1+i
-     do j=1,ncount1
-        jj=l_chunks(1,mypos)-1+j
-        iproc(mypos)%shared_data(j,i)=data(jj,ii)
-     end do
-  end do 
-  CALL mp_win_sync(comm)
-  !get data from other procs
-  do proc=0,nproc-1
-     if (proc.ne.mypos) then
-        ncount1=l_chunks(2,proc)-l_chunks(1,proc)+1
-        ncount2=t_chunks(2,proc)-t_chunks(1,proc)+1
-        !$omp parallel do private(i,ii,j,jj)
-        do i=1,ncount2
-           ii=t_chunks(1,proc)-1+i
-           do j=1,ncount1
-              jj=l_chunks(1,proc)-1+j
-              data(jj,ii)=iproc(proc)%shared_data(j,i)
-           end do
-        end do
-     end if
-  END DO
-  DEALLOCATE(iproc, stat=stat )
-  IF (stat.NE.0) CALL stopgm(procedureN,'Allocation problem',&
-       __LINE__,__FILE__)
-  CALL mp_win_sync(comm)
-  tim2=m_walltime()
-  cmtim(ipar_agav)=cmtim(ipar_agav)+tim2-tim1
-#endif
-  ! ==--------------------------------------------------------------==
-  RETURN
-END SUBROUTINE mp_allgatherv_intranode_inplace_complex
-
-SUBROUTINE mp_sum_intranode_inplace_real(data,lda,n,nproc,mypos,comm)
-  ! ==--------------------------------------------------------------==
-  ! == Special allsum routine using mpi_shared_memory for summation ==
-  ! ==--------------------------------------------------------------==
-  USE kinds, ONLY:real_8
-  USE error_handling, ONLY: stopgm
-  USE timer, ONLY: tiset, tihalt
-  USE mp_interface, ONLY: mp_win_alloc_shared_mem,mp_win_sync
-  USE pstat
-  USE machine, ONLY: m_walltime
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_PTR, C_F_POINTER
-
-  IMPLICIT NONE
-  ! Arguments
-  REAL(real_8),INTENT(INOUT) :: DATA(lda,n)
-  INTEGER,INTENT(IN) :: lda,n,comm,nproc,mypos
-  ! Variables
-  TYPE(C_PTR) :: baseptr(0:nproc-1)
-  TYPE CONTAINER
-     REAL(real_8),  POINTER __CONTIGUOUS :: shared_data(:,:)
-  END TYPE CONTAINER
-  TYPE(CONTAINER),ALLOCATABLE :: iproc(:) 
-  CHARACTER(*),PARAMETER :: procedureN='mp_allgatherv_inplace'
-#ifdef __PARALLEL
-  REAL(real_8) :: tim1,tim2
-  INTEGER :: i,j,proc,arrayshape(2),stat
-  ! ==--------------------------------------------------------------==
-  if(nproc.eq.1) RETURN
-  cmcal(ipar_gsum)=cmcal(ipar_gsum)+1.0d0
-  cmlen(ipar_gsum)=cmlen(ipar_gsum)+n*lda*8
-  tim1=m_walltime()
-  
-  ALLOCATE(iproc(0:nproc-1), stat=stat )
-  IF (stat.NE.0) CALL stopgm(procedureN,'Allocation problem',&
-       __LINE__,__FILE__)
-
-
-  CALL mp_win_alloc_shared_mem('r',lda,n,baseptr,nproc,mypos,comm)
-  DO proc=0,nproc-1
-     !get data from other procs
-     arrayshape(1)=lda
-     arrayshape(2)=n
-     CALL C_F_POINTER(baseptr(proc), iproc(proc)%shared_data,arrayshape)
-  END DO
-  !copy local data into local window
-  
-  !$omp parallel do private(i,j)  
-  DO i=1,n
-     DO j=1,lda
-        iproc(mypos)%shared_data(j,i)=data(j,i)
-     END DO
-  END DO 
-
-  call mp_win_sync(comm)
-
-  !get data from other procs
-  do proc=0,nproc-1
-     if (proc.ne.mypos) then
-        !$omp parallel do private(i,j)
-        do i=1,n
-           do j=1,lda
-              data(j,i)=data(j,i)+iproc(proc)%shared_data(j,i)
-           end do
-        end do
-     end if
-  END DO
-  DEALLOCATE(iproc, stat=stat )
-  IF (stat.NE.0) CALL stopgm(procedureN,'Allocation problem',&
-       __LINE__,__FILE__)
-  call mp_win_sync(comm)
-  tim2=m_walltime()
-  cmtim(ipar_gsum)=cmtim(ipar_gsum)+tim2-tim1
-#endif
-  ! ==--------------------------------------------------------------==
-  RETURN
-END SUBROUTINE mp_sum_intranode_inplace_real
-
-
-SUBROUTINE mp_sum_intranode_inplace_complex(data,lda,n,nproc,mypos,comm)
-  ! ==--------------------------------------------------------------==
-  ! == Special allsum routine using mpi_shared_memory for summation ==
-  ! ==--------------------------------------------------------------==
-  USE kinds, ONLY:real_8
-  USE error_handling, ONLY: stopgm
-  USE timer, ONLY: tiset, tihalt
-  USE mp_interface, ONLY: mp_win_alloc_shared_mem,mp_win_sync
-  USE pstat
-  USE machine, ONLY: m_walltime
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_PTR, C_F_POINTER
-
-  IMPLICIT NONE
-  ! Arguments
-  COMPLEX(real_8),INTENT(INOUT) :: DATA(lda,n)
-  INTEGER,INTENT(IN) :: lda,n,comm,nproc,mypos
-  ! Variables
-  TYPE(C_PTR) :: baseptr(0:nproc-1)
-  TYPE CONTAINER
-     COMPLEX(real_8),  POINTER __CONTIGUOUS :: shared_data(:,:)
-  END TYPE CONTAINER
-  TYPE(CONTAINER),ALLOCATABLE :: iproc(:) 
-  CHARACTER(*),PARAMETER :: procedureN='mp_allgatherv_inplace'
-#ifdef __PARALLEL
-  REAL(real_8) :: tim1,tim2
-  INTEGER :: i,j,proc,arrayshape(2),stat
-  ! ==--------------------------------------------------------------==
-  if(nproc.eq.1) RETURN
-  cmcal(ipar_gsum)=cmcal(ipar_gsum)+1.0d0
-  cmlen(ipar_gsum)=cmlen(ipar_gsum)+n*lda*16
-  tim1=m_walltime()
-  
-  ALLOCATE(iproc(0:nproc-1), stat=stat )
-  IF (stat.NE.0) CALL stopgm(procedureN,'Allocation problem',&
-       __LINE__,__FILE__)
-
-  CALL mp_win_alloc_shared_mem('r',lda,n,baseptr,nproc,mypos,comm)
-  DO proc=0,nproc-1
-     !get data from other procs
-     arrayshape(1)=lda
-     arrayshape(2)=n
-     CALL C_F_POINTER(baseptr(proc), iproc(proc)%shared_data,arrayshape)
-  END DO
-  !copy local data into local window
-  
-  !$omp parallel do private(i,j)  
-  DO i=1,n
-     DO j=1,lda
-        iproc(mypos)%shared_data(j,i)=data(j,i)
-     END DO
-  END DO 
-
-  call mp_win_sync(comm)
-
-  !get data from other procs
-  do proc=0,nproc-1
-     if (proc.ne.mypos) then
-        !$omp parallel do private(i,j)
-        do i=1,n
-           do j=1,lda
-              data(j,i)=data(j,i)+iproc(proc)%shared_data(j,i)
-           end do
-        end do
-     end if
-  END DO
-  call mp_win_sync(comm)
-  DEALLOCATE(iproc, stat=stat )
-  IF (stat.NE.0) CALL stopgm(procedureN,'Allocation problem',&
-       __LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_gsum)=cmtim(ipar_gsum)+tim2-tim1
-#endif
-  ! ==--------------------------------------------------------------==
-  RETURN
-END SUBROUTINE mp_sum_intranode_inplace_complex
-

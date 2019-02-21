@@ -1,7 +1,7 @@
 MODULE rortog_utils
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
-  USE distribution_utils,              ONLY: dist_size
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: int_1,&
                                              int_2,&
                                              int_4,&
@@ -65,7 +65,7 @@ CONTAINS
 
     CALL tiset('    RORTOG',isub)
     IF (cntl%tdmal) THEN
-       CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+       CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
        CALL rortho_da(c0,cm,gam,tnon,nstate)
        IF (prteig.AND.paral%parent) THEN
           WRITE(6,*) " WARNING: NO EIGENVALUE PRINTING ",&
@@ -119,7 +119,7 @@ CONTAINS
     REAL(real_8), ALLOCATABLE                :: del(:,:), gamn(:), rho(:,:), &
                                                 scr(:), sig(:,:), sxx(:)
 
-    CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+    CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
     ALLOCATE(gamn(nstate*nstx),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__) ! TODO ALIGN FOR BG
@@ -144,30 +144,30 @@ CONTAINS
     CALL zeroing(del)!,nstate*nstx)
     msglen=nstate*nstx * 8
     DO ip=0,parai%nproc-1
-       nx=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+       nx=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
        CALL zeroing(gam(1:nstate*nstx))!,nstate*nstx)
        IF (nx.GT.0) THEN
-          CALL ovlap2(ncpw%ngw,nstate,nx,gam,c0,cm(1,paraw%nwa12(1,ip)),.TRUE.)
+          CALL ovlap2(ncpw%ngw,nstate,nx,gam,c0,cm(1,paraw%nwa12(ip,1)),.TRUE.)
           CALL mp_sum(gam,scr,nstate*nstx,parap%pgroup(ip+1),parai%allgrp)
           IF (parai%mepos.EQ.parap%pgroup(ip+1)) CALL dcopy(nstate*nstx,scr,1,rho,1)
        ENDIF
     ENDDO
     ! 
     DO ip=0,parai%nproc-1
-       nx=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+       nx=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
        CALL zeroing(gam(1:nstate*nstx))!,nstate*nstx)
        IF (nx.GT.0) THEN
-          CALL ovlap2(ncpw%ngw,nstate,nx,gam,cm,cm(1,paraw%nwa12(1,ip)),.TRUE.)
+          CALL ovlap2(ncpw%ngw,nstate,nx,gam,cm,cm(1,paraw%nwa12(ip,1)),.TRUE.)
           CALL mp_sum(gam,scr,nstate*nstx,parap%pgroup(ip+1),parai%allgrp)
           IF (parai%mepos.EQ.parap%pgroup(ip+1)) CALL dcopy(nstate*nstx,scr,1,sig,1)
        ENDIF
     ENDDO
     IF (tnon) THEN
        DO ip=0,parai%nproc-1
-          nx=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+          nx=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
           CALL zeroing(gam(1:nstate*nstx))!,nstate*nstx)
           IF (nx.GT.0) THEN
-             CALL ovlap2(ncpw%ngw,nstate,nx,gam,c0,c0(1,paraw%nwa12(1,ip)),.TRUE.)
+             CALL ovlap2(ncpw%ngw,nstate,nx,gam,c0,c0(1,paraw%nwa12(ip,1)),.TRUE.)
              CALL mp_sum(gam,scr,nstate*nstx,parap%pgroup(ip+1),parai%allgrp)
              IF (parai%mepos.EQ.parap%pgroup(ip+1))&
                   CALL dcopy(nstate*nstx,scr,1,del,1)
@@ -176,14 +176,14 @@ CONTAINS
     ENDIF
     CALL dscal(nstate*nstx,-1.0_real_8,rho,1)
     CALL dscal(nstate*nstx,-1.0_real_8,sig,1)
-    DO i=paraw%nwa12(1,parai%mepos),paraw%nwa12(2,parai%mepos)
-       ii=i-paraw%nwa12(1,parai%mepos)+1
+    DO i=paraw%nwa12(parai%mepos,1),paraw%nwa12(parai%mepos,2)
+       ii=i-paraw%nwa12(parai%mepos,1)+1
        rho(i,ii)=1.0_real_8+rho(i,ii)
        sig(i,ii)=1.0_real_8+sig(i,ii)
     ENDDO
     IF (tnon) THEN
-       DO i=paraw%nwa12(1,parai%mepos),paraw%nwa12(2,parai%mepos)
-          ii=i-paraw%nwa12(1,parai%mepos)+1
+       DO i=paraw%nwa12(parai%mepos,1),paraw%nwa12(parai%mepos,2)
+          ii=i-paraw%nwa12(parai%mepos,1)+1
           del(i,ii)=del(i,ii)-1.0_real_8
        ENDDO
        CALL dscal(nstate*nstx,-0.5_real_8,del,1)
@@ -195,8 +195,8 @@ CONTAINS
     CALL dcopy(nstate*nstx,rho,1,scr,1)
     CALL dcopy(nstate*nstx,rho,1,sxx,1)
     DO ip=0,parai%nproc-1
-       i1=paraw%nwa12(1,ip)
-       crge%n=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+       i1=paraw%nwa12(ip,1)
+       crge%n=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
        IF (crge%n.GT.0) THEN
           CALL dcopy(nstate*nstx,scr,1,rho,1)
           CALL mp_bcast(rho,nstate*nstx,parap%pgroup(ip+1),parai%allgrp)
@@ -215,8 +215,8 @@ CONTAINS
     CALL dcopy(nstate*nstx,scr,1,sxx,1)
     CALL dcopy(nstate*nstx,scr,1,del,1)
     DO ip=0,parai%nproc-1
-       i1=paraw%nwa12(1,ip)
-       crge%n=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+       i1=paraw%nwa12(ip,1)
+       crge%n=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
        IF (crge%n.GT.0) THEN
           CALL dcopy(nstate*nstx,sxx,1,scr,1)
           CALL mp_bcast(scr,nstate*nstx,parap%pgroup(ip+1),parai%allgrp)
@@ -229,16 +229,16 @@ CONTAINS
        DO ip=0,parai%nproc-1
           CALL my_shift(del,sxx,msglen,parai%mepos,-ip,parai%allgrp)
           ipp=MOD(parai%mepos+ip,parai%nproc)
-          crge%n=paraw%nwa12(2,ipp)-paraw%nwa12(1,ipp)+1
-          i1=paraw%nwa12(1,ipp)
+          crge%n=paraw%nwa12(ipp,2)-paraw%nwa12(ipp,1)+1
+          i1=paraw%nwa12(ipp,1)
           CALL dgemm('N','N',nstate,nstx,crge%n,1._real_8,sxx,nstate,&
                gam(i1),nstate,1._real_8,scr,nstate)
        ENDDO
        DO ip=0,parai%nproc-1
           CALL my_shift(gam,sxx,msglen,parai%mepos,-ip,parai%allgrp)
           ipp=MOD(parai%mepos+ip,parai%nproc)
-          crge%n=paraw%nwa12(2,ipp)-paraw%nwa12(1,ipp)+1
-          i1=paraw%nwa12(1,ipp)
+          crge%n=paraw%nwa12(ipp,2)-paraw%nwa12(ipp,1)+1
+          i1=paraw%nwa12(ipp,1)
           CALL dgemm('T','N',crge%n,nstx,nstate,1._real_8,sxx,nstate,&
                scr,nstate,1._real_8,gamn(i1),nstate)
        ENDDO
@@ -261,7 +261,7 @@ CONTAINS
     ENDIF
     ! ..UPDATE WAVEFUNCTIONS
     CALL rotate_da(1._real_8,c0,1._real_8,cm,gam,2*ncpw%ngw,2*ncpw%ngw,nstate,&
-         paraw%nwa12(1,0),paraw%nwa12(2,0),nstx,parai%mepos,parap%pgroup,parai%nproc,parai%allgrp,&
+         paraw%nwa12(0,1),paraw%nwa12(0,2),nstx,parai%mepos,parap%pgroup,parai%nproc,parai%allgrp,&
          cntl%tlsd,spin_mod%nsup,spin_mod%nsdown)
     ! ==--------------------------------------------------------------==
     DEALLOCATE(gamn,STAT=ierr)
@@ -296,7 +296,7 @@ CONTAINS
 ! ==--------------------------------------------------------------==
 
     IF (cntl%tdmal) THEN
-       CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+       CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
        lrortog=MAX(6*nstate*nstx,nstate*(4+nstx))
        tag   ='MAX(6*NSTATE*NSTX,...)'
     ELSE
@@ -351,7 +351,7 @@ SUBROUTINE rortho(c0,cm,gam,tnon,nstate)
   USE parac, ONLY : paral,parai
   USE spin , ONLY:spin_mod
   USE ovlap_utils, ONLY : ovlap
-  USE summat_utils, ONLY : summat
+  USE summat_utils, ONLY : summat_parent
   USE utils, ONLY : symma
   USE rotate_utils, ONLY: rotate
   IMPLICIT NONE
@@ -388,7 +388,7 @@ SUBROUTINE rortho(c0,cm,gam,tnon,nstate)
   ! ==--------------------------------------------------------------==
   CALL ovlap(nstate,rho,c0,cm)
   CALL symma(rho,nstate)
-  CALL summat(rho,nstate,parent=.TRUE.)
+  CALL summat_parent(rho,nstate)
   CALL dscal(nstate*nstate,-1.0_real_8,rho(1,1),1)
   !$omp parallel do private(I)
   DO i=1,nstate
@@ -398,7 +398,7 @@ SUBROUTINE rortho(c0,cm,gam,tnon,nstate)
   ! == INITIALIZE SIG                                               ==
   ! ==--------------------------------------------------------------==
   CALL ovlap(nstate,sig,cm,cm)
-  CALL summat(sig,nstate,parent=.TRUE.)
+  CALL summat_parent(sig,nstate)
   CALL dscal(nstate*nstate,-1.0_real_8,sig(1,1),1)
   !$omp parallel do private(I)
   DO i=1,nstate
@@ -409,7 +409,7 @@ SUBROUTINE rortho(c0,cm,gam,tnon,nstate)
   ! ==--------------------------------------------------------------==
   IF (tnon) THEN
      CALL ovlap(nstate,del,c0,c0)
-     CALL summat(del,nstate,parent=.TRUE.)
+     CALL summat_parent(del,nstate)
      !$omp parallel do private(I)
      DO i=1,nstate
         del(i,i)=del(i,i)-1.0_real_8

@@ -46,8 +46,7 @@ MODULE printp_utils
   USE readsr_utils,                    ONLY: xstring
   USE rmas,                            ONLY: rmass
   USE ropt,                            ONLY: iteropt,&
-                                             ropt_mod,&
-                                             infi
+                                             ropt_mod
   USE store_types,                     ONLY: cprint,&
                                              rout1,&
                                              trajsmall,&
@@ -57,7 +56,7 @@ MODULE printp_utils
                                              cntl,&
                                              cntr,&
                                              iatpt,&
-                                             parm,cnti
+                                             parm
   use bicanonicalCpmd, only: bicanonicalCpmdConfig,& 
   biCanonicalEnsembleDo, getNameConstraintTape, getNameFtrajectoryTape,&
   getNamemetricTape, getNameTrajecTape, getNameTrajectoryTape
@@ -68,6 +67,7 @@ MODULE printp_utils
 
   PUBLIC :: printp
   PUBLIC :: printp2
+  PUBLIC :: print_mts_forces
 
 CONTAINS
 
@@ -176,7 +176,7 @@ CONTAINS
        IF (paral%io_parent)&
             CALL fileopen(4,f2,fo_app+if2,ferror)
     ENDIF
-    IF ((infi.EQ.cnti%nomore).or. ropt_mod%rprint.OR.(ropt_mod%txyz.AND.rout1%xtout).OR.(ropt_mod%tdcd.AND.rout1%dcout)) THEN
+    IF (ropt_mod%rprint.OR.(ropt_mod%txyz.AND.rout1%xtout).OR.(ropt_mod%tdcd.AND.rout1%dcout)) THEN
        IF (cotc0%mcnstr.GT.0.OR.cotr007%mrestr.GT.0) THEN
           IF (paral%io_parent)&
                CALL fileopen(31,f3,if3,ferror)
@@ -266,7 +266,7 @@ CONTAINS
        IF (paral%io_parent)&
             CALL fileclose(4)
     ENDIF
-    IF ((infi.EQ.cnti%nomore).OR.ropt_mod%rprint.OR.(ropt_mod%txyz.AND.rout1%xtout).OR.(ropt_mod%tdcd.AND.rout1%dcout)) THEN
+    IF (ropt_mod%rprint.OR.(ropt_mod%txyz.AND.rout1%xtout).OR.(ropt_mod%tdcd.AND.rout1%dcout)) THEN
        IF (cntl%tprcp.AND..NOT.(cntl%tpath.AND.cntl%tpimd)) THEN
           IF (paral%io_parent)&
                CALL fileopen(32,f5,fo_app+if2,ferror)
@@ -280,7 +280,7 @@ CONTAINS
           IF (paral%io_parent)&
                CALL fileclose(32)
        ENDIF
-       IF ((infi.EQ.cnti%nomore).OR.cotc0%mcnstr.GT.0.OR.cotr007%mrestr.GT.0) THEN
+       IF (cotc0%mcnstr.GT.0.OR.cotr007%mrestr.GT.0) THEN
           DO j=1,cotc0%mcnstr
              fval=fv(j)
              ityp=ntcnst(1,j)
@@ -296,11 +296,8 @@ CONTAINS
              IF (ityp.EQ.2.OR.ityp.EQ.3.OR.ityp.EQ.5) CALL raddeg(cval,1)
              fval=fval-cval
              IF (paral%io_parent)&
-!                  WRITE(31,'(I7,2X,I4,5X,3(1PE20.10)," R")') iteropt%nfi,j,cval,fval,&
-!                  resfdiff(j)
-                  WRITE(31,'(I7,2X,I4,5X,4(1PE20.10)," R")') iteropt%nfi,j,cval,fval,&
-                      RESFDIFF(J),0.5*RESFDIFF(J)*FVAL
-
+                  WRITE(31,'(I7,2X,I4,5X,3(1PE20.10)," R")') iteropt%nfi,j,cval,fval,&
+                  resfdiff(j)
           ENDDO
           IF (paral%io_parent) WRITE(cstring,'(I4)') cotr007%mrestr
           CALL xstring(cstring,i1,i2)
@@ -619,5 +616,91 @@ CONTAINS
     RETURN
   END SUBROUTINE printp2
   ! ==================================================================
+
+
+  ! Purpose: print MTS low or high level forces depending on job input
+  !      The effective forces which can be a combination of low and high levels
+  !      are already printed to the FTRAJECTORY file.
+  !      The file is printed in xyz format. (N atoms, title line, xyz data)
+  !
+  ! Author: Pablo Baudin
+  ! Date: May 2018
+  subroutine print_mts_forces(forces, title, job)
+
+     implicit none
+     !> forces to be printed
+     real(real_8), intent(in) :: forces(:,:,:)
+     !> title string to be printed
+     character(len=100), intent(in) :: title
+     !> Job type 'HIGH' or 'LOW' level
+     character(len=*), intent(in) :: job
+
+     real(real_8), allocatable :: gr_forces(:,:)
+     integer, allocatable :: gr_iat(:)
+     integer :: i, ia, is, k, funit, ierr
+     logical :: ferror
+     character(len=20) :: fname
+     character(*), parameter :: procedureN = 'print_mts_forces'
+
+     if (paral%io_parent) then
+        ! get file name
+        select case(job)
+        case('LOW')
+           fname = 'MTS_LOW_FORCES.xyz '
+        case('HIGH')
+           fname = 'MTS_HIGH_FORCES.xyz'
+        end select
+
+
+        ! allocate gromos arrays
+        ALLOCATE(gr_iat(ions1%nat+1),STAT=ierr)
+        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem: gr_iat',&
+           __LINE__,__FILE__)
+        ALLOCATE(gr_forces(3,ions1%nat),STAT=ierr)
+        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem: gr_forces',&
+           __LINE__,__FILE__)
+
+        ! get forces into gromos ordering
+        i=0
+        do is=1,ions1%nsp
+           do ia=1,ions0%na(is)
+              i=i+1
+              gr_iat(nat_grm(i))=ions0%iatyp(is)
+              do k=1,3
+                 gr_forces(k,nat_grm(i))=forces(k,ia,is)
+              end do
+           end do
+        end do
+
+
+        ! WRITE FILE:
+        ! -----------
+        !
+        funit = 4
+        call fileopen(funit,fname,fo_app,ferror)
+        !
+        ! write number of atoms
+        write(funit,*) ions1%nat
+
+        ! write title line
+        write(funit,*) title
+
+        ! write ionic forces
+        do i=1,ions1%nat
+           write(funit,'(a2,3(2x,f22.14))') elem%el(gr_iat(i)),(gr_forces(k,i),k=1,3)
+        enddo
+        call fileclose(funit)
+
+
+        ! deallocate gromos arrays
+        DEALLOCATE(gr_forces,STAT=ierr)
+        IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem: gr_forces',&
+           __LINE__,__FILE__)
+        DEALLOCATE(gr_iat,STAT=ierr)
+        IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem: gr_iat',&
+           __LINE__,__FILE__)
+     end if
+
+  end subroutine print_mts_forces
 
 END MODULE printp_utils

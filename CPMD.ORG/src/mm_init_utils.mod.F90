@@ -381,17 +381,6 @@ CONTAINS
     eqm_r%eext0=0._real_8
     eqm_r%eexcl=0._real_8
 
-!BM-start
-!     Compatibility for NAm array is build here
-    ALLOCATE(NAm(maxsys%nsx),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-         __LINE__,__FILE__)    
-    DO is=1,maxsys%nsx
-       NAm(is)=ions0%na(is)
-    END DO
-    CALL mp_bcast(NAm,SIZE(nam),parai%io_source,parai%cp_grp)
-!BM-end
-
     ! initialize NAT_cpmd to have an 1:1 atom index mapping 
     ! for normal inputs and outputs.
     mmdim%natm=0

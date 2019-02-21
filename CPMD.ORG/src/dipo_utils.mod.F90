@@ -170,7 +170,7 @@ CONTAINS
        dx(i,2)=parm%a2(i)/spar%nr2s
        dx(i,3)=parm%a3(i)/spar%nr3s
     ENDDO
-    nx0=parap%nrxpl(1,parai%mepos)
+    nx0=parap%nrxpl(parai%mepos,1)
     DO iz=1,parm%nr3
        DO iy=1,parm%nr2
           DO i=1,3

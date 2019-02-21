@@ -740,7 +740,7 @@ CONTAINS
                      coldall(1,1,1,1,ipx),1,cold,1)
                 nnow=nnowall(ipx); numcold=numcoldall(ipx)
              ENDIF
-             CALL extrapwf(infi,c0(:,:,ipx),scr,cold,crge%n,cnti%mextra)
+             CALL extrapwf(infi,c0(:,:,ipx),scr,cold,nnow,numcold,crge%n,cnti%mextra)
              IF (np_local>1) THEN
                 CALL zcopy(nkpt%ngwk*crge%n*nkpt%nkpnt*cnti%mextra,&
                      cold,1,coldall(1,1,1,1,ipx),1)

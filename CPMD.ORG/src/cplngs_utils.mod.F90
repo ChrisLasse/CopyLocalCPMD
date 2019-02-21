@@ -1352,13 +1352,13 @@ CONTAINS
        is2=isurf(2,ic)
        DO k=1,3
           CALL zeroing(dfab)!,2*ions1%nat*maxsys%nhxs)
-          IF (is1.GE.parap%nst12(1,parai%mepos).AND.&
-               is1.LE.parap%nst12(2,parai%mepos) ) THEN
-             ii=is1-parap%nst12(1,parai%mepos)+1
+          IF (is1.GE.parap%nst12(parai%mepos,1).AND.&
+               is1.LE.parap%nst12(parai%mepos,2) ) THEN
+             ii=is1-parap%nst12(parai%mepos,1)+1
              CALL dcopy(maxsys%nhxs*ions1%nat,dfnl(1,1,1,k,ii,1),1,dfab(1,1,1),1)
           ENDIF
-          IF (is2.GE.parap%nst12(1,parai%mepos).AND.is2.LE.parap%nst12(2,parai%mepos) ) THEN
-             ii=is2-parap%nst12(1,parai%mepos)+1
+          IF (is2.GE.parap%nst12(parai%mepos,1).AND.is2.LE.parap%nst12(parai%mepos,2) ) THEN
+             ii=is2-parap%nst12(parai%mepos,1)+1
              CALL dcopy(maxsys%nhxs*ions1%nat,dfnl(1,1,1,k,ii,1),1,dfab(1,1,2),1)
           ENDIF
           CALL mp_sum(dfab,2*ions1%nat*maxsys%nhxs,parai%allgrp)

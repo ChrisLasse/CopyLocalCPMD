@@ -22,7 +22,7 @@ CONTAINS
 
     INTEGER                                  :: ierr
 
-    ALLOCATE( ipept(2,0:max_nproc-1), &
+    ALLOCATE( ipept(2,0:max_nproc), &
          &    STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
@@ -44,12 +44,12 @@ CONTAINS
 
     INTEGER                                  :: ierr
 
-    ALLOCATE( parap%nrxpl (2,0:max_nproc-1), &
-         &    parap%nrzpl (2,0:max_nproc-1), &
-         &    parap%sparm (9,0:max_nproc-1), &
-         &    parap%nst12 (2,0:max_nproc-1), &
-         &    parap%pgroup(1:max_nproc)  , &
-         &    parap%nlink (0:max_nproc-1)  , &
+    ALLOCATE( parap%nrxpl (0:max_nproc,2), &
+         &    parap%nrzpl (0:max_nproc,2), &
+         &    parap%sparm (9,0:max_nproc), &
+         &    parap%nst12 (0:max_nproc,2), &
+         &    parap%pgroup(0:max_nproc)  , &
+         &    parap%nlink (0:max_nproc)  , &
          &    STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
@@ -57,6 +57,7 @@ CONTAINS
     parap%nrxpl  = HUGE(0)
     parap%nrzpl  = HUGE(0)
     parap%sparm  = HUGE(0)
+    parap%nst12  = HUGE(0)
     parap%pgroup = HUGE(0)
     parap%nlink  = HUGE(0)
 
@@ -71,7 +72,7 @@ CONTAINS
 
     INTEGER                                  :: ierr
 
-    ALLOCATE( paraw%nwa12(2,0:max_nproc-1), &
+    ALLOCATE( paraw%nwa12(0:max_nproc,2), &
          &    STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)

@@ -1,4 +1,3 @@
-#include "cpmd_global.h"
 MODULE fnlalloc_utils
   USE error_handling,                  ONLY: stopgm
   USE ions,                            ONLY: ions1
@@ -7,9 +6,7 @@ MODULE fnlalloc_utils
                                              ndfnl
   USE parac,                           ONLY: parai
   USE sfac,                            ONLY: dfnl,&
-                                             dfnla,&
                                              fnl,&
-                                             fnla,&
                                              fnl2,&
                                              ldf1,&
                                              ldf2,&
@@ -18,7 +15,8 @@ MODULE fnlalloc_utils
                                              maxsys,&
                                              natpe,&
                                              nkpt,&
-                                             parap,norbpe
+                                             norbpe,&
+                                             parap
   USE zeroing_utils,                   ONLY: zeroing
 
   IMPLICIT NONE
@@ -98,7 +96,7 @@ CONTAINS
     IF ( cntl%tshop ) THEN
        ndfnl=INT(nstate/parai%nproc)+1
     ELSE
-       ndfnl=norbpe
+       ndfnl=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
     ENDIF
     ldfnl=imagp*3*ions1%nat*maxsys%nhxs*ndfnl*nkpt%nkpnt
     IF (ldfnl.LE.0) ldfnl=1
@@ -111,9 +109,6 @@ CONTAINS
        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
             __LINE__,__FILE__)
     ENDIF
-    if (imagp .eq. 1) fnla => fnl(1,:,:,:,1)
-    if (imagp .eq. 1) dfnla => dfnl(1,:,:,:,:,1)
-
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE fnlalloc
@@ -127,7 +122,7 @@ CONTAINS
     INTEGER                                  :: ierr
 
 ! ==--------------------------------------------------------------==
-    if (imagp .eq. 1) nullify(fnla,dfnla)
+
     DEALLOCATE(fnl,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
          __LINE__,__FILE__)
@@ -150,34 +145,26 @@ CONTAINS
     INTEGER                                  :: ldfd
     INTEGER, SAVE                            :: ldf1b, ldf2b, ndfnlb
     LOGICAL, SAVE                            :: tfnl2b, tfnl2d
-    REAL(real_8), POINTER  __CONTIGUOUS      :: xdum(:,:,:,:,:), &
-                                                xdum2(:,:,:,:,:,:),& 
-                                                xdum3(:,:,:),&
-                                                xdum4(:,:,:,:)
-    REAL(real_8), POINTER, SAVE __CONTIGUOUS :: xdfnl(:,:,:,:,:,:), &
+    REAL(real_8), POINTER                    :: xdum(:,:,:,:,:), &
+                                                xdum2(:,:,:,:,:,:)
+    REAL(real_8), POINTER, SAVE              :: xdfnl(:,:,:,:,:,:), &
                                                 xfnl(:,:,:,:,:), &
                                                 xfnl2(:,:,:,:,:)
-    REAL(real_8), POINTER,SAVE __CONTIGUOUS  :: xdfnla(:,:,:,:)
-    REAL(real_8), POINTER,SAVE __CONTIGUOUS  :: xfnla(:,:,:)
 
     IF (INDEX(tag,'SAVE').NE.0) THEN
 
-       xfnl   => fnl
-       xfnl2  => fnl2
-       xdfnl  => dfnl
-       xfnla  => fnla
-       xdfnla => dfnla
+       xfnl => fnl
+       xfnl2 => fnl2
+       xdfnl => dfnl
 
        ldf1b=ldf1
        ldf2b=ldf2
        ndfnlb=ndfnl
        tfnl2b=tfnl2
     ELSEIF (INDEX(tag,'RECV').NE.0) THEN
-       fnl   => xfnl
-       fnl2  => xfnl2
-       dfnl  => xdfnl
-       fnla  => xfnla
-       dfnla => xdfnla
+       fnl => xfnl
+       fnl2 => xfnl2
+       dfnl => xdfnl
 
        ldf1=ldf1b
        ldf2=ldf2b
@@ -196,14 +183,6 @@ CONTAINS
        dfnl => xdfnl
        xdfnl => xdum2
 
-       xdum3  => fnla
-       fnla   => xfnla
-       xfnla  => xdum3
-        
-       xdum4  => dfnla
-       dfnla  => xdfnla
-       xdfnla => xdum4
-
        ldfd=ldf1
        ldf1=ldf1b
        ldf1b=ldfd
@@ -220,10 +199,6 @@ CONTAINS
        xdum2 => dfnl
        dfnl => xdfnl
        xdfnl => xdum2
-       
-       xdum4 => dfnla
-       dfnla => xdfnla
-       xdfnla => xdum4
 
        ldfd=ndfnl
        ndfnl=ndfnlb

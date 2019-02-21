@@ -158,8 +158,7 @@ CONTAINS
     CALL cuda_mem_zero_bytes( device%inzs, n_bytes )
 
     ALLOCATE( device%streams( 0:cp_cuda_env%fft_n_streams_per_device-1 ), STAT=ierr )
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', __LINE__,&
-       __FILE__)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', __LINE__,__FILE__)
 
     DO i_stream = 0, cp_cuda_env%fft_n_streams_per_device-1
        CALL cp_cufft_init_stream( device%streams( i_stream ), device_id )

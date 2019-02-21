@@ -19,8 +19,7 @@ MODULE fftprp_utils
   USE error_handling,                  ONLY: stopgm
   USE fft,                             ONLY: &
        fftpool, kr1m, kr2max, kr2min, kr3max, kr3min, lmsqmax, lnzf, lnzs, &
-       maxrpt, mg, ms, msp, mxy, mz, ngrm, nhrm, nr1m, nr3m, xf, yf, &
-       blocking_fft, a2a_msgsize, fft_blocksize, fft_numblocks, fft_residual, fft_total
+       maxrpt, mg, ms, msp, mxy, mz, ngrm, nhrm, nr1m, nr3m, xf, yf
   USE fft_maxfft,                      ONLY: maxfft
   USE fftnew_utils,                    ONLY: addfftnset,&
                                              setfftn
@@ -28,9 +27,7 @@ MODULE fftprp_utils
   USE kinds,                           ONLY: real_8
   USE kpts,                            ONLY: tkpts
   USE mp_interface,                    ONLY: mp_max,&
-                                             mp_sum,&
-                                             mp_bcast
-  USE part_1d,                         ONLY: part_1d_get_blk_bounds
+                                             mp_sum
   USE parac,                           ONLY: parai,&
                                              paral
   USE prmem_utils,                     ONLY: prmem
@@ -122,7 +119,7 @@ CONTAINS
 
     INTEGER :: i, ierr, ig, ij, img, iny1, iny2, iny3, ip, ipp, ixf, j, jj, &
       jmg, ldim, len, mxrp, nclu, ngray, nh1, nh2, nh3, nhray, nl1, nl2, nn2, &
-      nr3i, nrx, nstate, ny1, ny2, ny3, lda,first,last,scr_len,scr_off
+      nr3i, nrx, nstate, ny1, ny2, ny3
     INTEGER, ALLOCATABLE                     :: my(:)
     REAL(real_8)                             :: rmem, rstate, xmpenm
 
@@ -299,7 +296,7 @@ CONTAINS
        group%mpenm=NINT(xmpenm)
        nl1=parap%nlink(group%nolist(1))
        nl2=parap%nlink(group%nolist(group%nogrp))
-       nrx=parap%nrxpl(2,nl1)-parap%nrxpl(1,nl2)+1
+       nrx=parap%nrxpl(nl1,2)-parap%nrxpl(nl2,1)+1
        fpar%krx=nrx+MOD(nrx+1,2)
        CALL grpgs
     ELSE
@@ -313,7 +310,7 @@ CONTAINS
     IF (isos1%tclust) THEN
        nr3m = 0
        DO i=0,parai%nproc-1
-          nr3i = parap%nrzpl(2,i)-parap%nrzpl(1,i)+1
+          nr3i = parap%nrzpl(i,2)-parap%nrzpl(i,1)+1
           nr3m = MAX(nr3m,nr3i)
        ENDDO
        nclu = parai%nproc * nr1m*fpar%kr2s*nr3m
@@ -340,18 +337,17 @@ CONTAINS
           CALL cuda_alloc_host(xf,[maxfft,cp_cuda_env%fft_n_devices_per_task*cp_cuda_env%fft_n_streams_per_device])
           CALL cuda_alloc_host(yf,[maxfft,cp_cuda_env%fft_n_devices_per_task*cp_cuda_env%fft_n_streams_per_device])
        ENDIF
-       CALL zeroing(xf)!,SIZE(xf))
-       CALL zeroing(yf)!,SIZE(yf))
 #else
        CALL stopgm(procedureN,'shall not get to that point', __LINE__,__FILE__)
 #endif
     ELSE
-       !Allocations done inside fftmain
-!       ALLOCATE(xf(maxfft,1),STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', __LINE__,__FILE__)
-!       ALLOCATE(yf(maxfft,1),STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', __LINE__,__FILE__)
+       ALLOCATE(xf(maxfft,1),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', __LINE__,__FILE__)
+       ALLOCATE(yf(maxfft,1),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', __LINE__,__FILE__)
     ENDIF
+    CALL zeroing(xf)!,SIZE(xf))
+    CALL zeroing(yf)!,SIZE(yf))
     !
     DEALLOCATE(mg,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
@@ -371,7 +367,7 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     ! ARRAY TO KEEP THE REAL SPACE WAVEFUNCTIONS
     rsactive = .FALSE.
-    IF (cntl%krwfn.AND..NOT.blocking_fft) THEN
+    IF (cntl%krwfn) THEN
        IF (tkpts%tkblock) CALL stopgm('FFTPRP',&
             'INCOMPATIBLE OPTIONS TKBLOCK AND KRWFN',&
             __LINE__,__FILE__)
@@ -429,54 +425,6 @@ CONTAINS
        ENDIF
     ENDIF
     ! ==--------------------------------------------------------------==
-    ! INITIALIZE BLOCKING FFT ALGORITHM
-    IF (blocking_fft) THEN
-       lwdim = fpar%nnr1
-       call mp_max(lwdim,parai%allgrp)
-
-       nstate = crge%n 
-       call part_1d_get_blk_bounds(nstate,parai%cp_inter_me,parai%cp_nogrp,first,last)
-       nstate = last - first +1
-       IF (tkpts%tkpnt) nstate = nstate*nkpt%nkpnt
-       maxstates = nstate
-       rstate=1._real_8
-       ldim  = (maxstates+1)/2 * lwdim
-       IF (tkpts%tkpnt) ldim = ldim*2
-       if (lwdim .gt. 0 ) fft_total=ldim/lwdim
-       lda=ngrm*nr1m
-       !calculate blocking so that we get something less than a2a_msgsize to send per proc (sparse fft)
-       fft_blocksize=1
-       a2a_msgsize=a2a_msgsize*1024/parai%nproc/16
-       do i=1,fft_total
-          if (lda*i .lt. a2a_msgsize) fft_blocksize=fft_blocksize + 1
-       end do
-       if (fft_blocksize .gt. 1 ) fft_blocksize=fft_blocksize - 1
-       fft_residual=mod(fft_total,fft_blocksize)
-       fft_numblocks=(fft_total-fft_residual)/fft_blocksize
-       call mp_bcast(fft_numblocks,parai%io_source,parai%allgrp)
-       call mp_bcast(fft_residual,parai%io_source,parai%allgrp)
-       call mp_bcast(fft_blocksize,parai%io_source,parai%allgrp)
-       call mp_bcast(fft_total,parai%io_source,parai%allgrp)
-       if (maxfft .lt. fft_blocksize*fpar%nnr1*fft_total*2) then
-          scr_len=&
-               parai%ngrays*fpar%kr1s*fft_total+&
-               fpar%nnr1*fft_total+&
-               fft_blocksize*fpar%nnr1*2*2
-       else
-          scr_len=&
-               parai%ngrays*fpar%kr1s*fft_total+&
-               fpar%nnr1*fft_total+&
-               maxfft*2
-       end if
-!       call check_scratch(scr_len,0,scr_off)
-       
-       IF (paral%io_parent) THEN
-          WRITE(6,*)&
-               ' FFTPRP| BLOCKING FFT NUMBER ALLTOALL CALLS ',fft_numblocks
-          WRITE(6,*)&
-               ' FFTPRP| BLOCKING FFT NUMBER OF STATES PER CALL ',fft_blocksize
-       ENDIF
-    ENDIF
     IF (paral%parent) CALL prmem('    FFTPRP')
     ! ==--------------------------------------------------------------==
   END SUBROUTINE fftprp_default_init
@@ -517,14 +465,14 @@ CONTAINS
 #endif
        ENDIF
     ELSE
-       !deallocation done in fftmain
-!       DEALLOCATE(xf,STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
-!            __LINE__,__FILE__)
-!       DEALLOCATE(yf,STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
-!            __LINE__,__FILE__)
+       DEALLOCATE(xf,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+            __LINE__,__FILE__)
+       DEALLOCATE(yf,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+            __LINE__,__FILE__)
     ENDIF
+
   END SUBROUTINE fftprp_default_finalize
 
 

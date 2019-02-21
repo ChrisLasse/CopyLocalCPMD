@@ -21,7 +21,6 @@ MODULE control_utils
   USE cp_cuda_types,                   ONLY: cp_cuda_env
   USE envj,                            ONLY: tjlimit
   USE error_handling,                  ONLY: stopgm
-  USE fft,                             ONLY: a2a_msgsize,blocking_fft
   USE fileopenmod,                     ONLY: fo_info
   USE fint,                            ONLY: fint1,&
                                              fint4,&
@@ -2276,6 +2275,8 @@ CONTAINS
                    something_went_wrong = .true.
                    go_on_reading        = .false.
                 ENDIF
+             ELSEIF ( keyword_contains(line,'USE_MTS') ) THEN
+                cntl%use_mts=.true.
              ELSEIF ( keyword_contains(line,'TIMESTEP') ) THEN
                 ! Time step for electrons and ions
                 previous_line = line
@@ -3632,32 +3633,6 @@ CONTAINS
                 ELSE
                    cntr%memsize=-1._real_8
                 ENDIF
-             ELSEIF ( keyword_contains(line,'USE_BLOCKINGFFT') ) THEN
-                blocking_fft=.true.
-             ELSEIF ( keyword_contains(line,'ALL2ALL_BLOCKSIZE') ) THEN
-                READ(iunit,'(A)',iostat=ierr) line
-                CALL readsi(line,1,last,a2a_msgsize,erread)
-             ELSEIF ( keyword_contains(line,'RNLSM1_BLOCKCOUNT') ) THEN
-                READ(iunit,'(A)',iostat=ierr) line
-                CALL readsi(line,1,last,cnti%rnlsm1_bc,erread)
-             ELSEIF ( keyword_contains(line,'RNLSM2_BLOCKCOUNT') ) THEN
-                READ(iunit,'(A)',iostat=ierr) line
-                CALL readsi(line,1,last,cnti%rnlsm2_bc,erread)
-             ELSEIF ( keyword_contains(line,'RNLSM2_BLOCKSIZE1') ) THEN
-                READ(iunit,'(A)',iostat=ierr) line
-                CALL readsr(line,1,last,cntr%rnlsm2_b1,erread)
-             ELSEIF ( keyword_contains(line,'RNLSM2_BLOCKSIZE2') ) THEN
-                READ(iunit,'(A)',iostat=ierr) line
-                CALL readsr(line,1,last,cntr%rnlsm2_b2,erread)
-             ELSEIF ( keyword_contains(line,'RNLSM1_BLOCKSIZE1') ) THEN
-                READ(iunit,'(A)',iostat=ierr) line
-                CALL readsr(line,1,last,cntr%rnlsm1_b1,erread)
-             ELSEIF ( keyword_contains(line,'RNLSM1_BLOCKSIZE2') ) THEN
-                READ(iunit,'(A)',iostat=ierr) line
-                CALL readsr(line,1,last,cntr%rnlsm1_b2,erread)
-             ELSEIF ( keyword_contains(line,'RNLSM_AUTOTUNE') ) THEN
-                READ(iunit,'(A)',iostat=ierr) line
-                CALL readsi(line,1,last,cnti%rnlsm_autotune_maxit,erread)
              ELSEIF ( keyword_contains(line,'SPLINE') ) THEN
                 IF ( keyword_contains(line,'POINTS') ) THEN
                    ! Number of spline points

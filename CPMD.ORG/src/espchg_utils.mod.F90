@@ -89,7 +89,7 @@ CONTAINS
           DO i3=1,spar%nr3s
              DO i2=1,spar%nr2s
                 DO ii=1,parm%nr1
-                   i1=parap%nrxpl(1,parai%mepos)+ii-1
+                   i1=parap%nrxpl(parai%mepos,1)+ii-1
                    x=i1*da(1,1)+i2*da(1,2)+i3*da(1,3)-x1
                    y=i1*da(2,1)+i2*da(2,2)+i3*da(2,3)-y1
                    z=i1*da(3,1)+i2*da(3,2)+i3*da(3,3)-z1
@@ -110,7 +110,7 @@ CONTAINS
        DO i3=1,spar%nr3s
           DO i2=1,spar%nr2s
              DO ii=1,parm%nr1
-                i1=parap%nrxpl(1,parai%mepos)+ii-1
+                i1=parap%nrxpl(parai%mepos,1)+ii-1
                 ntest=MOD(i1,2)*MOD(i2,2)*MOD(i3,2)
                 IF (ntest.EQ.0) isel(ii,i2,i3)=0
              ENDDO

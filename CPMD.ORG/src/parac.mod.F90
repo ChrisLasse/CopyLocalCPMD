@@ -62,12 +62,6 @@ MODULE parac
      INTEGER :: loc_me = HUGE(0)
      INTEGER :: loc_nproc = HUGE(0)
      INTEGER :: loc_inter_grp = HUGE(0)
-     INTEGER :: node_grp = HUGE(0)
-     INTEGER :: node_nproc = HUGE(0)
-     INTEGER :: node_me = HUGE(0)
-     INTEGER :: cp_inter_node_grp = HUGE(0)
-     INTEGER :: cp_inter_node_nproc = HUGE(0)
-     INTEGER :: cp_inter_node_me = HUGE(0)
   END TYPE parai_t
   TYPE(parai_t), SAVE :: parai
 

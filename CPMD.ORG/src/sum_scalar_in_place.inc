@@ -1,124 +1,76 @@
-subroutine mp_sum_in_place_int4_r0(data,comm)
+SUBROUTINE mp_sum_in_place_int4_r0(DATA,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  implicit none
+  IMPLICIT NONE
   ! Arguments
-  integer, intent(in) :: comm
-  integer(int_4), intent(inout) :: data
+  INTEGER, INTENT(in) :: comm
+  INTEGER(int_4), INTENT(inout) :: DATA
   ! Variables
-  character(*),parameter :: procedureN='mp_sum_in_place_int4_r0'
+  CHARACTER(*),PARAMETER :: procedureN='mp_sum_in_place_int4_r0'
 #ifdef __PARALLEL
-  integer :: ierr
-  integer,save :: size
-  logical :: first=.true.
-  real(real_8) :: tim1,tim2
-  integer(int_4) :: stack_buff
-  if (first) then
-    call mpi_type_size(MPI_INTEGER,size,ierr)
-    first=.false.
-  end if
-  cmcal(ipar_gsum)=cmcal(ipar_gsum)+1.0d0
-  cmlen(ipar_gsum)=cmlen(ipar_gsum)+1*size
-  tim1=m_walltime()      
-  call mpi_allreduce(data,stack_buff,1,MPI_INTEGER,&
+  INTEGER :: ierr
+  INTEGER(int_4) :: stack_buff
+  CALL mpi_allreduce(DATA,stack_buff,1,MPI_INTEGER,&
          MPI_SUM,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  data=stack_buff
-  tim2=m_walltime()
-  cmtim(ipar_gsum)=cmtim(ipar_gsum)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+  DATA=stack_buff
 #endif
-end subroutine mp_sum_in_place_int4_r0
-subroutine mp_sum_in_place_int8_r0(data,comm)
+END SUBROUTINE mp_sum_in_place_int4_r0
+SUBROUTINE mp_sum_in_place_int8_r0(DATA,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  implicit none
+  IMPLICIT NONE
   ! Arguments
-  integer, intent(in) :: comm
-  integer(int_8), intent(inout) :: data
+  INTEGER, INTENT(in) :: comm
+  INTEGER(int_8), INTENT(inout) :: DATA
   ! Variables
-  character(*),parameter :: procedureN='mp_sum_in_place_int8_r0'
+  CHARACTER(*),PARAMETER :: procedureN='mp_sum_in_place_int8_r0'
 #ifdef __PARALLEL
-  integer :: ierr
-  integer,save :: size
-  logical :: first=.true.
-  real(real_8) :: tim1,tim2
-  integer(int_8) :: stack_buff
-  if (first) then
-    call mpi_type_size(MPI_INTEGER8,size,ierr)
-    first=.false.
-  end if
-  cmcal(ipar_gsum)=cmcal(ipar_gsum)+1.0d0
-  cmlen(ipar_gsum)=cmlen(ipar_gsum)+1*size
-  tim1=m_walltime()      
-  call mpi_allreduce(data,stack_buff,1,MPI_INTEGER8,&
+  INTEGER :: ierr
+  INTEGER(int_8) :: stack_buff
+  CALL mpi_allreduce(DATA,stack_buff,1,MPI_INTEGER8,&
          MPI_SUM,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  data=stack_buff
-  tim2=m_walltime()
-  cmtim(ipar_gsum)=cmtim(ipar_gsum)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+  DATA=stack_buff
 #endif
-end subroutine mp_sum_in_place_int8_r0
-subroutine mp_sum_in_place_real8_r0(data,comm)
+END SUBROUTINE mp_sum_in_place_int8_r0
+SUBROUTINE mp_sum_in_place_real8_r0(DATA,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  implicit none
+  IMPLICIT NONE
   ! Arguments
-  integer, intent(in) :: comm
-  real(real_8), intent(inout) :: data
+  INTEGER, INTENT(in) :: comm
+  REAL(real_8), INTENT(inout) :: DATA
   ! Variables
-  character(*),parameter :: procedureN='mp_sum_in_place_real8_r0'
+  CHARACTER(*),PARAMETER :: procedureN='mp_sum_in_place_real8_r0'
 #ifdef __PARALLEL
-  integer :: ierr
-  integer,save :: size
-  logical :: first=.true.
-  real(real_8) :: tim1,tim2
-  real(real_8) :: stack_buff
-  if (first) then
-    call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-    first=.false.
-  end if
-  cmcal(ipar_gsum)=cmcal(ipar_gsum)+1.0d0
-  cmlen(ipar_gsum)=cmlen(ipar_gsum)+1*size
-  tim1=m_walltime()      
-  call mpi_allreduce(data,stack_buff,1,MPI_DOUBLE_PRECISION,&
+  INTEGER :: ierr
+  REAL(real_8) :: stack_buff
+  CALL mpi_allreduce(DATA,stack_buff,1,MPI_DOUBLE_PRECISION,&
          MPI_SUM,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  data=stack_buff
-  tim2=m_walltime()
-  cmtim(ipar_gsum)=cmtim(ipar_gsum)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+  DATA=stack_buff
 #endif
-end subroutine mp_sum_in_place_real8_r0
-subroutine mp_sum_in_place_complex8_r0(data,comm)
+END SUBROUTINE mp_sum_in_place_real8_r0
+SUBROUTINE mp_sum_in_place_complex8_r0(DATA,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  implicit none
+  IMPLICIT NONE
   ! Arguments
-  integer, intent(in) :: comm
-  complex(real_8), intent(inout) :: data
+  INTEGER, INTENT(in) :: comm
+  COMPLEX(real_8), INTENT(inout) :: DATA
   ! Variables
-  character(*),parameter :: procedureN='mp_sum_in_place_complex8_r0'
+  CHARACTER(*),PARAMETER :: procedureN='mp_sum_in_place_complex8_r0'
 #ifdef __PARALLEL
-  integer :: ierr
-  integer,save :: size
-  logical :: first=.true.
-  real(real_8) :: tim1,tim2
-  complex(real_8) :: stack_buff
-  if (first) then
-    call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-    first=.false.
-  end if
-  cmcal(ipar_gsum)=cmcal(ipar_gsum)+1.0d0
-  cmlen(ipar_gsum)=cmlen(ipar_gsum)+1*size
-  tim1=m_walltime()      
-  call mpi_allreduce(data,stack_buff,1,MPI_DOUBLE_COMPLEX,&
+  INTEGER :: ierr
+  COMPLEX(real_8) :: stack_buff
+  CALL mpi_allreduce(DATA,stack_buff,1,MPI_DOUBLE_COMPLEX,&
          MPI_SUM,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  data=stack_buff
-  tim2=m_walltime()
-  cmtim(ipar_gsum)=cmtim(ipar_gsum)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+  DATA=stack_buff
 #endif
-end subroutine mp_sum_in_place_complex8_r0
+END SUBROUTINE mp_sum_in_place_complex8_r0

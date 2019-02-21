@@ -352,13 +352,9 @@ CONTAINS
 
     lineform =&
          '(1X,I7,3F14.6)'
-!    IF (paral%io_parent)&
-!         WRITE(52,lineform) iteropt%nfi,&
-!         Displacement,rmeta%hllw,rmeta%hllh
-    !WT-MTD
-    IF(paral%io_parent)&
-         WRITE(52,lineform) iteropt%nfi,displacement,rmeta%hllw,rmeta%hllh_temp*rmeta%wtfac
-
+    IF (paral%io_parent)&
+         WRITE(52,lineform) iteropt%nfi,&
+         Displacement,rmeta%hllw,rmeta%hllh
     ! Close files
     IF (paral%io_parent)&
          CALL fileclose(51)
@@ -758,35 +754,47 @@ CONTAINS
     INTEGER                                  :: ia, icv, ie, it
     LOGICAL                                  :: ferror
 
-    IF (paral%io_parent) THEN
+    IF (paral%parent) THEN
        CALL xstring(fmtdres,ia,ie)
-       CALL fileopen(nw,fmtdres(ia:ie),fo_def+fo_ufo,ferror)
-       REWIND(nw)
-       WRITE(nw) i_meta-1
-       WRITE(nw) ncolvar
+       IF (paral%io_parent)&
+            CALL fileopen(nw,fmtdres(ia:ie),fo_def+fo_ufo,ferror)
+       IF (paral%io_parent)&
+            REWIND(nw)
+       IF (paral%io_parent)&
+            WRITE(nw) i_meta-1
+       IF (paral%io_parent)&
+            WRITE(nw) ncolvar
 
        DO icv = 1,ncolvar
-          WRITE(nw) (cv_path(it,icv),it=1,i_meta-1)
-          WRITE(nw) (cscl_val(it,icv),it=1,i_meta-1)
+          IF (paral%io_parent)&
+               WRITE(nw) (cv_path(it,icv),it=1,i_meta-1)
+          IF (paral%io_parent)&
+               WRITE(nw) (cscl_val(it,icv),it=1,i_meta-1)
        ENDDO
 
        IF (lmeta%lextlagrange) THEN
 
-          WRITE(nw)(cv_dyn(icv)-cv_path(i_meta-1,icv),&
+          IF (paral%io_parent)&
+               WRITE(nw)(cv_dyn(icv)-cv_path(i_meta-1,icv),&
                icv=1,ncolvar)
-          WRITE(nw)(cv_vel(icv),icv=1,ncolvar)
+          IF (paral%io_parent)&
+               WRITE(nw)(cv_vel(icv),icv=1,ncolvar)
 
        ENDIF
-       WRITE(nw) (hllw_val(it,1),it=1,i_meta-1)
-       WRITE(nw) (hllh_val(it,1),it=1,i_meta-1)
-       WRITE(NW) (hllh_val(it,1)*rmeta%wtfac,it=1,i_meta-1)
-       
-       CALL fileclose(nw)
-       WRITE(fformat,'(A,I2,A)') '(/,A,T',MAX(34,65-(ie-ia)),',A)'
-       WRITE(6,fformat)&
+       IF (paral%io_parent)&
+            WRITE(nw) (hllw_val(it,1),it=1,i_meta-1)
+       IF (paral%io_parent)&
+            WRITE(nw) (hllh_val(it,1),it=1,i_meta-1)
+
+       IF (paral%io_parent)&
+            CALL fileclose(nw)
+       IF (paral%io_parent)&
+            WRITE(fformat,'(A,I2,A)') '(/,A,T',MAX(34,65-(ie-ia)),',A)'
+       IF (paral%io_parent)&
+            WRITE(6,fformat)&
             ' MTD RESTART INFO WRITTEN ON FILE ',fmtdres(ia:ie)
 
-    ENDIF  ! io_parent
+    ENDIF  ! parent
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE wmtdres
@@ -853,13 +861,8 @@ CONTAINS
 
           IF (paral%io_parent)&
                READ(nr) (hllw_val(it,1),it=1,imeta%i_meta_res)
-          IF (paral%io_parent) THEN
-             READ(nr) (hllh_val(it,1),it=1,imeta%i_meta_res)
-             DO IT=1,imeta%i_meta_res
-                hllh_val(it,1)=hllh_val(it,1)/rmeta%wtfac
-             END DO
-          end if
-
+          IF (paral%io_parent)&
+               READ(nr) (hllh_val(it,1),it=1,imeta%i_meta_res)
           IF (paral%io_parent)&
                WRITE(fformat,'(A,I2,A)') '(/,A,T',MAX(34,65-(ie-ia)),',A)'
           IF (paral%io_parent)&
@@ -916,7 +919,6 @@ CONTAINS
        IF (paral%io_parent)&
             READ(52,err=20,END=20,fmt=*) ij,&
             Displacement,hllw_val(ii,1),hllh_val(ii,1)
-       IF (paral%io_parent) hllh_val(ii,1)=hllh_val(ii,1)/rmeta%wtfac
        IF (paral%io_parent)&
             READ(55,err=20,END=20,fmt=*) ij,&
             (cv_disp(icv),icv=1,ncolvar)

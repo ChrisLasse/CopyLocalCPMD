@@ -729,9 +729,9 @@ CONTAINS
           k0(2)=epot2%boxdum(5)+REAL(k-1,kind=real_8)*dk
           DO j=1,fpar%kr2s
              k0(1)=epot2%boxdum(3)+REAL(j-1,kind=real_8)*dj
-             DO i=parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)+ikr1! IKR1 added: biswas
+             DO i=parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)+ikr1! IKR1 added: biswas
                 k0(0)=epot2%boxdum(1)+REAL(i-1,kind=real_8)*di
-                extf((i-parap%nrxpl(1,parai%mepos)+1) + (j-1)*fpar%kr1 + (k-1)*fpar%kr1*fpar%kr2s) &
+                extf((i-parap%nrxpl(parai%mepos,1)+1) + (j-1)*fpar%kr1 + (k-1)*fpar%kr1*fpar%kr2s) &
                      =clcpot(k0)
              ENDDO
           ENDDO
@@ -744,10 +744,10 @@ CONTAINS
           k0(2)=epot2%boxdum(5)+REAL(k-1,kind=real_8)*dk
           DO j=1,fpar%kr2s
              k0(1)=epot2%boxdum(3)+REAL(j-1,kind=real_8)*dj
-             DO i=parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)+ikr1! IKR1 added: biswas
+             DO i=parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)+ikr1! IKR1 added: biswas
                 ir = ir +1
                 k0(0)=epot2%boxdum(1)+REAL(i-1,kind=real_8)*di
-                extf(i-parap%nrxpl(1,parai%mepos)+1 + (j-1)*fpar%kr1 + (k-1)*fpar%kr1*fpar%kr2s) &
+                extf(i-parap%nrxpl(parai%mepos,1)+1 + (j-1)*fpar%kr1 + (k-1)*fpar%kr1*fpar%kr2s) &
                      =clcfld(ir,k0)
              ENDDO
           ENDDO
@@ -1679,7 +1679,7 @@ CONTAINS
           ko(2)=epot2%boxdum(5)+REAL(k-1,kind=real_8)*dk
           DO j=1,fpar%kr2s
              ko(1)=epot2%boxdum(3)+REAL(j-1,kind=real_8)*dj
-             DO i=parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)+ikr1
+             DO i=parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)+ikr1
                 ko(0)=epot2%boxdum(1)+REAL(i-1,kind=real_8)*di
                 ! ..   
                 ir=ir+1

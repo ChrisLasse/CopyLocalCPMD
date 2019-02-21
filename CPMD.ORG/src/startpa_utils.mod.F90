@@ -95,10 +95,10 @@ CONTAINS
     CALL mp_bcast_byte(parai%cp_nogrp,size_in_bytes_of(parai%cp_nogrp),0,parai%cp_grp)
     ! ==--------------------------------------------------------------==
     ! 
-    ! set the cp groups, parent, io_parent, source, io_source, node_grp and cp_inter_node_grp
+    ! set the cp groups, parent, io_parent, source and io_source
     ! 
     CALL set_cp_grp()
-    
+
     ! ==--------------------------------------------------------------==
     ! alloc some global arrays in system (alloc with max number of procs ie parai%cp_nproc)
     CALL alloc_system( parai%cp_nproc )

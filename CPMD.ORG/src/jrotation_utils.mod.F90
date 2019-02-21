@@ -2,7 +2,6 @@
 
 MODULE jrotation_utils
   USE cnst,                            ONLY: pi
-  USE distribution_utils,              ONLY: dist_size
   USE error_handling,                  ONLY: stopgm
   USE kinds,                           ONLY: real_8
   USE machine,                         ONLY: m_flush
@@ -36,6 +35,8 @@ MODULE jrotation_utils
   PRIVATE
 
   PUBLIC :: jrotation
+  PUBLIC :: set_orbdist
+  PUBLIC :: my_set_orbdist
   !public :: jrotation1
   !public :: jrotationp
   !public :: jacobirot_new
@@ -171,7 +172,7 @@ CONTAINS
             CALL jrotation1(rotmat,xyzmat,ldx,nstate)
        CALL mp_bcast(rotmat,nstate**2,parai%io_source,parai%cp_grp)
     ELSE
-       CALL dist_size(nstate,my_nproc,paraw%nwa12,nblock=1,nbmax=imax,fw=1)
+       CALL set_orbdist(nstate,1,my_nproc,imax)
        CALL jrotationp(rotmat(1,1),xyzmat(1,1,1),ldx,nstate,my_grp)
        ! redist
        CALL mp_bcast(rotmat,nstate**2,parai%io_source,parai%cp_grp)
@@ -185,6 +186,72 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE jrotation
+  ! ==================================================================
+  SUBROUTINE set_orbdist(nstate,nblock,my_nproc,nbmax)
+    ! ==--------------------------------------------------------------==
+    INTEGER                                  :: nstate, nblock, my_nproc, &
+                                                nbmax
+
+    INTEGER                                  :: ip, nx
+    REAL(real_8)                             :: xsaim, xsnow, xstates
+
+! ==--------------------------------------------------------------==
+
+    nbmax=0
+    xstates=REAL(nblock,kind=real_8)
+    IF ((xstates*my_nproc).LT.nstate) THEN
+       xstates=REAL(nstate,kind=real_8)/REAL(my_nproc,kind=real_8)
+    ENDIF
+    xsnow=0.0_real_8
+    xsaim=0.0_real_8
+    DO ip=1,my_nproc
+       xsaim = xsnow + xstates
+       paraw%nwa12(ip-1,1)=NINT(xsnow)+1
+       paraw%nwa12(ip-1,2)=NINT(xsaim)
+       IF (NINT(xsaim).GT.nstate) THEN
+          paraw%nwa12(ip-1,2)=nstate
+       ENDIF
+       IF (NINT(xsnow).GT.nstate) THEN
+          paraw%nwa12(ip-1,1)=nstate+1
+       ENDIF
+       xsnow = xsaim
+    ENDDO
+    DO ip=0,my_nproc-1
+       nx=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
+       nbmax=MAX(nbmax,nx)
+    ENDDO
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END SUBROUTINE set_orbdist
+  ! ==================================================================
+  SUBROUTINE my_set_orbdist(nstate,nblock,nbmax)
+    ! ==--------------------------------------------------------------==
+    INTEGER                                  :: nstate, nblock, nbmax
+
+    INTEGER                                  :: ip, n
+    REAL(real_8)                             :: xsaim, xsnow, xstates
+
+! ==--------------------------------------------------------------==
+
+    nbmax=0
+    xstates=REAL(nstate,kind=real_8)/REAL(parai%nproc,kind=real_8)
+    IF (xstates.LT.REAL(nblock,kind=real_8)) xstates=REAL(nblock,kind=real_8)
+    xsnow=0.0_real_8
+    n=0
+    DO ip=1,parai%nproc
+       xsaim = xsnow + xstates
+       paraw%nwa12(ip-1,1)=NINT(xsnow)+1
+       paraw%nwa12(ip-1,2)=NINT(xsaim)
+       IF (NINT(xsaim).GT.nstate) paraw%nwa12(ip-1,2)=nstate
+       IF (ip.EQ.parai%nproc) paraw%nwa12(ip-1,2)=nstate
+       IF (NINT(xsnow).GT.nstate) paraw%nwa12(ip-1,1)=nstate+1
+       xsnow = xsaim
+       n=n+paraw%nwa12(ip-1,2)-paraw%nwa12(ip-1,1)+1
+       nbmax=MAX(nbmax,paraw%nwa12(ip-1,2)-paraw%nwa12(ip-1,1)+1)
+    ENDDO
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END SUBROUTINE my_set_orbdist
   ! ==================================================================
   SUBROUTINE jrotation1(rotmat,xyzmat,ldx,nstate)
     ! ==--------------------------------------------------------------==
@@ -296,10 +363,10 @@ CONTAINS
     top(:)=HUGE(0)
     bot(:)=HUGE(0)
     ! ==--------------------------------------------------------------==
-    nome=paraw%nwa12(2,my_me)-paraw%nwa12(1,my_me)+1
+    nome=paraw%nwa12(my_me,2)-paraw%nwa12(my_me,1)+1
     nomax=0
     DO ip=0,my_nproc-1
-       nn=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+       nn=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
        nomax=MAX(nomax,nn)
     ENDDO
     nn=MAX(8*nomax*nomax*wannc%nwanopt,2*nomax*nstate*wannc%nwanopt,&
@@ -344,7 +411,7 @@ CONTAINS
           ENDDO
 1000      CONTINUE
           IF (ipo.GE.0) THEN
-             nipo=paraw%nwa12(2,ipo)-paraw%nwa12(1,ipo)+1
+             nipo=paraw%nwa12(ipo,2)-paraw%nwa12(ipo,1)+1
           ELSE
              nipo=0
           ENDIF
@@ -354,7 +421,7 @@ CONTAINS
              ! pack data to be send to partner
              DO k=1,wannc%nwanopt
                 kk=(k-1)*nome*nstate
-                CALL matmov(nstate,nome,xyzmat(1,paraw%nwa12(1,my_me),k),&
+                CALL matmov(nstate,nome,xyzmat(1,paraw%nwa12(my_me,1),k),&
                      ldx,xyzc(kk+1),nstate)
              ENDDO
              ! send/receive data
@@ -362,7 +429,7 @@ CONTAINS
              rcount=wannc%nwanopt*nipo*nstate
              CALL mp_sendrecv(xyzc,scount,ipo,xyzd,rcount,ipo,my_grp)
              ! build up local problem
-             IF (paraw%nwa12(1,my_me).LT.paraw%nwa12(1,ipo)) THEN
+             IF (paraw%nwa12(my_me,1).LT.paraw%nwa12(ipo,1)) THEN
                 mia=1
                 mib=nome+1
                 mja=nome*nn+nome+1
@@ -376,17 +443,17 @@ CONTAINS
              DO k=1,wannc%nwanopt
                 kk=(k-1)*nome*nstate
                 kk2=(k-1)*nn*nn
-                j=paraw%nwa12(1,my_me)
+                j=paraw%nwa12(my_me,1)
                 CALL matmov(nome,nome,xyzc(j+kk),nstate,&
                      xyzm(kk2+mia),nn)
-                j=paraw%nwa12(1,ipo)
+                j=paraw%nwa12(ipo,1)
                 CALL matmov(nipo,nome,xyzc(j+kk),nstate,&
                      xyzm(kk2+mib),nn)
                 kk=(k-1)*nipo*nstate
-                j=paraw%nwa12(1,ipo)
+                j=paraw%nwa12(ipo,1)
                 CALL matmov(nipo,nipo,xyzd(j+kk),nstate,&
                      xyzm(kk2+mja),nn)
-                j=paraw%nwa12(1,my_me)
+                j=paraw%nwa12(my_me,1)
                 CALL matmov(nome,nipo,xyzd(j+kk),nstate,&
                      xyzm(kk2+mjb),nn)
              ENDDO
@@ -411,16 +478,16 @@ CONTAINS
              ! send/receive ROTMAT data
              scount=nome*nstate
              rcount=nipo*nstate
-             CALL mp_sendrecv(rotmat(:,paraw%nwa12(1,my_me)),scount,ipo,&
-                  rotmat(:,paraw%nwa12(1,ipo)),rcount,ipo,my_grp)
+             CALL mp_sendrecv(rotmat(:,paraw%nwa12(my_me,1)),scount,ipo,&
+                  rotmat(:,paraw%nwa12(ipo,1)),rcount,ipo,my_grp)
              ! update ROTMAT
              CALL dgemm("N","N",nstate,nome,nipo,1._real_8,&
-                  rotmat(1,paraw%nwa12(1,ipo)),nstate,rmat(mib),nn,&
+                  rotmat(1,paraw%nwa12(ipo,1)),nstate,rmat(mib),nn,&
                   0._real_8,gmat,nstate)
              CALL dgemm("N","N",nstate,nome,nome,1._real_8,&
-                  rotmat(1,paraw%nwa12(1,my_me)),nstate,rmat(mia),nn,&
+                  rotmat(1,paraw%nwa12(my_me,1)),nstate,rmat(mia),nn,&
                   1._real_8,gmat,nstate)
-             CALL dcopy(nstate*nome,gmat,1,rotmat(1,paraw%nwa12(1,my_me)),1)
+             CALL dcopy(nstate*nome,gmat,1,rotmat(1,paraw%nwa12(my_me,1)),1)
              ! update XYZMAT (first part, multiplication from right)
              DO k=1,wannc%nwanopt
                 kk=(k-1)*nome*nstate+1
@@ -431,14 +498,14 @@ CONTAINS
           ELSEIF (nome.GT.0) THEN
              DO k=1,wannc%nwanopt
                 kk=(k-1)*nome*nstate
-                CALL matmov(nstate,nome,xyzmat(1,paraw%nwa12(1,my_me),k),&
+                CALL matmov(nstate,nome,xyzmat(1,paraw%nwa12(my_me,1),k),&
                      ldx,xyzm(kk+1),nstate)
              ENDDO
           ENDIF
           ! distribute rotation matrices and update xyzmat (second part)
           IF (nome.GT.0) THEN
              DO k=1,wannc%nwanopt
-                DO i=paraw%nwa12(1,my_me),paraw%nwa12(2,my_me)
+                DO i=paraw%nwa12(my_me,1),paraw%nwa12(my_me,2)
                    !CALL zeroing(xyzmat(:,i,k))!,nstate)
                    xyzmat(1:nstate,i,k)=0.0_real_8
                 ENDDO
@@ -465,7 +532,7 @@ CONTAINS
                 CALL mp_sendrecv(gmat,msglen,mre,gmat(k:),&
                      msglen,mep,my_grp)
              ENDIF
-             mre=paraw%nwa12(2,mep)-paraw%nwa12(1,mep)+1
+             mre=paraw%nwa12(mep,2)-paraw%nwa12(mep,1)+1
              IF (nome.GT.0) THEN
                 IF (mre.GT.0) THEN
                    ! look for partner of mep
@@ -481,14 +548,14 @@ CONTAINS
                    ENDDO
 1001               CONTINUE
                    IF (mip.GE.0) THEN
-                      m=paraw%nwa12(2,mip)-paraw%nwa12(1,mip)+1
+                      m=paraw%nwa12(mip,2)-paraw%nwa12(mip,1)+1
                    ELSE
                       m=0
                    ENDIF
                    IF (m.GT.0) THEN
-                      j=paraw%nwa12(1,my_me)
-                      i1=paraw%nwa12(1,mep)
-                      i2=paraw%nwa12(1,mip)
+                      j=paraw%nwa12(my_me,1)
+                      i1=paraw%nwa12(mep,1)
+                      i2=paraw%nwa12(mip,1)
                       k=2*nomax*nomax+1
                       kk=3*nomax*nomax+1
                       DO i=1,wannc%nwanopt
@@ -500,8 +567,8 @@ CONTAINS
                       ENDDO
                    ELSE
                       DO k=1,wannc%nwanopt
-                         j=paraw%nwa12(1,my_me)
-                         i=paraw%nwa12(1,mep)
+                         j=paraw%nwa12(my_me,1)
+                         i=paraw%nwa12(mep,1)
                          kk=(k-1)*nome*nstate+i
                          CALL matmov(mre,nome,xyzm(kk),nstate,&
                               xyzmat(i,j,k),ldx)
@@ -517,8 +584,8 @@ CONTAINS
        !$omp parallel do private(K,I,KK,II)
        DO k=1,wannc%nwanopt
           kk=(k-1)*nomax
-          DO i=paraw%nwa12(1,my_me),paraw%nwa12(2,my_me)
-             ii=i-paraw%nwa12(1,my_me)+1
+          DO i=paraw%nwa12(my_me,1),paraw%nwa12(my_me,2)
+             ii=i-paraw%nwa12(my_me,1)+1
              xyzc(kk+ii)=xyzmat(i,i,k)
           ENDDO
        ENDDO
@@ -531,15 +598,15 @@ CONTAINS
           DO k=1,wannc%nwanopt
              kk=(k-1)*nomax+j
              i1=(k-1)*nstate
-             DO i=paraw%nwa12(1,ip),paraw%nwa12(2,ip)
-                ii=i-paraw%nwa12(1,ip)+1
+             DO i=paraw%nwa12(ip,1),paraw%nwa12(ip,2)
+                ii=i-paraw%nwa12(ip,1)+1
                 xyzc(i1+i)=xyzm(kk+ii)
              ENDDO
           ENDDO
        ENDDO
        ! calculate gradient
        gmax=0._real_8
-       DO j=paraw%nwa12(1,my_me),paraw%nwa12(2,my_me)
+       DO j=paraw%nwa12(my_me,1),paraw%nwa12(my_me,2)
           DO i=1,j-1
              gcomp=0._real_8
              DO k=1,wannc%nwanopt
@@ -575,22 +642,22 @@ CONTAINS
 100 CONTINUE
     ! update the full xyzmat and rotmat
     DO k=1,wannc%nwanopt
-       DO i=1,paraw%nwa12(1,my_me)-1
+       DO i=1,paraw%nwa12(my_me,1)-1
           !CALL zeroing(xyzmat(:,i,k))!,nstate)
           xyzmat(1:nstate,i,k)=0.0_real_8
        ENDDO
-       DO i=paraw%nwa12(2,my_me)+1,nstate
+       DO i=paraw%nwa12(my_me,2)+1,nstate
           !CALL zeroing(xyzmat(:,i,k))!,nstate)
           xyzmat(1:nstate,i,k)=0.0_real_8
        ENDDO
        i=MAX(((nstate-1)*ldx+nstate),0) ! MAX to avoid negative value
        CALL mp_sum(xyzmat(:,:,k),i,my_grp)
     ENDDO
-    DO i=1,paraw%nwa12(1,my_me)-1
+    DO i=1,paraw%nwa12(my_me,1)-1
        !CALL zeroing(rotmat(:,i))!,nstate)
        rotmat(1:nstate,i)=0._real_8
     ENDDO
-    DO i=paraw%nwa12(2,my_me)+1,nstate
+    DO i=paraw%nwa12(my_me,2)+1,nstate
        !CALL zeroing(rotmat(:,i))!,nstate)
        rotmat(1:nstate,i)=0._real_8
     ENDDO
@@ -922,7 +989,7 @@ CONTAINS
        lgmat=nstate*nstate
        lwann=lgmat+100
     ELSE
-       CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=1,nbmax=nomax,fw=1)
+       CALL set_orbdist(nstate,1,parai%nproc,nomax)
        nn=MAX(8*nomax*nomax*wannc%nwanopt,2*nomax*nstate*wannc%nwanopt,&
             2*nomax*parai%nproc*wannc%nwanopt)
        lgmat=2*nn+2*nomax*nstate*wannc%nwanopt+4*nomax*nomax

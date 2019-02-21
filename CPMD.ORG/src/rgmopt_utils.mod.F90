@@ -290,7 +290,7 @@ SUBROUTINE rgmopt(c0,c1,c2,cm,sc0,pme,gde,vpp,eigv)
   ropt_mod%engpri=.FALSE.
   ropt_mod%calste=.FALSE.
   ! DFNL
-  ndfnl=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+  ndfnl=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
   ldfnl=imagp*3*ions1%nat*maxsys%nhxs*ndfnl*nkpt%nkpnt
   IF (ldfnl.LE.0) THEN
      ldfnl=1

@@ -58,8 +58,7 @@ CONTAINS
     ! ==  SCRATCH SPACE MANAGEMENT                                    ==
     ! ==--------------------------------------------------------------==
     ! TODO refactor this: create separate arrays instead of SCR
-!BM    idp1 = 1
-    idp1 = 0
+    idp1 = 1
     idp2 = idp1 + cotc0%nodim*cotc0%nodim
     idp3 = idp2 + cotc0%nodim*cnti%mgdiis
     idp4 = idp3 + cotc0%nodim
@@ -176,8 +175,7 @@ CONTAINS
     lrgdiis=MAX(&
          cotc0%nodim*cotc0%nodim&
          +cotc0%nodim*cnti%mgdiis&
-!BM         +7*cotc0%nodim+cnti%mgdiis,&
-         +7*cotc0%nodim+cnti%mgdiis+10,&
+         +7*cotc0%nodim+cnti%mgdiis,&
          10*cotc0%nodim)
     tag   ='NODIM*NODIM+NODIM*MGDIIS+...'
     ! ==--------------------------------------------------------------==

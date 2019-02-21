@@ -10,7 +10,6 @@ MODULE pm_mdpt_utils
                                              cotr007,&
                                              ntrest,&
                                              resval
-  USE distribution_utils,              ONLY: dist_size
   USE ddip,                            ONLY: lenbk
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
@@ -27,6 +26,7 @@ MODULE pm_mdpt_utils
                                              fnldealloc
   USE fusion_utils,                    ONLY: fusion,&
                                              separate
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8
   USE kpts,                            ONLY: tkpts
   USE linres,                          ONLY: &
@@ -75,8 +75,7 @@ MODULE pm_mdpt_utils
                                              cntl,&
                                              maxsys,&
                                              ncpw,&
-                                             nkpt,&
-                                             paraw
+                                             nkpt
   USE timer,                           ONLY: tihalt,&
                                              tiset
   USE utils,                           ONLY: nxxfun
@@ -308,7 +307,7 @@ CONTAINS
        CALL zeroing(urot)!,nus)
        clrwf => c1
        IF (cntl%tdmal) THEN
-          CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+          CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
           ALLOCATE(gamx(nstate*nstx*bsfac),STAT=ierr)
           IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
                __LINE__,__FILE__)

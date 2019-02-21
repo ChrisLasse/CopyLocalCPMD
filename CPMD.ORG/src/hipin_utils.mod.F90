@@ -53,7 +53,7 @@ CONTAINS
 
 ! ==--------------------------------------------------------------==
 
-    nr3pl=parap%nrzpl(2,parai%mepos)-parap%nrzpl(1,parai%mepos)+1
+    nr3pl=parap%nrzpl(parai%mepos,2)-parap%nrzpl(parai%mepos,1)+1
     ! IF(PARENT) NR3MX=NR3M+1
     ALLOCATE(hgpot(spar%nr1s+1,spar%nr2s+1,nr3pl),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
@@ -159,7 +159,7 @@ CONTAINS
        r3(i)=dr3*REAL(k,kind=real_8)
     ENDDO
     ! ==--------------------------------------------------------------==
-    nr3in=parap%nrzpl(1,parai%mepos)
+    nr3in=parap%nrzpl(parai%mepos,1)
     IF (trealsp) THEN
        DO ix=1,nr1h
           !$omp parallel do private(IZ,IY,IYZ,DX,DY,DZ,RPOX,SPOT)

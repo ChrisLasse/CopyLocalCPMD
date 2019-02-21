@@ -54,8 +54,8 @@ CONTAINS
                    IF (ABS(temp).GT.1.e-5_real_8) THEN
                       IF (iv.NE.jv) temp=2.0_real_8*temp
                       ! This loops are split to get better cash usage
-                      DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                         ii=i-parap%nst12(1,parai%mepos)+1
+                      DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                         ii=i-parap%nst12(parai%mepos,1)+1
                          DO j=i,nstate
                             tk=temp*GAMMA(i,j)
                             IF (i.EQ.j) tk=0.5_real_8*tk
@@ -66,8 +66,8 @@ CONTAINS
                             ENDDO
                          ENDDO
                       ENDDO
-                      DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                         ii=i-parap%nst12(1,parai%mepos)+1
+                      DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                         ii=i-parap%nst12(parai%mepos,1)+1
                          DO j=i,nstate
                             tk=temp*GAMMA(j,i)
                             IF (i.EQ.j) tk=0.5_real_8*tk
@@ -78,8 +78,8 @@ CONTAINS
                             ENDDO
                          ENDDO
                       ENDDO
-                      DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                         ii=i-parap%nst12(1,parai%mepos)+1
+                      DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                         ii=i-parap%nst12(parai%mepos,1)+1
                          DO j=i,nstate
                             tk=temp*GAMMA(i,j)
                             IF (i.EQ.j) tk=0.5_real_8*tk
@@ -90,8 +90,8 @@ CONTAINS
                             ENDDO
                          ENDDO
                       ENDDO
-                      DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                         ii=i-parap%nst12(1,parai%mepos)+1
+                      DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                         ii=i-parap%nst12(parai%mepos,1)+1
                          DO j=i,nstate
                             tk=temp*GAMMA(j,i)
                             IF (i.EQ.j) tk=0.5_real_8*tk

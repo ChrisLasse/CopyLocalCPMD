@@ -54,7 +54,7 @@ MODULE ovlap_utils
 CONTAINS
 
   ! ==================================================================
-  SUBROUTINE ovlap(nstate,a,c1,c2,rdst,full)
+  SUBROUTINE ovlap(nstate,a,c1,c2)
     ! ==--------------------------------------------------------------==
     ! ==         COMPUTES THE OVERLAP MATRIX A = < C1 | C2 >          ==
     ! ==--------------------------------------------------------------==
@@ -64,23 +64,12 @@ CONTAINS
 
     CHARACTER(*), PARAMETER                  :: procedureN = 'ovlap'
 
+    COMPLEX(real_8), ALLOCATABLE, &
+      DIMENSION(:, :)                        :: C1_local, C2_local
     COMPLEX(real_8), POINTER                 :: pc1, pc2
     INTEGER                                  :: ibeg_c0, ierr, isub, isub2, &
                                                 isub3, NGW_local
-    LOGICAL                                  :: GEQ0_local, symmetric,redist,need_full
-    LOGICAL,intent(in), optional             :: rdst,full
-
-    IF( PRESENT (rdst) ) THEN
-       redist = rdst
-    ELSE
-       redist = .TRUE.
-    END IF
-    
-    IF(PRESENT(full))THEN
-       need_full=full
-    ELSE
-       need_full=.TRUE.
-    END IF
+    LOGICAL                                  :: GEQ0_local, symmetric
 
     CALL tiset(procedureN,isub)
     __NVTX_TIMER_START ( procedureN )
@@ -94,6 +83,18 @@ CONTAINS
     CALL tiset(procedureN//'_grps_a',isub2)
     CALL cp_grp_get_sizes(ngw_l=NGW_local,geq0_l=GEQ0_local,&
          first_g=ibeg_c0)
+    ALLOCATE(C1_local(NGW_local,nstate),stat=ierr)
+    IF (ierr.NE.0) CALL stopgm(procedureN,'Allocation problem',& 
+         __LINE__,__FILE__)
+    CALL cp_grp_copy_wfn_to_local(c1,ncpw%ngw,C1_local,NGW_local,&
+         ibeg_c0,NGW_local,nstate)
+    IF (.NOT.symmetric) THEN
+       ALLOCATE(C2_local(NGW_local,nstate),stat=ierr)
+       IF (ierr.NE.0) CALL stopgm(procedureN,'Allocation problem',& 
+            __LINE__,__FILE__)
+       CALL cp_grp_copy_wfn_to_local(c2,ncpw%ngw,C2_local,NGW_local,&
+            ibeg_c0,NGW_local,nstate)
+    ENDIF
     CALL tihalt(procedureN//'_grps_a',isub2)
     ! <<<<<<<
 
@@ -103,42 +104,42 @@ CONTAINS
           ! ==--------------------------------------------------------------==
           ! ..Alpha spin
           IF (symmetric) THEN
-             CALL dsyrk('U','T',spin_mod%nsup,2*NGW_local,2._real_8,C1(ibeg_c0,1),2*ncpw%ngw,&
+             CALL dsyrk('U','T',spin_mod%nsup,2*NGW_local,2._real_8,C1_local,2*ngw_local,&
                   0._real_8,a,nstate)
-             IF(need_full)CALL dmatc('U',spin_mod%nsup,a,nstate)
+             CALL dmatc('U',spin_mod%nsup,a,nstate)
           ELSE
-             CALL dgemm('T','N',spin_mod%nsup,spin_mod%nsup,2*NGW_local,2.0_real_8,C1(ibeg_c0,1),&
-                  2*NCPW%NGW,C2(ibeg_c0,1),2*ncpw%ngw,0.0_real_8,a(1,1),&
+             CALL dgemm('T','N',spin_mod%nsup,spin_mod%nsup,2*NGW_local,2.0_real_8,C1_local(1,1),&
+                  2*NGW_local,C2_local(1,1),2*ngw_local,0.0_real_8,a(1,1),&
                   nstate)
           ENDIF
           IF (GEQ0_local) THEN
              IF (symmetric) THEN
-                CALL dger(spin_mod%nsup,spin_mod%nsup,-1.0_real_8,C1(ibeg_c0,1),2*NCPW%NGW,&
-                     C1(ibeg_c0,1),2*NCPW%NGW,a(1,1),nstate)
+                CALL dger(spin_mod%nsup,spin_mod%nsup,-1.0_real_8,C1_local(1,1),2*NGW_local,&
+                     C1_local(1,1),2*NGW_local,a(1,1),nstate)
              ELSE
-                CALL dger(spin_mod%nsup,spin_mod%nsup,-1.0_real_8,C1(ibeg_c0,1),2*NCPW%NGW,&
-                     C2(ibeg_c0,1),2*NCPW%NGW,a(1,1),nstate)
+                CALL dger(spin_mod%nsup,spin_mod%nsup,-1.0_real_8,C1_local(1,1),2*NGW_local,&
+                     C2_local(1,1),2*NGW_local,a(1,1),nstate)
              ENDIF
           ENDIF
           ! ==--------------------------------------------------------------==
           ! ..Beta spin
           IF (symmetric) THEN
-             CALL dsyrk('U','T',spin_mod%nsdown,2*NGW_local,2._real_8,C1(ibeg_c0,spin_mod%nsup+1),&
-                  2*NCPW%NGW,0._real_8,a(spin_mod%nsup+1,spin_mod%nsup+1),nstate)
-             IF(need_full)CALL dmatc('U',spin_mod%nsdown,a(spin_mod%nsup+1,spin_mod%nsup+1),nstate)
+             CALL dsyrk('U','T',spin_mod%nsdown,2*NGW_local,2._real_8,C1_local(1,spin_mod%nsup+1),&
+                  2*NGW_local,0._real_8,a(spin_mod%nsup+1,spin_mod%nsup+1),nstate)
+             CALL dmatc('U',spin_mod%nsdown,a(spin_mod%nsup+1,spin_mod%nsup+1),nstate)
           ELSE
              CALL dgemm('T','N',spin_mod%nsdown,spin_mod%nsdown,2*NGW_local,2.0_real_8,&
-                  C1(ibeg_c0,spin_mod%nsup+1),2*NCPW%NGW,C2(ibeg_c0,spin_mod%nsup+1),&
-                  2*NCPW%NGW,0.0_real_8,a(spin_mod%nsup+1,spin_mod%nsup+1),nstate)
+                  C1_local(1,spin_mod%nsup+1),2*NGW_local,C2_local(1,spin_mod%nsup+1),&
+                  2*NGW_local,0.0_real_8,a(spin_mod%nsup+1,spin_mod%nsup+1),nstate)
           ENDIF
           IF (GEQ0_local) THEN
              IF (symmetric) THEN
-                CALL dger(spin_mod%nsdown,spin_mod%nsdown,-1.0_real_8,C1(ibeg_c0,spin_mod%nsup+1),&
-                     2*NCPW%NGW,C1(ibeg_c0,spin_mod%nsup+1),2*ncpw%ngw,&
+                CALL dger(spin_mod%nsdown,spin_mod%nsdown,-1.0_real_8,C1_local(1,spin_mod%nsup+1),&
+                     2*NGW_local,C1_local(1,spin_mod%nsup+1),2*ngw_local,&
                      a(spin_mod%nsup+1,spin_mod%nsup+1),nstate)
              ELSE
-                CALL dger(spin_mod%nsdown,spin_mod%nsdown,-1.0_real_8,C1(ibeg_c0,spin_mod%nsup+1),&
-                     2*NCPW%NGW,C2(ibeg_c0,spin_mod%nsup+1),2*ncpw%ngw,&
+                CALL dger(spin_mod%nsdown,spin_mod%nsdown,-1.0_real_8,C1_local(1,spin_mod%nsup+1),&
+                     2*NGW_local,C2_local(1,spin_mod%nsup+1),2*ngw_local,&
                      a(spin_mod%nsup+1,spin_mod%nsup+1),nstate)
              ENDIF
           ENDIF
@@ -146,21 +147,21 @@ CONTAINS
           ! ==--------------------------------------------------------------==
           ! ..LDA
           IF (symmetric) THEN
-             CALL dsyrk('U','T',nstate,2*NGW_local,2._real_8,C1(ibeg_c0,1),&
-                  2*NCPW%NGW,0._real_8,a(1,1),nstate)
-             IF(need_full)CALL dmatc('U',nstate,a,nstate)
+             CALL dsyrk('U','T',nstate,2*NGW_local,2._real_8,C1_local(1,1),&
+                  2*NGW_local,0._real_8,a(1,1),nstate)
+             CALL dmatc('U',nstate,a,nstate)
           ELSE
              CALL dgemm('T','N',nstate,nstate,2*NGW_local,2.0_real_8,&
-                  C1(ibeg_c0,1),2*NCPW%NGW,C2(ibeg_c0,1),2*ncpw%ngw,&
+                  C1_local(1,1),2*NGW_local,C2_local(1,1),2*ngw_local,&
                   0.0_real_8,a(1,1),nstate)
           ENDIF
           IF (GEQ0_local) THEN
              IF (symmetric) THEN
-                CALL dger(nstate,nstate,-1.0_real_8,C1(ibeg_c0,1),2*NCPW%NGW,&
-                     C1(ibeg_c0,1),2*NCPW%NGW,a(1,1),nstate)
+                CALL dger(nstate,nstate,-1.0_real_8,C1_local(1,1),2*NGW_local,&
+                     C1_local(1,1),2*NGW_local,a(1,1),nstate)
              ELSE
-                CALL dger(nstate,nstate,-1.0_real_8,C1(ibeg_c0,1),2*NCPW%NGW,&
-                     C2(ibeg_c0,1),2*NCPW%NGW,a(1,1),nstate)
+                CALL dger(nstate,nstate,-1.0_real_8,C1_local(1,1),2*NGW_local,&
+                     C2_local(1,1),2*NGW_local,a(1,1),nstate)
              ENDIF
           ENDIF
        ENDIF
@@ -171,7 +172,15 @@ CONTAINS
     ! >>>>>>> cp_grp trick
     CALL tiset(procedureN//'_grps_b',isub3)
     ! we reduce so that we get back the cp_grp distribution of the matrix
-    IF (redist)  CALL cp_grp_redist(a,nstate,nstate)
+    CALL cp_grp_redist(a,nstate,nstate)
+    DEALLOCATE(C1_local,stat=ierr)
+    IF (ierr.NE.0) CALL stopgm(procedureN,'Deallocation problem',& 
+         __LINE__,__FILE__)
+    IF (.NOT.symmetric) THEN
+       DEALLOCATE(C2_local,stat=ierr)
+       IF (ierr.NE.0) CALL stopgm(procedureN,'Deallocation problem',& 
+            __LINE__,__FILE__)
+    ENDIF
     CALL tihalt(procedureN//'_grps_b',isub3)
     ! <<<<<<<
 
@@ -258,7 +267,7 @@ CONTAINS
     ! computes the distributed overlap matrix A = < C1 | C2 >
     USE system,                          ONLY: cnti, paraw, parap
     USE cp_grp_utils,                    ONLY: cp_grp_get_cp_rank
-    USE distribution_utils,              ONLY: dist_size
+    USE jrotation_utils,                 ONLY: set_orbdist
     USE mp_interface,                    ONLY: mp_sum
     INTEGER, INTENT(IN)                      :: nstate
     REAL(real_8), INTENT(INOUT)              :: a(:,:)
@@ -286,12 +295,13 @@ CONTAINS
     __NVTX_TIMER_START ( procedureN )
 
 
-    ALLOCATE(NWA12_grp(2,0:parai%cp_nproc-1),stat=ierr)
+    ALLOCATE(NWA12_grp(0:parai%cp_nproc-1,2),stat=ierr)
     IF (ierr.NE.0) CALL stopgm(procedureN,'Allocation problem',&
          __LINE__,__FILE__)
 
-    CALL dist_size(nstate,parai%cp_nproc,NWA12_grp,nblock=cnti%nstblk,nbmax=nstx_grp,fw=1)
-    CALL dist_size(nstate,parai%nproc,paraw%NWA12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+    CALL set_orbdist( nstate,cnti%nstblk,parai%cp_nproc,NSTX_grp)
+    NWA12_grp(0:parai%cp_nproc-1,1:2)=paraw%nwa12(0:parai%cp_nproc-1,1:2)
+    CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)!vw needed?
 
     ALLOCATE(a2mat(nstate,nstx),a3mat(nstate,nstx),stat=ierr)!vw nstx too big needs only NSTX_grp???
     IF (ierr.NE.0) CALL stopgm(procedureN,'Allocation problem',&
@@ -328,23 +338,23 @@ CONTAINS
 
     DO ip=0,parai%nproc-1
        ipp = cp_grp_get_cp_rank(ip,parai%cp_inter_me)
-       nx = NWA12_grp(2,ipp)-nwa12_grp(1,ipp)+1
+       nx = NWA12_grp(ipp,2)-nwa12_grp(ipp,1)+1
        CALL zeroing(a2mat)
        IF (nx.GT.0) THEN
           IF( use_gpu ) THEN
              CALL cublas_dgemm ( blas_handle, 'T', 'N', nstate, nx, 2*ncpw%ngw, &
                   & 2.0_real_8, c1_d, 2*ncpw%ngw, &
-                  & cuda_z_points_to(c2_d_p,(NWA12_grp(1,ipp)-1)*ncpw%ngw+1), 2*ncpw%ngw, &
+                  & cuda_z_points_to(c2_d_p,(NWA12_grp(ipp,1)-1)*ncpw%ngw+1), 2*ncpw%ngw, &
                   & 0.0_real_8, a2mat_d, nstate )
              IF (Geq0) THEN
                 CALL cublas_dger ( blas_handle, nstate, nx, -1.0_real_8, &
                      & c1_d, 2*ncpw%ngw, &
-                     & cuda_z_points_to(c2_d_p,(NWA12_grp(1,ipp)-1)*ncpw%ngw+1), 2*ncpw%ngw, &
+                     & cuda_z_points_to(c2_d_p,(NWA12_grp(ipp,1)-1)*ncpw%ngw+1), 2*ncpw%ngw, &
                      & a2mat_d, nstate )
              ENDIF
              CALL cuda_memcpy_device_to_host ( a2mat_d, a2mat )
           ELSE
-             CALL ovlap2(ncpw%ngw,nstate,nx,a2mat,c1,c2(1,NWA12_grp(1,ipp)),.FALSE.)
+             CALL ovlap2(ncpw%ngw,nstate,nx,a2mat,c1,c2(1,NWA12_grp(ipp,1)),.FALSE.)
           ENDIF
           CALL mp_sum(a2mat,a3mat,nstate*NSTX_grp,parap%pgroup(ip+1),parai%allgrp)
           IF (parai%me.EQ.parap%pgroup(ip+1)) CALL dcopy(nstate*NSTX_grp,a3mat,1,a,1)

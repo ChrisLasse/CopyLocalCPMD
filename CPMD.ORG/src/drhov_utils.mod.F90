@@ -176,8 +176,8 @@ SUBROUTINE drhov(nstate,qg,ctmp)
                        DO ia=1,ions0%na(is)
                           isa=isa0+ia
                           dsum_up=0.0_real_8; dsum_down=0.0_real_8
-                          DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                             ii=i-parap%nst12(1,parai%mepos)+1
+                          DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                             ii=i-parap%nst12(parai%mepos,1)+1
                              IF (i>=1.AND.i<=spin_mod%nsup) THEN
                                 dsum_up=dsum_up +&
                                    crge%f(i,1)*fnl(1,isa,iv,i,1)*becs(1,isa,jv,kk,ii,1)+&
@@ -205,8 +205,8 @@ SUBROUTINE drhov(nstate,qg,ctmp)
                        DO ia=1,ions0%na(is)
                           isa=isa0+ia
                           dsum=0.0_real_8
-                          DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                             ii=i-parap%nst12(1,parai%mepos)+1
+                          DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                             ii=i-parap%nst12(parai%mepos,1)+1
                              dsum=dsum +&
                                   crge%f(i,1)*fnl(1,isa,iv,i,1)*becs(1,isa,jv,kk,ii,1)+&
                                   crge%f(i,1)*becs(1,isa,iv,kk,ii,1)*fnl(1,isa,jv,i,1)
@@ -234,8 +234,8 @@ SUBROUTINE drhov(nstate,qg,ctmp)
                     DO kk=1,6
                        IF (cntl%tlsd) THEN
                           dsum_up=0.0_real_8; dsum_down=0.0_real_8
-                          DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                             ii=i-parap%nst12(1,parai%mepos)+1
+                          DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                             ii=i-parap%nst12(parai%mepos,1)+1
                              IF (i>=1.AND.i<=spin_mod%nsup) THEN
                                 dsum_up=dsum_up +&
                                    crge%f(i,1)*fnl(1,isa,iv,i,1)*becs(1,isa,jv,kk,ii,1)+&
@@ -257,8 +257,8 @@ SUBROUTINE drhov(nstate,qg,ctmp)
                           ENDDO
                        ELSE
                           dsum=0.0_real_8
-                          DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                             ii=i-parap%nst12(1,parai%mepos)+1
+                          DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                             ii=i-parap%nst12(parai%mepos,1)+1
                              dsum=dsum +&
                                   crge%f(i,1)*fnl(1,isa,iv,i,1)*becs(1,isa,jv,kk,ii,1)+&
                                   crge%f(i,1)*becs(1,isa,iv,kk,ii,1)*fnl(1,isa,jv,i,1)

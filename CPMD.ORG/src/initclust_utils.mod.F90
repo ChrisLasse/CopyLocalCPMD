@@ -9,7 +9,8 @@ MODULE initclust_utils
                                              scg,&
                                              scgx
   USE cp_xc_utils,                     ONLY: cp_xc_functional, &
-                                             cp_xc_kernel
+                                             cp_xc_kernel, &
+                                             cp_xc_mts_low_func
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
   USE fft,                             ONLY: llr1
@@ -18,6 +19,7 @@ MODULE initclust_utils
   USE func,                            ONLY: ashcroft_coulomb_rcut,&
                                              func1,&
                                              func2,&
+                                             msrx_is_skipped,&
                                              msrx_is_CAM,&
                                              msrx_is_ashcroft,&
                                              msrx_is_erfc,&
@@ -39,6 +41,7 @@ MODULE initclust_utils
   USE rswfmod,                         ONLY: lwdimx,&
                                              maxstatesx,&
                                              rswfx
+  USE scex_utils,                      ONLY: scex
   USE spin,                            ONLY: lspin2
   USE system,                          ONLY: cntl,&
                                              cntr,&
@@ -105,7 +108,7 @@ CONTAINS
     IF (geq0) ig1=2
     DO ig=ig1,ncpw%nhg
        g2=parm%tpiba2*hg(ig)
-       scg(ig)=CMPLX(fpi/g2,0._real_8,kind=real_8)
+       scg(ig)=CMPLX(fpi/g2,0.0_real_8,kind=real_8)
     ENDDO
     IF (geq0) scg(1)=0.0_real_8
 
@@ -120,11 +123,13 @@ CONTAINS
     INTEGER                                  :: ierr, ldim, nstate
     INTEGER                                  :: functional_msrx, functional_mhfx
     INTEGER                                  :: kernel_msrx, kernel_mhfx
+    INTEGER                                  :: mts_low_func_msrx, mts_low_func_mhfx
     INTEGER                                  :: mhfx, msrx
     INTEGER, SAVE                            :: ifirst = 0
     REAL(real_8)                             :: rmem, rstate
     REAL(real_8)                             :: functional_srxa
     REAL(real_8)                             :: kernel_srxa
+    REAL(real_8)                             :: mts_low_func_srxa
     REAL(real_8)                             :: srxa, cam_alpha, cam_beta
 
     !
@@ -137,6 +142,7 @@ CONTAINS
     IF ( cntl%use_xc_driver ) THEN
        CALL cp_xc_functional%get(mhfx=functional_mhfx,msrx=functional_msrx,srxa=functional_srxa)
        CALL cp_xc_kernel%get(mhfx=kernel_mhfx,msrx=kernel_msrx,srxa=kernel_srxa)
+       CALL cp_xc_mts_low_func%get(mhfx=mts_low_func_mhfx,msrx=mts_low_func_msrx,srxa=mts_low_func_srxa)
        !
        ! Do we use HFX both times? Then, we cannot mix CAM and HFX for the moment
        ! (will fix that later)
@@ -158,6 +164,34 @@ CONTAINS
        ELSE
           CALL stopgm(procedureN,'Invalid HFX combination between kernel and functional',&
                       __LINE__,__FILE__)
+       ENDIF
+
+       ! Martin:
+       ! MTS type is NOT copied from the standard functional if it is not used.
+       ! Need an IF to skip bugs with screened functionals
+       !
+       IF (cntl%use_mts) THEN
+          ! 
+          ! same thing for MTS low functional
+          !
+          IF (mts_low_func_mhfx == functional_mhfx) THEN
+             IF (functional_msrx /= mts_low_func_msrx) CALL stopgm(procedureN,&
+                'MTS: LOW and HIGH level FUNCTIONALS must imperatively use the same HFX screening function',&
+                __LINE__,__FILE__)
+             IF (functional_srxa /= mts_low_func_srxa) CALL stopgm(procedureN,&
+                'MTS: LOW and HIGH level FUNCTIONALS must imperatively use the same HFX screening parameter',&
+                __LINE__,__FILE__)
+             CALL cp_xc_functional%get(mhfx=mhfx,msrx=msrx,srxa=srxa,cam_alpha=cam_alpha,cam_beta=cam_beta)
+          ELSEIF (mts_low_func_mhfx > 0 .and. functional_mhfx == 0) THEN
+             ! No HFX in functional, but in MTS low func., thus get the parameters from the MTS low func.
+             CALL cp_xc_mts_low_func%get(mhfx=mhfx,msrx=msrx,srxa=srxa,cam_alpha=cam_alpha,cam_beta=cam_beta)
+          ELSEIF (mts_low_func_mhfx == 0 .and. functional_mhfx > 0) THEN
+             ! No HFX in MTS low func., but in the main functional, thus get the parameters from the main functional
+             CALL cp_xc_functional%get(mhfx=mhfx,msrx=msrx,srxa=srxa,cam_alpha=cam_alpha,cam_beta=cam_beta)
+          ELSE
+             CALL stopgm(procedureN,'MTS: Invalid HFX combination between secomdary and primary functionals',&
+                         __LINE__,__FILE__)
+          ENDIF
        ENDIF
     ELSE
        mhfx      = func1%mhfx
@@ -209,7 +243,12 @@ CONTAINS
           CALL stopgm("HF_INIT", "HFX not implemented for HOCKNEY.",& 
                __LINE__,__FILE__)
        ENDIF
-       IF (hfxc2%hfxwfe > 0._real_8 .AND. hfxc2%hfxdee > 0._real_8) THEN
+       IF (cntl%use_scaled_hfx) THEN
+          IF (msrx /= msrx_is_skipped) CALL stopgm(procedureN,'ScEX: Matrix elements for screened '// &
+                                                   'exchange not yet available',&
+                                                   __LINE__,__FILE__)
+          CALL scex%grid_init()
+       ELSEIF (hfxc2%hfxwfe > 0._real_8 .AND. hfxc2%hfxdee > 0._real_8) THEN
           IF (paral%io_parent) THEN
              WRITE(6,'(/,A,T56,F10.0)')&
                   ' Wavefunction Cutoff for HFX [Ry] ',hfxc2%hfxwfe

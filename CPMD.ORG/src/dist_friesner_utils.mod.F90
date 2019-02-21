@@ -1,6 +1,5 @@
 MODULE dist_friesner_utils
   USE adjmu_utils,                     ONLY: convfrie
-  USE distribution_utils,              ONLY: dist_size
   USE dotp_utils,                      ONLY: dotp
   USE error_handling,                  ONLY: stopgm
   USE fint,                            ONLY: fint1
@@ -10,6 +9,7 @@ MODULE dist_friesner_utils
   USE hfx_drivers,                     ONLY: hfxpsi
   USE hpsi_utils,                      ONLY: give_scr_hpsi,&
                                              hpsi
+  USE jrotation_utils,                 ONLY: my_set_orbdist
   USE kinds,                           ONLY: real_8
   USE kpts,                            ONLY: tkpts
   USE machine,                         ONLY: m_walltime
@@ -149,8 +149,8 @@ CONTAINS
     ! ==================================================================
     ! DEFINE BLOCKS FOR DISTRIBUTED LANCZOS EIGENSOLVER
     ! ==================================================================
-    CALL dist_size(ndiag,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=norbx,&
-         nblocal=norb,iloc=parai%mepos,fw=1)
+    CALL my_set_orbdist(ndiag,cnti%nstblk,norbx)
+    norb=paraw%nwa12(parai%mepos,2)-paraw%nwa12(parai%mepos,1)+1
     norb=MAX(0,norb)
     sz = parai%nproc
     ! ==================================================================
@@ -162,7 +162,7 @@ CONTAINS
        ENDDO
        nolan = 0
        DO index4=1, sz
-          IF ((paraw%nwa12(2,index4-1)-paraw%nwa12(1,index4-1)+1).NE.0) THEN
+          IF ((paraw%nwa12(index4-1,2)-paraw%nwa12(index4-1,1)+1).NE.0) THEN
              lanlist(index4) = index4-1
              nolan = nolan + 1
           ENDIF
@@ -199,10 +199,10 @@ CONTAINS
                __LINE__,__FILE__)
        ENDIF
        DO ip=0,parai%nproc-1
-          nx=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+          nx=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
           CALL zeroing(tmat)!,ndiag*norbx)
           IF (nx.GT.0) THEN
-             CALL ovlap2(ncpw%ngw,ndiag,nx,tmat,c0,cs(1,paraw%nwa12(1,ip)),.TRUE.)
+             CALL ovlap2(ncpw%ngw,ndiag,nx,tmat,c0,cs(1,paraw%nwa12(ip,1)),.TRUE.)
              CALL mp_sum(tmat,rmat,ndiag*norbx,parai%allgrp)
              IF (parai%me.EQ.ip) THEN
                 CALL dcopy(ndiag*norbx,rmat(1),1,xtmat(1,1),1)
@@ -220,11 +220,11 @@ CONTAINS
        ! ONLY PROCESSORS THAT HAVE A NON-ZERO CHUNK OF THE RESTRICTED
        ! HAMILTONIAN IN XTMAT PARTICIPATE IN LANCZOS
        ! ================================================================
-       IF ((paraw%nwa12(2,parai%me)-paraw%nwa12(1,parai%me)+1).NE.0) THEN
+       IF ((paraw%nwa12(parai%me,2)-paraw%nwa12(parai%me,1)+1).NE.0) THEN
           sz = 0
-          chunk_new = paraw%nwa12(2,parai%me)-paraw%nwa12(1,parai%me)+1
+          chunk_new = paraw%nwa12(parai%me,2)-paraw%nwa12(parai%me,1)+1
           DO ip=0, parai%nproc-1
-             IF ((paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1).NE.0) sz = sz+1
+             IF ((paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1).NE.0) sz = sz+1
           ENDDO
           nolan = sz
           lan_max = ndiag+1
@@ -281,8 +281,8 @@ CONTAINS
              w(is)=0._real_8
           ENDDO
           beta = 0._real_8
-          chunk_begin = paraw%nwa12(1,parai%me)
-          chunk_end   = paraw%nwa12(2,parai%me)
+          chunk_begin = paraw%nwa12(parai%me,1)
+          chunk_end   = paraw%nwa12(parai%me,2)
           ! INITIALIZE FIRST LANCZOS VECTOR
           CALL dcopy(chunk_new, vcur(chunk_begin), 1, lanv(1), 1)
           ! INITIALIZE INITIAL SUM OF WANTED EIGENVALUES
@@ -344,8 +344,8 @@ CONTAINS
           ! =============================================================
           CALL mp_sync(langrp)
           IF (.NOT.conv_flag) index4 = index4-1
-          chunk_begin_e = paraw%nwa12(1,parai%mepos)
-          chunk_end_e   = paraw%nwa12(2,parai%mepos)
+          chunk_begin_e = paraw%nwa12(parai%mepos,1)
+          chunk_end_e   = paraw%nwa12(parai%mepos,2)
           chunk_new_e   = chunk_end_e - chunk_begin_e +1
           ! =======================
           ! DETERMINE SEND  BUFFERS
@@ -678,10 +678,10 @@ CONTAINS
        ! DISTRIBUTED PROJECTED HAMILTONIAN IS CALCULATED HERE 
        ! ===============================================================
        DO ip=0,parai%nproc-1
-          nx=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+          nx=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
           CALL zeroing(tmat)!,ndiag*norbx)
           IF (nx.GT.0) THEN
-             CALL ovlap2(ncpw%ngw,ndiag,nx,tmat,c0,cs(1,paraw%nwa12(1,ip)),.TRUE.)
+             CALL ovlap2(ncpw%ngw,ndiag,nx,tmat,c0,cs(1,paraw%nwa12(ip,1)),.TRUE.)
              CALL mp_sum(tmat,rmat,ndiag*norbx,parai%allgrp)
              IF (parai%me.EQ.ip) THEN
                 CALL dcopy(ndiag*norbx,rmat(1),1,xtmat(1,1),1)
@@ -698,11 +698,11 @@ CONTAINS
        ! ================================================================
        ! LANCZOS PARALLEL EIGENSOLVER
        ! ================================================================
-       IF ((paraw%nwa12(2,parai%me)-paraw%nwa12(1,parai%me)+1).NE.0) THEN
+       IF ((paraw%nwa12(parai%me,2)-paraw%nwa12(parai%me,1)+1).NE.0) THEN
           sz = 0
-          chunk_new = paraw%nwa12(2,parai%me)-paraw%nwa12(1,parai%me)+1
+          chunk_new = paraw%nwa12(parai%me,2)-paraw%nwa12(parai%me,1)+1
           DO ip=0, parai%nproc-1
-             IF ((paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1).NE.0) sz = sz+1
+             IF ((paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1).NE.0) sz = sz+1
           ENDDO
           nolan = sz
           lan_max = ndiag+1
@@ -733,8 +733,8 @@ CONTAINS
              w(is)=0._real_8
           ENDDO
           beta = 0._real_8
-          chunk_begin = paraw%nwa12(1,parai%me)
-          chunk_end   = paraw%nwa12(2,parai%me)
+          chunk_begin = paraw%nwa12(parai%me,1)
+          chunk_end   = paraw%nwa12(parai%me,2)
           ! INITIALIZE FIRST LANCZOS VECTOR
           CALL dcopy(chunk_new, vcur(chunk_begin), 1, lanv(1), 1)
           ! INITIALIZE INITIAL SUM OF WANTED EIGENVALUES
@@ -799,8 +799,8 @@ CONTAINS
           ! END OF LANCZOS LOOP
           ! ===================
           IF (.NOT.conv_flag) index4 = index4-1
-          chunk_begin_e = paraw%nwa12(1,parai%mepos)
-          chunk_end_e   = paraw%nwa12(2,parai%mepos)
+          chunk_begin_e = paraw%nwa12(parai%mepos,1)
+          chunk_end_e   = paraw%nwa12(parai%mepos,2)
           chunk_new_e   = chunk_end_e - chunk_begin_e +1
           ! =======================
           ! DETERMINE SEND  BUFFERS

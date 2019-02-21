@@ -99,7 +99,7 @@ CONTAINS
     IF (group%nogrp.GT.1) THEN
        ! Summation of density within orbital split
        nl2=parap%nlink(group%nolist(group%nogrp))
-       ix1=parap%nrxpl(1,parai%mepos)-parap%nrxpl(1,nl2)
+       ix1=parap%nrxpl(parai%mepos,1)-parap%nrxpl(nl2,1)
        ! EXP(-betaP*0) = 1!!!
        !$omp parallel do private(I)
        DO i=1,nnrx
@@ -203,7 +203,7 @@ CONTAINS
     ! Reestablish initial conditions for the potential
     IF (group%nogrp.GT.1) THEN
        nl2=parap%nlink(group%nolist(group%nogrp))
-       ix1=parap%nrxpl(1,parai%mepos)-parap%nrxpl(1,nl2)
+       ix1=parap%nrxpl(parai%mepos,1)-parap%nrxpl(nl2,1)
        CALL dcopy(nnrx,exp_vpotx(1),1,psix(1),1)
        CALL zeroing(exp_vpotx)!,nnrx)
        DO ixp=1,parm%nr1
@@ -701,7 +701,7 @@ SUBROUTINE ehpsi(c0,c2,exp_vpot,psi,nstate)
   IF (group%nogrp.GT.1) THEN
      ! Summation of density within orbital split
      nl2=parap%nlink(group%nolist(group%nogrp))
-     ix1=parap%nrxpl(1,parai%mepos)-parap%nrxpl(1,nl2)
+     ix1=parap%nrxpl(parai%mepos,1)-parap%nrxpl(nl2,1)
      msglen= 8 * nnrx
      ! EXP(-betaP*0) = 1!!!
      ALLOCATE(psix(nnrx),stat=ierr)
@@ -862,7 +862,7 @@ SUBROUTINE ehpsi(c0,c2,exp_vpot,psi,nstate)
   ! Reestablish initial conditions for the potential
   IF (group%nogrp.GT.1) THEN
      nl2=parap%nlink(group%nolist(group%nogrp))
-     ix1=parap%nrxpl(1,parai%mepos)-parap%nrxpl(1,nl2)
+     ix1=parap%nrxpl(parai%mepos,1)-parap%nrxpl(nl2,1)
      CALL dcopy(nnrx,exp_vpotx(1),1,psix(1),1)
      CALL zeroing(exp_vpotx)!,nnrx)
      DO ixp=1,parm%nr1

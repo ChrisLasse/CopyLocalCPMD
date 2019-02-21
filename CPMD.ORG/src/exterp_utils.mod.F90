@@ -91,7 +91,7 @@ CONTAINS
           ! READ(99) (PSCR(I),I=1,KK)
        ENDIF
        DO ipp=1,parai%nproc
-          IF (ir.GE.parap%nrxpl(1,ipp-1).AND.ir.LE.parap%nrxpl(2,ipp-1)) THEN
+          IF (ir.GE.parap%nrxpl(ipp-1,1).AND.ir.LE.parap%nrxpl(ipp-1,2)) THEN
              ipx=ipp
              GOTO 10
           ENDIF
@@ -114,7 +114,7 @@ CONTAINS
           CALL mp_sync(parai%allgrp)
        ENDIF
        IF (ip.EQ.parai%me) THEN
-          irr=ir-parap%nrxpl(1,parai%mepos)+1
+          irr=ir-parap%nrxpl(parai%mepos,1)+1
           CALL dcopy(kk,pscr,1,extpot(irr,1,1),fpar%kr1)
        ENDIF
     ENDDO

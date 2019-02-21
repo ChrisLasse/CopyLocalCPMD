@@ -302,7 +302,7 @@ CONTAINS
                 CALL rotate(-1.0_real_8,c0(:,:,ik),1.0_real_8,c2,gam,&
                      nstate,2*nkpt%ngwk,cntl%tlsd,spin_mod%nsup,spin_mod%nsdown)
              ENDIF
-             CALL nlforce(c2,crge%f,gam,nstate)
+             CALL nlforce(c2,crge%f,gam,auxc,ddia,nstate)
           ELSE
              CALL fnonloc(c2,crge%f,nstate,ik,clsd%nlsd,.TRUE.)
           ENDIF

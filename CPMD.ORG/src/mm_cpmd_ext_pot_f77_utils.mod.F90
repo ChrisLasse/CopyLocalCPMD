@@ -56,9 +56,9 @@ CONTAINS
        zm=REAL(iz-1,kind=real_8)*dz
        DO iy=1,kr2s
           ym=REAL(iy-1,kind=real_8)*dy
-          DO ix=nrxpl(1,parai%mepos),nrxpl(2,parai%mepos)
+          DO ix=nrxpl(parai%mepos,1),nrxpl(parai%mepos,2)
              xm=REAL(ix-1,kind=real_8)*dx
-             ix2 = ix-nrxpl(1,parai%mepos)+1
+             ix2 = ix-nrxpl(parai%mepos,1)+1
              CALL mm_cpmd_elstat_get_pot(xm,ym,zm,r_pot)
 
              extf_3d(ix2,iy,iz)=r_pot

@@ -55,12 +55,12 @@ CONTAINS
     CALL reshape_inplace(c2, (/lenbk, parai%nproc/), c2s)
     CALL reshape_inplace(sc0, (/lenbk, parai%nproc/), sc0s)
     DO ip=1,parai%nproc
-       nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-       n1=parap%nst12(1,ip-1)
+       nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+       n1=parap%nst12(ip-1,1)
        CALL dcopy(2*ncpw%ngw*nn,c0(1,n1),1,c2s(1,ip),1)
     ENDDO
     CALL my_trans(c2s,sc0s,16*lenbk,1)
-    nn=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+    nn=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
     !$omp parallel do private(IP,NGGP,IGII,II,IG)
     DO ip=1,parai%nproc
        nggp=parap%sparm(3,ip-1)
@@ -72,8 +72,8 @@ CONTAINS
           ENDDO
        ENDDO
     ENDDO
-    DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-       ii=i-parap%nst12(1,parai%mepos)+1
+    DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+       ii=i-parap%nst12(parai%mepos,1)+1
        CALL zeroing(aux)!,ngg1*ngg2*ngg3)
        !$omp parallel do private(IG)
        DO ig=1,spar%ngws
@@ -91,7 +91,7 @@ CONTAINS
 
     ENDDO
 
-    nn=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+    nn=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
     !$omp parallel do private(IP,NGGP,IGII,II,IG)
     DO ip=1,parai%nproc
        nggp=parap%sparm(3,ip-1)
@@ -107,8 +107,8 @@ CONTAINS
     ENDDO
     CALL my_trans(c2s,sc0s,16*lenbk,1)
     DO ip=1,parai%nproc
-       nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-       n1=parap%nst12(1,ip-1)
+       nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+       n1=parap%nst12(ip-1,1)
        IF (nn.GT.0) THEN
           CALL dcopy(2*ncpw%ngw*nn,sc0s(1,ip),1,c2(1,n1),1)
           CALL zcopy(ncpw%ngw*nn,sc0s(1,ip),1,cwork(1,n1,1),1)
@@ -126,12 +126,12 @@ CONTAINS
             c2,ncpw%ngw,CMPLX(0._real_8,0._real_8,kind=real_8),ddmat,nstate)
     ENDIF
     DO ip=1,parai%nproc
-       nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-       n1=parap%nst12(1,ip-1)
+       nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+       n1=parap%nst12(ip-1,1)
        CALL dcopy(2*ncpw%ngw*nn,c0(1,n1),1,c2s(1,ip),1)
     ENDDO
     CALL my_trans(c2s,sc0s,16*lenbk,1)
-    nn=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+    nn=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
     !$omp parallel do private(IP,NGGP,IGII,II,IG)
     DO ip=1,parai%nproc
        nggp=parap%sparm(3,ip-1)
@@ -146,8 +146,8 @@ CONTAINS
        ENDDO
     ENDDO
 
-    DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-       ii=i-parap%nst12(1,parai%mepos)+1
+    DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+       ii=i-parap%nst12(parai%mepos,1)+1
        CALL zeroing(aux)!,ngg1*ngg2*ngg3)
        !$omp parallel do private(IG)
        DO ig=1,spar%ngws
@@ -165,7 +165,7 @@ CONTAINS
        sc0(1,ii)=CMPLX(0._real_8,0._real_8,kind=real_8)
 
     ENDDO
-    nn=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+    nn=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
     !$omp parallel do private(IP,NGGP,IGII,II,IG)
     DO ip=1,parai%nproc
        nggp=parap%sparm(3,ip-1)
@@ -181,8 +181,8 @@ CONTAINS
     ENDDO
     CALL my_trans(c2s,sc0s,16*lenbk,1)
     DO ip=1,parai%nproc
-       nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-       n1=parap%nst12(1,ip-1)
+       nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+       n1=parap%nst12(ip-1,1)
        IF (nn.GT.0) THEN
           CALL dcopy(2*ncpw%ngw*nn,sc0s(1,ip),1,c2(1,n1),1)
           CALL zcopy(ncpw%ngw*nn,sc0s(1,ip),1,cwork(1,n1,2),1)

@@ -80,16 +80,12 @@ MODULE system
   ! ==--------------------------------------------------------------==
   ! == NCPW   : Number of plane waves                               ==
   ! ==          NHG  number of G-components for electronic density  ==
-  ! ==          NHG_CP same as NHG but takes into account cp_groups ==
-  ! ==          NHG_START first G-vector                            ==
-  ! ==          NHG_LAST last G-vector                              ==
   ! ==          NHGL number of G-shells for electronic density      ==
   ! ==          NGW  number of G-components for wavefunctions       ==
   ! ==          NGWL number of G-shells for wavefunctions           ==
   ! ==--------------------------------------------------------------==
   TYPE, PUBLIC :: ncpw_t
      INTEGER :: nhg = HUGE(0)
-     INTEGER :: nhg_cp = HUGE(0), nhg_start = HUGE(0), nhg_last = HUGE(0)    
      INTEGER :: nhgl = HUGE(0)
      INTEGER :: ngw = HUGE(0)
      INTEGER :: ngwl = HUGE(0)
@@ -249,16 +245,16 @@ MODULE system
   ! ==================================================================
   ! == NATPE           =IPEPT(2,MEPOS)-IPEPT(1,MEPOS)+1             ==
   ! ==                 Number of atoms per processes                ==
-  ! == NORBPE          =NST12(2,MEPOS)-NST12(1,MEPOS)+1             ==
+  ! == NORBPE          =NST12(MEPOS,2)-NST12(MEPOS,1)+1             ==
   ! ==                 Number of orbitals per processes             ==
   ! == IPEPT(2,0:MAXCPU) Indexes of atoms per processes             ==
   ! == IATPT(2,NAT)                                                 ==
   ! == IATPE(NAT)                                                   ==
   ! ==--------------------------------------------------------------==
-  INTEGER, SAVE, PUBLIC :: natpe = HUGE(0),norbpe = HUGE(0),natpe_cp = HUGE(0)
-  INTEGER, ALLOCATABLE, SAVE, PUBLIC :: ipept(:,:),ipept_cp(:,:,:) !(2,0:maxcpu)
+  INTEGER, SAVE, PUBLIC :: natpe = HUGE(0),norbpe = HUGE(0)
+  INTEGER, ALLOCATABLE, DIMENSION(:,:), SAVE, PUBLIC :: ipept !(2,0:maxcpu)
   INTEGER, ALLOCATABLE, SAVE, PUBLIC :: iatpt(:,:)
-  INTEGER, ALLOCATABLE, SAVE, PUBLIC :: iatpe(:), iatpe_cp(:,:)
+  INTEGER, ALLOCATABLE, SAVE, PUBLIC :: iatpe(:)
   ! ==================================================================
   ! == A LOT OF ITEMS IN THE COMMON BLOCKS IS NEEDED FOR PARALLEL   ==
   ! ==================================================================
@@ -399,6 +395,7 @@ MODULE system
   ! == IS_IN_STREAM : use stream input                              ==
   ! == IS_OUT_STREAM : use stream output                            ==
   ! == USE_MPI_IO : use mpi for the parallel io                     ==
+  ! == USE_MTS: use multiple time step algorithm in MD              ==
   ! ==--------------------------------------------------------------==
   TYPE, PUBLIC :: cntl_t
      LOGICAL :: md = .FALSE.
@@ -564,6 +561,8 @@ MODULE system
      LOGICAL :: use_xc_driver = .FALSE.
      LOGICAL :: div_analytical = .FALSE.
      LOGICAL :: thubb  = .FALSE.
+     LOGICAL :: use_mts = .FALSE.
+     LOGICAL :: use_scaled_hfx = .FALSE.
   END TYPE cntl_t
   TYPE(cntl_t), SAVE, PUBLIC :: cntl
   ! ==================================================================
@@ -674,9 +673,6 @@ MODULE system
      INTEGER :: isocs = HUGE(0) !vw not initialized at all
      INTEGER :: jsoct = HUGE(0) !vw not initialized at all
      INTEGER :: disortho_bsize = HUGE(0)
-     INTEGER :: rnlsm1_bc
-     INTEGER :: rnlsm2_bc
-     INTEGER :: rnlsm_autotune_maxit = HUGE(0)
   END TYPE cnti_t
   TYPE(cnti_t), SAVE, PUBLIC :: cnti
   ! ==================================================================
@@ -794,10 +790,6 @@ MODULE system
      REAL(real_8) :: dampge = HUGE(0.0_real_8)
      REAL(real_8) :: dampgc = HUGE(0.0_real_8)
      REAL(real_8) :: gfreq = HUGE(0.0_real_8) !vw not initialized at all
-     REAL(real_8) :: rnlsm1_b1 = HUGE(0.0_real_8)
-     REAL(real_8) :: rnlsm1_b2 = HUGE(0.0_real_8)
-     REAL(real_8) :: rnlsm2_b1 = HUGE(0.0_real_8)
-     REAL(real_8) :: rnlsm2_b2 = HUGE(0.0_real_8)
   END TYPE cntr_t
   TYPE(cntr_t), SAVE, PUBLIC :: cntr
   ! strings

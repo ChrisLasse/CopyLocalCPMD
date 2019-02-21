@@ -12,7 +12,6 @@ MODULE fftnew_utils
                                              nzhs
   USE cuda_types,                      ONLY: cuda_memory_t
   USE cuda_utils,                      ONLY: cuda_memcpy_host_to_device
-  USE distribution_utils,              ONLY: dist_size
   USE error_handling,                  ONLY: stopgm
   USE fft,                             ONLY: &
        fftpool, fftpoolsize, fpoolv, inzf, inzfp, inzh, inzhp, inzs, inzsp, &
@@ -92,8 +91,8 @@ CONTAINS
        inzh => inyh
 
        DO ip=0,parai%nproc-1
-          lrxpl(1,ip)    = parap%nrxpl(1,ip)
-          lrxpl(2,ip)    = parap%nrxpl(2,ip)
+          lrxpl(ip,1)    = parap%nrxpl(ip,1)
+          lrxpl(ip,2)    = parap%nrxpl(ip,2)
           sp5(ip)        = parap%sparm(5,ip)
           sp8(ip)        = parap%sparm(8,ip)
           sp9(ip)        = parap%sparm(9,ip)
@@ -140,8 +139,8 @@ CONTAINS
        inzh => inzhp(:, :, ipool)
 
        DO ip=0,parai%nproc-1
-          lrxpl(1,ip)    = lrxpool(1,ip,ipool)
-          lrxpl(2,ip)    = lrxpool(2,ip,ipool)
+          lrxpl(ip,1)    = lrxpool(ip,1,ipool)
+          lrxpl(ip,2)    = lrxpool(ip,2,ipool)
           sp5(ip)        = spm(5,ip,ipool)
           sp8(ip)        = spm(8,ip,ipool)
           sp9(ip)        = spm(9,ip,ipool)
@@ -191,7 +190,7 @@ CONTAINS
           CALL icopy(lnzs,nzfsp(1,i),1,nzfsp(1,j),1)
           CALL icopy(lnzs,inzsp(1,i),1,inzsp(1,j),1)
           CALL icopy(3*lnzf,inzhp(1,1,i),1,inzhp(1,1,j),1)
-          CALL icopy(2*SIZE(lrxpool,1),lrxpool(1,0,i),1,lrxpool(1,0,j),1)
+          CALL icopy(2*SIZE(lrxpool,1),lrxpool(0,1,i),1,lrxpool(0,1,j),1)
           CALL icopy(9*SIZE(lrxpool,1),spm(1,0,i),1,spm(1,0,j),1)
           IF (lmsqmax.GT.0) THEN
              CALL icopy(lmsqmax*parai%nproc,msqfpool(1,1,i),1,&
@@ -230,7 +229,8 @@ CONTAINS
     INTEGER                                  :: i, ierr, ig, j, k, l, lh1, &
                                                 lh2, lh3, nh1, nh2, nh3
     INTEGER, SAVE                            :: icount = 0
-    REAL(real_8)                             :: aa1, aa2, aa3, rr
+    REAL(real_8)                             :: aa1, aa2, aa3, rr, xpaim, &
+                                                xplanes, xpnow
 
 ! ==--------------------------------------------------------------==
 
@@ -354,7 +354,18 @@ CONTAINS
     ENDDO
     inzh => inzhp(:,:,ipool)
     ! 
-    CALL dist_size(lr1s,parai%nproc,lrxpool(:,:,ipool),nblocal=lr1,iloc=parai%mepos)
+    CALL zeroing(lrxpool(:,:,ipool))!,2*(maxcpu+1))
+    xplanes=REAL(lr1s,kind=real_8)
+    xpnow=0.0_real_8
+    DO i=parai%nproc,1,-1
+       xpaim = xpnow + xplanes/parai%nproc
+       lrxpool(i-1,1,ipool)=NINT(xpnow)+1
+       lrxpool(i-1,2,ipool)=NINT(xpaim)
+       IF (NINT(xpaim).GT.lr1s) lrxpool(i-1,2,ipool)=lr1s
+       IF (i.EQ.1) lrxpool(i-1,2,ipool)=lr1s
+       xpnow = xpaim
+    ENDDO
+    lr1=lrxpool(parai%mepos,2,ipool)-lrxpool(parai%mepos,1,ipool)+1
     CALL leadim(lr1,lr2s,lr3s,qr1,qr2s,qr3s)
     lr2=lr2s
     lr3=lr3s
@@ -397,13 +408,13 @@ CONTAINS
     ! 
     IF (paral%io_parent) THEN
        WRITE(6,*)
-       WRITE(6,'(A,T50,A,I4)') ' Add new FFT set ',' set number ',&
+       WRITE(6,'(A,T50,A,I4)') ' ADD NEW FFT SET ',' SET NUMBER ',&
             ipooL
-       WRITE(6,'(A,T51,3I5)') ' Real space Grid ',lr1s,lr2s,lr3S
-       WRITE(6,'(A,T20,A,F6.0,T44,A,I10)') ' Sparse FFT setup: ',&
-            'Cutoff [Ry]:',ecuts,'Plane Waves:',jgwS
-       WRITE(6,'(A,T20,A,F6.0,T44,A,I10)') ' Full FFT setup  : ',&
-            'Cutoff [Ry]:',ecutf,'Plane Waves:',jhgS
+       WRITE(6,'(A,T51,3I5)') ' REAL SPACE GRID ',lr1s,lr2s,lr3S
+       WRITE(6,'(A,T20,A,F6.0,T44,A,I10)') ' SPARSE FFT SETUP: ',&
+            'CUTOFF [Ry]:',ecuts,'PLANE WAVES:',jgwS
+       WRITE(6,'(A,T20,A,F6.0,T44,A,I10)') ' FULL FFT SETUP  : ',&
+            'CUTOFF [Ry]:',ecutf,'PLANE WAVES:',jhgS
        WRITE(6,*)
     ENDIF
     ! ==--------------------------------------------------------------==

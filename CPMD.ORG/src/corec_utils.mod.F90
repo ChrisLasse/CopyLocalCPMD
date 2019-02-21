@@ -58,7 +58,6 @@ CONTAINS
           IF (corel%tnlcc(is)) THEN
              DO ia=1,ions0%na(is)
                 isa=isa0+ia
-                !$omp parallel do private(ig)
 #ifdef __SR8000
                 !poption parallel, tlocal(IG)
 #endif 
@@ -75,7 +74,6 @@ CONTAINS
           IF (corel%tnlcc(is)) THEN
              DO ia=1,ions0%na(is)
                 isa=isa0+ia
-                !$omp parallel do private(ig,ei123)
 #ifdef __SR8000
                 !poption parallel, tlocal(IG,EI123)
 #endif 
@@ -91,7 +89,6 @@ CONTAINS
     ENDIF
     ! FFT TO R-SPACE
     CALL zeroing(v)!,maxfft)
-    !$omp parallel do private(ig)
 #ifdef __SR8000
     !poption parallel, tlocal(IG)
 #endif 

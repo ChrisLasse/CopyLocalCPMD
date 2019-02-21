@@ -1,5 +1,4 @@
 MODULE rnlrh_utils
-  USE cp_grp_utils,                    ONLY: cp_grp_split_atoms
   USE cvan,                            ONLY: dvan
   USE elct,                            ONLY: crge
   USE ener,                            ONLY: ener_c,&
@@ -9,7 +8,6 @@ MODULE rnlrh_utils
                                              ions1
   USE kinds,                           ONLY: real_8
   USE kpnt,                            ONLY: wk
-  USE mp_interface,                    ONLY: mp_sum
   USE nlps,                            ONLY: imagp,&
                                              nghtol,&
                                              nlm,&
@@ -19,8 +17,7 @@ MODULE rnlrh_utils
   USE pslo,                            ONLY: pslo_com
   USE sfac,                            ONLY: fnl,&
                                              fnl2,&
-                                             fnlgp,&
-                                             fnla
+                                             fnlgp
   USE sgpp,                            ONLY: sgpp1,&
                                              sgpp2
   USE spin,                            ONLY: clsd,&
@@ -55,15 +52,10 @@ CONTAINS
 
     INTEGER                                  :: i, ia, ii, ik, is, isa, isa0, &
                                                 isub, iv, jv, ki, kj, l, l2, &
-                                                li, lj, isa_start, isa_end, &
-                                                na_grp(2,ions1%nsp,parai%cp_nogrp)
-    REAL(real_8)                             :: sum, weight, enl_priv
+                                                li, lj
+    REAL(real_8)                             :: sum, weight
 
-    ! split atoms between cp groups
-    call cp_grp_split_atoms(na_grp)
-
-    enl=0.0_real_8
-
+    enl=0._real_8
     ! If no non-local components -> return.
     IF (nlm.EQ.0) RETURN
     ! ==--------------------------------------------------------------==
@@ -71,152 +63,136 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     ! == Compute the non-local contribution to the total energy (ENL) ==
     ! ==--------------------------------------------------------------==
-    IF (pslo_com%tivan) THEN
-       ! VANDERBILT PSEUDOPOTENTIAL
-       IF (imagp.EQ.2)&
-            CALL stopgm('RNLRH','K-POINTS NOT IMPLEMENTED',& 
-            __LINE__,__FILE__)
-       !$omp parallel private (ik,isa0,is,i,ii,iv,jv,sum,ia,isa,isa_end,isa_start) reduction(+:enl) 
-       DO ik=1,nkpoint
-          isa0=0
-          DO is=1,ions1%nsp
-             IF (pslo_com%tvan(is)) THEN
-                isa_start=isa0+na_grp(1,is,parai%cp_inter_me +1)
-                isa_end=isa_start+na_grp(2,is,parai%cp_inter_me +1)-na_grp(1,is,parai%cp_inter_me +1)
-                IF(isa_end-isa_start+1.GT.0) THEN
-                   !$omp do 
-                   DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                      ii=i-parap%nst12(1,parai%mepos)+1
-                      DO iv=1,nlps_com%ngh(is)
-                         DO jv=1,nlps_com%ngh(is)
-                            sum=0.0_real_8
+    DO ik=1,nkpoint
+       isa0=0
+       DO is=1,ions1%nsp
+          IF (pslo_com%tvan(is)) THEN
+             ! VANDERBILT PSEUDOPOTENTIAL
+             IF (imagp.EQ.2)&
+                  CALL stopgm('RNLRH','K-POINTS NOT IMPLEMENTED',& 
+                  __LINE__,__FILE__)
+             DO iv=1,nlps_com%ngh(is)
+                DO jv=1,nlps_com%ngh(is)
+                   sum=0.0_real_8
+                   ! Remember: NST12(MEPOS,1)=1
+                   ! ST12(MEPOS,2)=NSTATE for serial jobs
+                   DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                      ii=i-parap%nst12(parai%mepos,1)+1
+                      IF (cntl%tfdist) THEN
+                         DO ia=1,ions0%na(is)
+                            isa=isa0+ia
+                            sum=sum+crge%f(i,ik)*fnl2(1,isa,iv,ii,ik)*&
+                                 fnl2(1,isa,jv,ii,ik)
+                         ENDDO
+                      ELSE
+                         DO ia=1,ions0%na(is)
+                            isa=isa0+ia
+                            sum=sum+crge%f(i,ik)*fnl2(1,isa,iv,i,ik)*&
+                                 fnl2(1,isa,jv,i,ik)
+                         ENDDO
+                      ENDIF
+                   ENDDO
+                   enl=enl+dvan(jv,iv,is)*sum
+                ENDDO
+             ENDDO
+          ELSEIF (sgpp1%tsgp(is)) THEN
+             ! Stefan Goedecker pp
+             DO iv=1,nlps_com%ngh(is)
+                l=nghtol(iv,is)+1
+                ki=sgpp2%lfval(iv,is)
+                li=sgpp2%lpval(iv,is)
+                DO jv=iv,nlps_com%ngh(is)
+                   l2=nghtol(jv,is)+1
+                   lj=sgpp2%lpval(jv,is)
+                   IF (l2.EQ.l.AND.li.EQ.lj) THEN
+                      kj=sgpp2%lfval(jv,is)
+                      sum=0.0_real_8
+                      DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                         weight=wk(ik)*crge%f(i,ik)
+                         IF (weight.EQ.0._real_8) GOTO 2000
+                         ii=i-parap%nst12(parai%mepos,1)+1
+                         IF (imagp.EQ.1) THEN
                             IF (cntl%tfdist) THEN
                                DO ia=1,ions0%na(is)
                                   isa=isa0+ia
-                                  sum=sum+crge%f(i,ik)*fnl2(1,isa,iv,ii,ik)*&
+                                  sum=sum+weight*fnl2(1,isa,iv,ii,ik)*&
                                        fnl2(1,isa,jv,ii,ik)
                                ENDDO
                             ELSE
-                               !$omp simd reduction(+:sum)
-                               DO isa=isa_start,isa_end
-                                  sum=sum+fnla(isa,iv,i)*fnla(isa,jv,i)
+                               DO ia=1,ions0%na(is)
+                                  isa=isa0+ia
+                                  sum=sum+weight*fnl2(1,isa,iv,i,ik)*&
+                                       fnl2(1,isa,jv,i,ik)
                                ENDDO
                             ENDIF
-                            enl=enl+dvan(jv,iv,is)*sum*crge%f(i,ik)
-                         ENDDO
-                      ENDDO
-                   ENDDO
-                   !$omp end do nowait
-                END IF
-             END IF
-             isa0=isa0+ions0%na(is)
-          END DO
-       END DO
-       !$omp end parallel
-    ELSE
-       DO ik=1,nkpoint
-          isa0=0
-          DO is=1,ions1%nsp
-             IF (sgpp1%tsgp(is)) THEN
-                ! Stefan Goedecker pp
-                DO iv=1,nlps_com%ngh(is)
-                   l=nghtol(iv,is)+1
-                   ki=sgpp2%lfval(iv,is)
-                   li=sgpp2%lpval(iv,is)
-                   DO jv=iv,nlps_com%ngh(is)
-                      l2=nghtol(jv,is)+1
-                      lj=sgpp2%lpval(jv,is)
-                      IF (l2.EQ.l.AND.li.EQ.lj) THEN
-                         kj=sgpp2%lfval(jv,is)
-                         sum=0.0_real_8
-                         DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                            weight=wk(ik)*crge%f(i,ik)
-                            IF (weight.EQ.0._real_8) GOTO 2000
-                            ii=i-parap%nst12(1,parai%mepos)+1
-                            IF (imagp.EQ.1) THEN
-                               IF (cntl%tfdist) THEN
-                                  DO ia=1,ions0%na(is)
-                                     isa=isa0+ia
-                                     sum=sum+weight*fnl2(1,isa,iv,ii,ik)*&
-                                          fnl2(1,isa,jv,ii,ik)
-                                  ENDDO
-                               ELSE
-                                  DO ia=na_grp(1,is,parai%cp_inter_me +1),na_grp(2,is,parai%cp_inter_me +1)
-                                     isa=isa0+ia
-                                     sum=sum+weight*fnl2(1,isa,iv,i,ik)*&
-                                          fnl2(1,isa,jv,i,ik)
-                                  ENDDO
-                               ENDIF
+                         ELSE
+                            IF (cntl%tfdist) THEN
+                               DO ia=1,ions0%na(is)
+                                  isa=isa0+ia
+                                  sum=sum+weight*&
+                                       (fnl2(1,isa,iv,ii,ik)*fnl2(1,isa,jv,ii,ik)&
+                                       +fnl2(2,isa,iv,ii,ik)*fnl2(2,isa,jv,ii,ik))
+                               ENDDO
                             ELSE
-                               IF (cntl%tfdist) THEN
-                                  DO ia=1,ions0%na(is)
-                                     isa=isa0+ia
-                                     sum=sum+weight*&
-                                          (fnl2(1,isa,iv,ii,ik)*fnl2(1,isa,jv,ii,ik)&
-                                          +fnl2(2,isa,iv,ii,ik)*fnl2(2,isa,jv,ii,ik))
-                                  ENDDO
-                               ELSE
-                                  DO ia=na_grp(1,is,parai%cp_inter_me +1),na_grp(2,is,parai%cp_inter_me +1)
-                                     isa=isa0+ia
-                                     sum=sum+weight*&
-                                          (fnl2(1,isa,iv,i,ik)*fnl2(1,isa,jv,i,ik)&
-                                          +fnl2(2,isa,iv,i,ik)*fnl2(2,isa,jv,i,ik))
-                                  ENDDO
-                               ENDIF
+                               DO ia=1,ions0%na(is)
+                                  isa=isa0+ia
+                                  sum=sum+weight*&
+                                       (fnl2(1,isa,iv,i,ik)*fnl2(1,isa,jv,i,ik)&
+                                       +fnl2(2,isa,iv,i,ik)*fnl2(2,isa,jv,i,ik))
+                               ENDDO
                             ENDIF
-2000                        CONTINUE
+                         ENDIF
+2000                     CONTINUE
+                      ENDDO
+                      IF (iv.NE.jv) sum=2._real_8*sum
+                      enl=enl+sum*sgpp2%hlsg(ki,kj,l,is)
+                   ENDIF
+                ENDDO
+             ENDDO
+          ELSE
+             ! BHS AND RELATED 
+             DO iv=1,nlps_com%ngh(is)
+                sum=0.0_real_8
+                DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                   ii=i-parap%nst12(parai%mepos,1)+1
+                   IF (imagp.EQ.1) THEN
+                      IF (cntl%tfdist) THEN
+                         DO ia=1,ions0%na(is)
+                            isa=isa0+ia
+                            sum=sum+crge%f(i,ik)*wk(ik)*&
+                                 fnl2(1,isa,iv,ii,ik)*fnl2(1,isa,iv,ii,ik)
                          ENDDO
-                         IF (iv.NE.jv) sum=2._real_8*sum
-                         enl=enl+sum*sgpp2%hlsg(ki,kj,l,is)
-                      ENDIF
-                   ENDDO
-                ENDDO
-             ELSE
-                ! BHS AND RELATED 
-                DO iv=1,nlps_com%ngh(is)
-                   sum=0.0_real_8
-                   DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                      ii=i-parap%nst12(1,parai%mepos)+1
-                      IF (imagp.EQ.1) THEN
-                         IF (cntl%tfdist) THEN
-                            DO ia=1,ions0%na(is)
-                               isa=isa0+ia
-                               sum=sum+crge%f(i,ik)*wk(ik)*&
-                                    fnl2(1,isa,iv,ii,ik)*fnl2(1,isa,iv,ii,ik)
-                            ENDDO
-                         ELSE
-                            DO ia=na_grp(1,is,parai%cp_inter_me +1),na_grp(2,is,parai%cp_inter_me +1)
-                               isa=isa0+ia
-                               sum=sum+crge%f(i,ik)*wk(ik)*&
-                                    fnl2(1,isa,iv,i,ik)*fnl2(1,isa,iv,i,ik)
-                            ENDDO
-                         ENDIF
                       ELSE
-                         IF (cntl%tfdist) THEN
-                            DO ia=1,ions0%na(is)
-                               isa=isa0+ia
-                               sum=sum+crge%f(i,ik)*wk(ik)*&
-                                    (fnl2(1,isa,iv,ii,ik)*fnl2(1,isa,iv,ii,ik)&
-                                    +fnl2(2,isa,iv,ii,ik)*fnl2(2,isa,iv,ii,ik))
-                            ENDDO
-                         ELSE
-                            DO ia=na_grp(1,is,parai%cp_inter_me +1),na_grp(2,is,parai%cp_inter_me +1)
-                               isa=isa0+ia
-                               sum=sum+crge%f(i,ik)*wk(ik)*&
-                                    (fnl2(1,isa,iv,i,ik)*fnl2(1,isa,iv,i,ik)&
-                                    +fnl2(2,isa,iv,i,ik)*fnl2(2,isa,iv,i,ik))
-                            ENDDO
-                         ENDIF
+                         DO ia=1,ions0%na(is)
+                            isa=isa0+ia
+                            sum=sum+crge%f(i,ik)*wk(ik)*&
+                                 fnl2(1,isa,iv,i,ik)*fnl2(1,isa,iv,i,ik)
+                         ENDDO
                       ENDIF
-                   ENDDO
-                   enl=enl+wsg(is,iv)*sum
+                   ELSE
+                      IF (cntl%tfdist) THEN
+                         DO ia=1,ions0%na(is)
+                            isa=isa0+ia
+                            sum=sum+crge%f(i,ik)*wk(ik)*&
+                                 (fnl2(1,isa,iv,ii,ik)*fnl2(1,isa,iv,ii,ik)&
+                                 +fnl2(2,isa,iv,ii,ik)*fnl2(2,isa,iv,ii,ik))
+                         ENDDO
+                      ELSE
+                         DO ia=1,ions0%na(is)
+                            isa=isa0+ia
+                            sum=sum+crge%f(i,ik)*wk(ik)*&
+                                 (fnl2(1,isa,iv,i,ik)*fnl2(1,isa,iv,i,ik)&
+                                 +fnl2(2,isa,iv,i,ik)*fnl2(2,isa,iv,i,ik))
+                         ENDDO
+                      ENDIF
+                   ENDIF
                 ENDDO
-             ENDIF
-             isa0=isa0+ions0%na(is)
-          ENDDO
+                enl=enl+wsg(is,iv)*sum
+             ENDDO
+          ENDIF
+          isa0=isa0+ions0%na(is)
        ENDDO
-    END IF
-    if (parai%cp_nogrp .gt. 1) call mp_sum(enl,parai%cp_inter_grp)
+    ENDDO
     IF (lspin2%tlse .AND. lspin2%tcas22) CALL rnlcas
     CALL tihalt('     RNLRH',isub)
     ! ==--------------------------------------------------------------==
@@ -320,8 +296,8 @@ CONTAINS
           ! BHS AND RELATED
           DO iv=1,nlps_com%ngh(is)
              sum=0.0_real_8
-             DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                ii=i-parap%nst12(1,parai%mepos)+1
+             DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                ii=i-parap%nst12(parai%mepos,1)+1
                 IF (imagp.EQ.1) THEN
                    IF (cntl%tfdist) THEN
                       DO ia=1,ions0%na(is)

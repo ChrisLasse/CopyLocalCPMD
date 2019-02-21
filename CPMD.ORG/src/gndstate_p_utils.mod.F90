@@ -111,7 +111,7 @@ CONTAINS
           DO iz=1,parm%nr3
              IF (scr(ix,iy,iz,1) .GT. rhoM) THEN
                 rhoM = scr(ix,iy,iz,1)
-                imax(1)=ix + parap%nrxpl(1,parai%mepos)
+                imax(1)=ix + parap%nrxpl(parai%mepos,1)
                 imax(2)=iy
                 imax(3)=iz
              ENDIF

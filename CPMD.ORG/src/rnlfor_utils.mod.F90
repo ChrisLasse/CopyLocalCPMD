@@ -1,11 +1,7 @@
-#include "cpmd_global.h"
-
 MODULE rnlfor_utils
-  USE cp_grp_utils,                    ONLY: cp_grp_split_atoms  
   USE cvan,                            ONLY: deeq,&
                                              dvan
   USE error_handling,                  ONLY: stopgm
-  USE fnl_utils,                       ONLY: unpack_dfnl
   USE ions,                            ONLY: ions0,&
                                              ions1
   USE kinds,                           ONLY: real_8
@@ -15,17 +11,11 @@ MODULE rnlfor_utils
                                              nlm,&
                                              nlps_com,&
                                              wsg
-  USE parac,                           ONLY: parai,&
-                                             paral
+  USE parac,                           ONLY: parai
   USE pslo,                            ONLY: pslo_com
-  !$ USE omp_lib,                         ONLY: omp_get_thread_num
   USE sfac,                            ONLY: dfnl,&
                                              fnl,&
-                                             fnl2,&
-                                             fnla,&
-                                             dfnla,&
-                                             dfnl_packed,&
-                                             il_dfnl_packed
+                                             fnl2
   USE sgpp,                            ONLY: sgpp1,&
                                              sgpp2
   USE spin,                            ONLY: clsd,&
@@ -33,28 +23,20 @@ MODULE rnlfor_utils
   USE system,                          ONLY: cntl,&
                                              ipept,&
                                              maxsys,&
-                                             parap,&
-                                             norbpe
-  USE kpts,                            ONLY: tkpts
+                                             parap
   USE timer,                           ONLY: tihalt,&
                                              tiset
   USE zeroing_utils,                   ONLY: zeroing
-#ifdef _USE_SCRATCHLIBRARY
-  USE scratch_interface,               ONLY: request_scratch,&
-                                             free_scratch,&
-                                             request_saved_scratch,&
-                                             save_scratch
-#endif
 
   IMPLICIT NONE
 
   PRIVATE
 
-  PUBLIC :: rnlfor_old
   PUBLIC :: rnlfor
   !public :: rcasfor
 
 CONTAINS
+
   ! ==================================================================
   SUBROUTINE rnlfor(fion,f,wk,nstate,nkpoint)
     ! ==--------------------------------------------------------------==
@@ -68,382 +50,154 @@ CONTAINS
 
     INTEGER                                  :: i, ia, ii, ik, is, isa, isa0, &
                                                 ispin, isub, iv, jv, ki, kj, &
-                                                l, l2, li, lj, k, ierr, &
-                                                methread, il_fiont(4), &
-                                                na_grp(2,ions1%nsp,parai%cp_nogrp),iac,&
-                                                ia_sum, start_ia,end_ia,offset1,offset2,&
-                                                offset3,offset4,offset_base, tot_work, &
-                                                offset, start_isa,ikind
-   REAL(real_8)                             :: tdbl, tt, weight, &
+                                                l, l2, li, lj
+    REAL(real_8)                             :: tdbl, temp, tt, weight, &
                                                 wk1_1, wk1_2, wk1_3, wk2_1, &
-                                                wk2_2, wk2_3, wk_t(3), ft(maxsys%nax,3)
-   LOGICAL                                  :: need_old
-#ifdef _USE_SCRATCHLIBRARY   
-   REAL(real_8), POINTER __CONTIGUOUS       :: fiont(:,:,:,:),temp(:,:)
-#else
-   REAL(real_8),ALLOCATABLE                 :: fiont(:,:,:,:),temp(:,:)
-#endif
-#ifdef _VERBOSE_FORCE_DBG
-    REAL(real_8),ALLOCATABLE                :: dbg_forces(:,:,:)
-#endif
-    CHARACTER(*), PARAMETER                 :: procedureN = 'rnlfor' 
-    ! split atoms between cp groups
-
-    call cp_grp_split_atoms(na_grp)
+                                                wk2_2, wk2_3
 
 ! Variables
 ! ==--------------------------------------------------------------==
 ! If no non-local components -> return.
+
     IF (nlm.EQ.0) RETURN
-
-    CALL tiset(procedureN,isub)
-
-    need_old=.FALSE.
-    IF(imagp.EQ.2)need_old=.TRUE.
-    IF(il_dfnl_packed(1).EQ.0)need_old=.TRUE.
-    DO is=1,ions1%nsp
-       IF(.NOT.pslo_com%tvan(is))need_old=.TRUE.
-    END DO
-    IF (il_dfnl_packed(1).GT.0.AND.pslo_com%tivan.AND.imagp.EQ.1.AND..NOT.cntl%tfdist) THEN
-       !Vanderbilt optimized: rnlsm2 glosum is skipped, instead rnlfor runs over all states
-       !and only forces need to be summed up. Glosum of dfnl is always more expensive 
-       CALL cp_grp_split_atoms(na_grp)
-   
-       if (parai%cp_nogrp.gt.1 .and. parai%cp_inter_me .gt. 0) then
-          !$omp parallel do private(is,ia)
-          do is=1,ions1%nsp
-             do ia=1,ions0%na(is)
-                fion(1:3,ia,is)=0._real_8
-             end do
-          end do
-       end if
-       
-       il_fiont(1)=3
-       il_fiont(2)=maxsys%nax
-       il_fiont(3)=ions1%nsp+10
-       il_fiont(4)=parai%ncpus
-#ifdef _USE_SCRATCHLIBRARY
-       CALL request_scratch(il_fiont,fiont,procedureN//'_fiont')
-       CALL request_saved_scratch(il_dfnl_packed,dfnl_packed,'DFNL_packed')
-#else
-       ALLOCATE(fiont(il_fiont(1),il_fiont(2),il_fiont(3),il_fiont(4)), stat=ierr)
-       IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate dfnlt',& 
-            __LINE__,__FILE__)
-#endif
-       isa0=0
-
-       methread=1
-       !$omp parallel private(methread,is,ia,k,ik,isa0,offset_base,start_ia,end_ia,ia_sum,&
-       !$omp ft,i,weight,ispin,iv,jv,tdbl,isa,offset1,offset2,iac,start_isa)
-
-       !$ methread=omp_get_thread_num()+1
-       fiont(:,:,:,methread)=0.0_real_8
-       DO ik=1,nkpoint
-          isa0=0
-          offset_base=0
-          DO is=1,ions1%nsp
-             IF (pslo_com%tvan(is)) THEN
-                !Vanderbilt optimized
-                start_ia=na_grp(1,is,parai%cp_inter_me +1)
-                end_ia=na_grp(2,is,parai%cp_inter_me +1)
-                ia_sum=end_ia-start_ia+1
-                start_isa=isa0+na_grp(1,is,parai%cp_inter_me +1)-1
-                ft=0.0_real_8
-                !$omp do
-                DO i=1,nstate                   
-                   weight=wk(ik)*f(i,ik)
-                   IF (ABS(weight).GT.1.e-12_real_8) THEN
-                      ispin=1
-                      IF (cntl%tlsd.AND.i.GT.spin_mod%nsup) ispin=2
-                      DO jv=1,nlps_com%ngh(is)
-                         DO k=1,3
-                            offset1=offset_base+(jv-1)*ia_sum*3+(k-1)*ia_sum
-                            isa=start_isa
-                            !$omp simd
-                            DO ia=1,ia_sum
-                               isa=isa+1
-                               ft(ia,k)=ft(ia,k)+&
-                                    fnla(isa,jv,i)*dfnl_packed(offset1+ia,i)*&
-                                    (dvan(jv,jv,is)+deeq(isa,jv,jv,ispin))*weight
-                            END DO
-                         END DO
-                      END DO
-                      DO iv=1,nlps_com%ngh(is)
-                         DO jv=iv+1,nlps_com%ngh(is)
-                            DO k=1,3
-                               offset1=offset_base+(iv-1)*ia_sum*3+(k-1)*ia_sum
-                               offset2=offset_base+(jv-1)*ia_sum*3+(k-1)*ia_sum
-                               isa=start_isa
-                               !$omp simd
-                               DO ia=1,ia_sum
-                                  isa=isa+1
-                                  ft(ia,k)=ft(ia,k)+&
-                                       fnla(isa,jv,i)*dfnl_packed(offset1+ia,i)*&
-                                       (dvan(jv,iv,is)+deeq(isa,jv,iv,ispin))*weight
-                                  ft(ia,k)=ft(ia,k)+&
-                                       fnla(isa,iv,i)*dfnl_packed(offset2+ia,i)*&
-                                       (dvan(jv,iv,is)+deeq(isa,jv,iv,ispin))*weight
-                               END DO
-                            END DO
-                         END DO
-                      END DO
-                   END IF
-                END DO
-                !$omp end do nowait
-                DO ia=1,ia_sum
-                   DO k=1,3
-                      fiont(k,ia,is,methread)=ft(ia,k)*2.0_real_8
-                   END DO
-                END DO
-             END IF
-             isa0 = isa0 + ions0%na(is)
-             offset_base=offset_base+nlps_com%ngh(is)*ia_sum*3
-          ENDDO
-       ENDDO
-       !$omp end parallel
-       DO methread=1,parai%ncpus
-          DO is=1,ions1%nsp
-             DO ia=na_grp(1,is,parai%cp_inter_me+1),na_grp(2,is,parai%cp_inter_me+1)
-                iac=ia-na_grp(1,is,parai%cp_inter_me+1)+1
-                DO k=1,3
-                   fion(k,ia,is)=fion(k,ia,is)-fiont(k,iac,is,methread)
-                END DO
-             END DO
-          END DO
-       END DO
-       IF (parai%cp_nogrp.GT.1) THEN
-          CALL mp_sum(fion,3*maxsys%nax*maxsys%nsx,parai%cp_inter_grp)
-       END IF
-#ifdef _VERBOSE_FORCE_DBG
-       ALLOCATE(dbg_forces(3,maxsys%nax,maxsys%nsx), stat=ierr)
-       IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate dbg_forces',& 
-            __LINE__,__FILE__)
-       dbg_forces=fion
-       CALL mp_sum(dbg_forces,3*maxsys%nax*maxsys%nsx,parai%allgrp)
-       IF (paral%io_parent) THEN
-          WRITE(6,*) "===================================="
-          WRITE(6,*) "DEBUG FORCES", procedureN
-          DO is=1,ions1%nsp
-             DO ia=1,ions0%na(is)
-                WRITE(6,*) dbg_forces(1:3,ia,is),ia,is
-             END DO
-          END DO
-       END IF
-       DEALLOCATE(dbg_forces,STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-            __LINE__,__FILE__)
-#endif
-#ifdef _USE_SCRATCHLIBRARY
-    CALL free_scratch(il_fiont,fiont,procedureN//'_fiont')
-    CALL save_scratch(il_dfnl_packed,dfnl_packed,'DFNL_packed')
-#else
-    DEALLOCATE(fiont, stat=ierr)
-    IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate fiont',& 
-         __LINE__,__FILE__)
-#endif
-    END IF
-    IF(need_old)THEN
-       IF(il_dfnl_packed(1).GT.0) THEN
-          !this should only happen if uspp and norm conservings are mixed
-          !so we need to keep a packed version of dfnl without glosum for use in rnlfl
-          !need glosum and unpnack dfnl_packed
-#ifdef _USE_SCRATCHLIBRARY
-          CALL request_saved_scratch(il_dfnl_packed,dfnl_packed,'DFNL_packed')
-          CALL request_scratch(il_dfnl_packed,temp,procedureN//'_temp')
-#else
-          ALLOCATE(temp(il_dfnl_packed(1),il_dfnl_packed(2)), stat=ierr)
-          IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate temp',& 
-               __LINE__,__FILE__)
-#endif
-          CALL dcopy(dfnl_packed,product(il_dfnl_packed),temp,1)
-#ifdef _USE_SCRATCHLIBRARY
-          CALL save_scratch(il_dfnl_packed,dfnl_packed,'DFNL_packed')
-#endif
-          CALL mp_sum(temp,size(temp,1)*size(temp,2),parai%allgrp)
-          DO ik=1,nkpoint
-             CALL unpack_dfnl(temp,dfnl,dfnla,na_grp,tkpts%tkpnt,ik)
-          END DO
-#ifdef _USE_SCRATCHLIBRARY
-          CALL free_scratch(il_dfnl_packed,temp,procedureN//'_temp')
-          CALL save_scratch(il_dfnl_packed,dfnl_packed,'DFNL_packed')
-#else
-          DEALLOCATE(temp, stat=ierr)
-          IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate temp',& 
-               __LINE__,__FILE__)
-#endif
-       END IF
-       CALL rnlfor_old(fion,f,wk,nstate,nkpoint)
-    END IF
-    CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==
-    RETURN
-  END SUBROUTINE rnlfor
-  ! ==================================================================
-  ! ==================================================================
-  SUBROUTINE rnlfor_old(fion,f,wk,nstate,nkpoint)
-    ! ==--------------------------------------------------------------==
-    ! ==                        COMPUTES                              ==
-    ! ==  THE NON-LOCAL POTENTIAL CONTRIBUTION TO THE FORCE ON THE    ==
-    ! ==  IONIC DEGREES OF FREEDOM                                    ==
-    ! ==--------------------------------------------------------------==
-    REAL(real_8)                             :: fion(:,:,:)
-    INTEGER                                  :: nstate, nkpoint
-    REAL(real_8)                             :: f(nstate,nkpoint), wk(nkpoint)
-
-    INTEGER                                  :: i, ia, ii, ik, is, isa, isa0, &
-                                                ispin, isub, iv, jv, ki, kj, &
-                                                l, l2, li, lj, k, ierr, &
-                                                methread, il_fnlt(3), il_dfnlt(4), &
-                                                na_grp(2,ions1%nsp,parai%cp_nogrp) 
-   REAL(real_8)                             :: tdbl, temp, tt, weight, &
-                                                wk1_1, wk1_2, wk1_3, wk2_1, &
-                                                wk2_2, wk2_3, fiont(3)
-   REAL(real_8),ALLOCATABLE                  :: fnlt(:,:,:),dfnlt(:,:,:,:)
-#ifdef _VERBOSE_FORCE_DBG
-    REAL(real_8),ALLOCATABLE                 :: dbg_forces(:,:,:)
-#endif
-    CHARACTER(*), PARAMETER                  :: procedureN = 'rnlfor_old' 
-    ! split atoms between cp groups
-
-    call cp_grp_split_atoms(na_grp)
-
-! Variables
-! ==--------------------------------------------------------------==
-! If no non-local components -> return.
-    IF (nlm.EQ.0) RETURN
-
-    CALL tiset(procedureN,isub)
-
-    CALL cp_grp_split_atoms(na_grp)
-    
-    if (parai%cp_nogrp.gt.1 .and. parai%cp_inter_me .gt. 0) then
-       !$omp parallel do private(is,ia)
-       do is=1,ions1%nsp
-          do ia=1,ions0%na(is)
-             fion(1:3,ia,is)=0._real_8
-          end do
-       end do
-    end if
-
-    ! ==--------------------------------------------------------------==
+    CALL tiset('    RNLFOR',isub)
     DO ik=1,nkpoint
        isa0=0
        DO is=1,ions1%nsp
           IF (pslo_com%tvan(is)) THEN
-             !Vanderbilt optimized
-             IF (imagp .EQ.1 .AND. .NOT. cntl%tfdist) THEN
-                !see newcode above
-             ELSE
-                ! Vanderbild pp
-                DO iv=1,nlps_com%ngh(is)
-                   DO jv=iv,nlps_com%ngh(is)
-                      tdbl=1._real_8
-                      IF (iv.NE.jv) tdbl=2.0_real_8
-                      DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                         ii=i-parap%nst12(1,parai%mepos)+1
-                         ispin=1
-                         weight=wk(ik)*f(i,ik)
-                         IF (ABS(weight).GT.1.e-12_real_8) THEN
-                            IF (cntl%tlsd.AND.i.GT.spin_mod%nsup) ispin=2
-                            IF (cntl%tfdist) THEN
-                               IF (imagp.EQ.2) THEN
-                                  !$omp  do private(IA,ISA,TEMP,wk1_1,wk1_2,wk1_3) &
-                                  !$omp             private(wk2_1,wk2_2,wk2_3)
-                                  DO ia=na_grp(1,is,parai%cp_inter_me +1),na_grp(2,is,parai%cp_inter_me +1)
-                                     isa=isa0+ia
-                                     temp=dvan(iv,jv,is)+deeq(isa,jv,iv,ispin)
-                                     wk1_1=dfnl(1,isa,jv,1,ii,ik)*fnl2(1,isa,iv,&
-                                          ii,ik)+dfnl(2,isa,jv,1,ii,ik)*fnl2(2,isa,&
-                                          iv,  ii,ik)
-                                     wk1_2=dfnl(1,isa,jv,2,ii,ik)*fnl2(1,isa,iv,&
-                                          ii,ik)+dfnl(2,isa,jv,2,ii,ik)*fnl2(2,isa,&
-                                          iv,  ii,ik)
-                                     wk1_3=dfnl(1,isa,jv,3,ii,ik)*fnl2(1,isa,iv,ii,&
-                                          ik)+dfnl(2,isa,jv,3,ii,ik)*fnl2(2,isa,iv,&
-                                          ii,ik)
-                                     wk2_1=dfnl(1,isa,iv,1,ii,ik)*fnl2(1,isa,jv,&
-                                          ii,ik)+dfnl(2,isa,iv,1,ii,ik)*fnl2(2,isa,&
-                                          jv,  ii,ik)
-                                     wk2_2=dfnl(1,isa,iv,2,ii,ik)*fnl2(1,isa,jv,&
-                                          ii,ik)+dfnl(2,isa,iv,2,ii,ik)*fnl2(2,isa,&
-                                          jv,  ii,ik)
-                                     wk2_3=dfnl(1,isa,iv,3,ii,ik)*fnl2(1,isa,jv,&
-                                          ii,ik)+dfnl(2,isa,iv,3,ii,ik)*fnl2(2,isa,&
-                                          jv,  ii,ik)
-                                     fion(1,ia,is)=fion(1,ia,is)-weight*tdbl*&
-                                          temp*(wk1_1+wk2_1)
-                                     fion(2,ia,is)=fion(2,ia,is)-weight*tdbl*&
-                                          temp*(wk1_2+wk2_2)
-                                     fion(3,ia,is)=fion(3,ia,is)-weight*tdbl*&
-                                          temp*(wk1_3+wk2_3)
-                                  ENDDO
-                               ELSE
-                                  !$omp do private(IA,ISA,TEMP,wk1_1,wk1_2,wk1_3) &
-                                  !$omp             private(wk2_1,wk2_2,wk2_3)
-                                  DO ia=na_grp(1,is,parai%cp_inter_me +1),na_grp(2,is,parai%cp_inter_me +1)
-                                     isa=isa0+ia
-                                     temp=dvan(iv,jv,is)+deeq(isa,jv,iv,ispin)
-                                     wk1_1=dfnl(1,isa,jv,1,ii,ik) *fnl2(1,isa,iv,&
-                                          ii,ik)
-                                     wk1_2=dfnl(1,isa,jv,2,ii,ik) *fnl2(1,isa,iv,&
-                                          ii,ik)
-                                     wk1_3=dfnl(1,isa,jv,3,ii,ik) *fnl2(1,isa,iv,&
-                                          ii,ik)
-                                     wk2_1=dfnl(1,isa,iv,1,ii,ik) *fnl2(1,isa,jv,&
-                                          ii,ik)
-                                     wk2_2=dfnl(1,isa,iv,2,ii,ik) *fnl2(1,isa,jv,&
-                                          ii,ik)
-                                     wk2_3=dfnl(1,isa,iv,3,ii,ik) *fnl2(1,isa,jv,&
-                                          ii,ik)
-                                     fion(1,ia,is)=fion(1,ia,is)-weight*tdbl*&
-                                          temp*(wk1_1+wk2_1)
-                                     fion(2,ia,is)=fion(2,ia,is)-weight*tdbl*&
-                                          temp*(wk1_2+wk2_2)
-                                     fion(3,ia,is)=fion(3,ia,is)-weight*tdbl*&
-                                          temp*(wk1_3+wk2_3)
-                                  ENDDO
-                               ENDIF
+             ! Vanderbild pp
+             DO iv=1,nlps_com%ngh(is)
+                DO jv=iv,nlps_com%ngh(is)
+                   tdbl=1._real_8
+                   IF (iv.NE.jv) tdbl=2.0_real_8
+                   DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                      ii=i-parap%nst12(parai%mepos,1)+1
+                      ispin=1
+                      weight=wk(ik)*f(i,ik)
+                      IF (ABS(weight).GT.1.e-12_real_8) THEN
+                         IF (cntl%tlsd.AND.i.GT.spin_mod%nsup) ispin=2
+                         IF (cntl%tfdist) THEN
+                            IF (imagp.EQ.2) THEN
+                               !$omp parallel do private(IA,ISA,TEMP,wk1_1,wk1_2,wk1_3) &
+                               !$omp             private(wk2_1,wk2_2,wk2_3)
+                               DO ia=1,ions0%na(is)
+                                  isa=isa0+ia
+                                  temp=dvan(iv,jv,is)+deeq(isa,jv,iv,ispin)
+                                  wk1_1=dfnl(1,isa,jv,1,ii,ik)*fnl2(1,isa,iv,&
+                                       ii,ik)+dfnl(2,isa,jv,1,ii,ik)*fnl2(2,isa,&
+                                       iv,  ii,ik)
+                                  wk1_2=dfnl(1,isa,jv,2,ii,ik)*fnl2(1,isa,iv,&
+                                       ii,ik)+dfnl(2,isa,jv,2,ii,ik)*fnl2(2,isa,&
+                                       iv,  ii,ik)
+                                  wk1_3=dfnl(1,isa,jv,3,ii,ik)*fnl2(1,isa,iv,ii,&
+                                       ik)+dfnl(2,isa,jv,3,ii,ik)*fnl2(2,isa,iv,&
+                                       ii,ik)
+                                  wk2_1=dfnl(1,isa,iv,1,ii,ik)*fnl2(1,isa,jv,&
+                                       ii,ik)+dfnl(2,isa,iv,1,ii,ik)*fnl2(2,isa,&
+                                       jv,  ii,ik)
+                                  wk2_2=dfnl(1,isa,iv,2,ii,ik)*fnl2(1,isa,jv,&
+                                       ii,ik)+dfnl(2,isa,iv,2,ii,ik)*fnl2(2,isa,&
+                                       jv,  ii,ik)
+                                  wk2_3=dfnl(1,isa,iv,3,ii,ik)*fnl2(1,isa,jv,&
+                                       ii,ik)+dfnl(2,isa,iv,3,ii,ik)*fnl2(2,isa,&
+                                       jv,  ii,ik)
+                                  fion(1,ia,is)=fion(1,ia,is)-weight*tdbl*&
+                                       temp*(wk1_1+wk2_1)
+                                  fion(2,ia,is)=fion(2,ia,is)-weight*tdbl*&
+                                       temp*(wk1_2+wk2_2)
+                                  fion(3,ia,is)=fion(3,ia,is)-weight*tdbl*&
+                                       temp*(wk1_3+wk2_3)
+                               ENDDO
                             ELSE
-                               IF (imagp.EQ.2) THEN
-                                  !$omp  do private(IA,ISA,TEMP,wk1_1,wk1_2,wk1_3) &
-                                  !$omp             private(wk2_1,wk2_2,wk2_3)
-                                  DO ia=na_grp(1,is,parai%cp_inter_me +1),na_grp(2,is,parai%cp_inter_me +1)
-                                     isa=isa0+ia
-                                     temp=dvan(iv,jv,is)+deeq(isa,jv,iv,ispin)
-                                     wk1_1=dfnl(1,isa,jv,1,ii,ik)*fnl(1,isa,iv, i,&
-                                          ik)+dfnl(2,isa,jv,1,ii,ik)*fnl(2,isa,iv,&
-                                          i,ik)
-                                     wk1_2=dfnl(1,isa,jv,2,ii,ik)*fnl(1,isa,iv, i,&
-                                          ik)+dfnl(2,isa,jv,2,ii,ik)*fnl(2,isa,iv,&
-                                          i,ik)
-                                     wk1_3=dfnl(1,isa,jv,3,ii,ik)*fnl(1,isa,iv, i,&
-                                          ik)+dfnl(2,isa,jv,3,ii,ik)*fnl(2,isa,iv,&
-                                          i,ik)
-                                     wk2_1=dfnl(1,isa,iv,1,ii,ik)*fnl(1,isa,jv, i,&
-                                          ik)+dfnl(2,isa,iv,1,ii,ik)*fnl(2,isa,jv,&
-                                          i,ik)
-                                     wk2_2=dfnl(1,isa,iv,2,ii,ik)*fnl(1,isa,jv, i,&
-                                          ik)+dfnl(2,isa,iv,2,ii,ik)*fnl(2,isa,jv,&
-                                          i,ik)
-                                     wk2_3=dfnl(1,isa,iv,3,ii,ik)*fnl(1,isa,jv, i,&
-                                          ik)+dfnl(2,isa,iv,3,ii,ik)*fnl(2,isa,jv,&
-                                          i,ik)
-                                     fion(1,ia,is)=fion(1,ia,is)-weight*tdbl*&
-                                          temp*(wk1_1+wk2_1)
-                                     fion(2,ia,is)=fion(2,ia,is)-weight*tdbl*&
-                                          temp*(wk1_2+wk2_2)
-                                     fion(3,ia,is)=fion(3,ia,is)-weight*tdbl*&
-                                          temp*(wk1_3+wk2_3)
-                                  ENDDO
-                               ELSE
-                                  !See new code above
-                               ENDIF
+                               !$omp parallel do private(IA,ISA,TEMP,wk1_1,wk1_2,wk1_3) &
+                               !$omp             private(wk2_1,wk2_2,wk2_3)
+                               DO ia=1,ions0%na(is)
+                                  isa=isa0+ia
+                                  temp=dvan(iv,jv,is)+deeq(isa,jv,iv,ispin)
+                                  wk1_1=dfnl(1,isa,jv,1,ii,ik) *fnl2(1,isa,iv,&
+                                       ii,ik)
+                                  wk1_2=dfnl(1,isa,jv,2,ii,ik) *fnl2(1,isa,iv,&
+                                       ii,ik)
+                                  wk1_3=dfnl(1,isa,jv,3,ii,ik) *fnl2(1,isa,iv,&
+                                       ii,ik)
+                                  wk2_1=dfnl(1,isa,iv,1,ii,ik) *fnl2(1,isa,jv,&
+                                       ii,ik)
+                                  wk2_2=dfnl(1,isa,iv,2,ii,ik) *fnl2(1,isa,jv,&
+                                       ii,ik)
+                                  wk2_3=dfnl(1,isa,iv,3,ii,ik) *fnl2(1,isa,jv,&
+                                       ii,ik)
+                                  fion(1,ia,is)=fion(1,ia,is)-weight*tdbl*&
+                                       temp*(wk1_1+wk2_1)
+                                  fion(2,ia,is)=fion(2,ia,is)-weight*tdbl*&
+                                       temp*(wk1_2+wk2_2)
+                                  fion(3,ia,is)=fion(3,ia,is)-weight*tdbl*&
+                                       temp*(wk1_3+wk2_3)
+                               ENDDO
                             ENDIF
-                         END IF
-                      ENDDO
+                         ELSE
+                            IF (imagp.EQ.2) THEN
+                               !$omp parallel do private(IA,ISA,TEMP,wk1_1,wk1_2,wk1_3) &
+                               !$omp             private(wk2_1,wk2_2,wk2_3)
+                               DO ia=1,ions0%na(is)
+                                  isa=isa0+ia
+                                  temp=dvan(iv,jv,is)+deeq(isa,jv,iv,ispin)
+                                  wk1_1=dfnl(1,isa,jv,1,ii,ik)*fnl(1,isa,iv, i,&
+                                       ik)+dfnl(2,isa,jv,1,ii,ik)*fnl(2,isa,iv,&
+                                       i,ik)
+                                  wk1_2=dfnl(1,isa,jv,2,ii,ik)*fnl(1,isa,iv, i,&
+                                       ik)+dfnl(2,isa,jv,2,ii,ik)*fnl(2,isa,iv,&
+                                       i,ik)
+                                  wk1_3=dfnl(1,isa,jv,3,ii,ik)*fnl(1,isa,iv, i,&
+                                       ik)+dfnl(2,isa,jv,3,ii,ik)*fnl(2,isa,iv,&
+                                       i,ik)
+                                  wk2_1=dfnl(1,isa,iv,1,ii,ik)*fnl(1,isa,jv, i,&
+                                       ik)+dfnl(2,isa,iv,1,ii,ik)*fnl(2,isa,jv,&
+                                       i,ik)
+                                  wk2_2=dfnl(1,isa,iv,2,ii,ik)*fnl(1,isa,jv, i,&
+                                       ik)+dfnl(2,isa,iv,2,ii,ik)*fnl(2,isa,jv,&
+                                       i,ik)
+                                  wk2_3=dfnl(1,isa,iv,3,ii,ik)*fnl(1,isa,jv, i,&
+                                       ik)+dfnl(2,isa,iv,3,ii,ik)*fnl(2,isa,jv,&
+                                       i,ik)
+                                  fion(1,ia,is)=fion(1,ia,is)-weight*tdbl*&
+                                       temp*(wk1_1+wk2_1)
+                                  fion(2,ia,is)=fion(2,ia,is)-weight*tdbl*&
+                                       temp*(wk1_2+wk2_2)
+                                  fion(3,ia,is)=fion(3,ia,is)-weight*tdbl*&
+                                       temp*(wk1_3+wk2_3)
+                               ENDDO
+                            ELSE
+                               !$omp parallel do private(IA,ISA,TEMP,wk1_1,wk1_2,wk1_3) &
+                               !$omp             private(wk2_1,wk2_2,wk2_3)
+                               DO ia=1,ions0%na(is)
+                                  isa=isa0+ia
+                                  temp=dvan(iv,jv,is)+deeq(isa,jv,iv,ispin)
+                                  wk1_1=dfnl(1,isa,jv,1,ii,ik)*fnl(1,isa,iv,&
+                                       i,ik)
+                                  wk1_2=dfnl(1,isa,jv,2,ii,ik)*fnl(1,isa,iv,&
+                                       i,ik)
+                                  wk1_3=dfnl(1,isa,jv,3,ii,ik)*fnl(1,isa,iv,&
+                                       i,ik)
+                                  wk2_1=dfnl(1,isa,iv,1,ii,ik)*fnl(1,isa,jv,&
+                                       i,ik)
+                                  wk2_2=dfnl(1,isa,iv,2,ii,ik)*fnl(1,isa,jv,&
+                                       i,ik)
+                                  wk2_3=dfnl(1,isa,iv,3,ii,ik)*fnl(1,isa,jv,&
+                                       i,ik)
+                                  fion(1,ia,is)=fion(1,ia,is)-weight*tdbl*&
+                                       temp*(wk1_1+wk2_1)
+                                  fion(2,ia,is)=fion(2,ia,is)-weight*tdbl*&
+                                       temp*(wk1_2+wk2_2)
+                                  fion(3,ia,is)=fion(3,ia,is)-weight*tdbl*&
+                                       temp*(wk1_3+wk2_3)
+                               ENDDO
+                            ENDIF
+                         ENDIF
+                      ENDIF
                    ENDDO
                 ENDDO
-             ENDIF
+             ENDDO
           ELSEIF (sgpp1%tsgp(is)) THEN
              ! Stefan Goedecker pp
              DO iv=1,nlps_com%ngh(is)
@@ -455,11 +209,11 @@ CONTAINS
                    lj=sgpp2%lpval(jv,is)
                    IF (l2.EQ.l.AND.li.EQ.lj) THEN
                       kj=sgpp2%lfval(jv,is)
-                      DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
+                      DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
                          weight=wk(ik)*f(i,ik)
                          IF (ABS(weight).GT.1.e-12_real_8) THEN
                             tt=2.0_real_8*weight*sgpp2%hlsg(ki,kj,l,is)
-                            ii=i-parap%nst12(1,parai%mepos)+1
+                            ii=i-parap%nst12(parai%mepos,1)+1
                             IF (imagp.EQ.2) THEN
                                IF (cntl%tfdist) THEN
                                   !$omp parallel do private(IA,ISA)
@@ -530,10 +284,10 @@ CONTAINS
              ! Other pp (numeric)
              DO iv=1,nlps_com%ngh(is)
                 temp=2._real_8*wsg(is,iv)
-                DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
+                DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
                    weight=wk(ik)*f(i,ik)
                    IF (ABS(weight).GT.1.e-12_real_8) THEN
-                      ii=i-parap%nst12(1,parai%mepos)+1
+                      ii=i-parap%nst12(parai%mepos,1)+1
                       IF (cntl%tfdist) THEN
                          IF (imagp.EQ.2) THEN
                             !$omp parallel do private(IA,ISA,wk1_1,wk1_2,wk1_3)
@@ -608,33 +362,10 @@ CONTAINS
           isa0 = isa0 + ions0%na(is)
        ENDDO
     ENDDO
-    if (parai%cp_nogrp.gt.1) then
-       CALL mp_sum(fion,3*maxsys%nax*maxsys%nsx,parai%cp_inter_grp)
-    end if
-
-#ifdef _VERBOSE_FORCE_DBG
-    ALLOCATE(dbg_forces(3,maxsys%nax,maxsys%nsx), stat=ierr)
-    IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate dbg_forces',& 
-         __LINE__,__FILE__)
-    dbg_forces=fion
-    CALL mp_sum(dbg_forces,3*maxsys%nax*maxsys%nsx,parai%allgrp)
-    IF (paral%io_parent) THEN
-       WRITE(6,*) "===================================="
-       WRITE(6,*) "DEBUG FORCES", procedureN
-       DO is=1,ions1%nsp
-          DO ia=1,ions0%na(is)
-             WRITE(6,*) dbg_forces(1:3,ia,is),ia,is
-          END DO
-       END DO
-    END IF
-    DEALLOCATE(dbg_forces,STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-         __LINE__,__FILE__)
-#endif
-    CALL tihalt(procedureN,isub)
+    CALL tihalt('    RNLFOR',isub)
     ! ==--------------------------------------------------------------==
     RETURN
-  END SUBROUTINE rnlfor_old
+  END SUBROUTINE rnlfor
   ! ==================================================================
   SUBROUTINE rcasfor(fion)
     ! ==--------------------------------------------------------------==
@@ -664,12 +395,12 @@ CONTAINS
          __LINE__,__FILE__)
     DO k=1,3
        CALL zeroing(dfab)!,2*ions1%nat)
-       IF (clsd%ialpha.GE.parap%nst12(1,parai%mepos).AND.clsd%ialpha.LE.parap%nst12(2,parai%mepos) ) THEN
-          ii=clsd%ialpha-parap%nst12(1,parai%mepos)+1
+       IF (clsd%ialpha.GE.parap%nst12(parai%mepos,1).AND.clsd%ialpha.LE.parap%nst12(parai%mepos,2) ) THEN
+          ii=clsd%ialpha-parap%nst12(parai%mepos,1)+1
           CALL dcopy(maxsys%nhxs*ions1%nat,dfnl(1,1,1,k,ii,1),1,dfab(1,1,1),1)
        ENDIF
-       IF (clsd%ibeta.GE.parap%nst12(1,parai%mepos).AND.clsd%ibeta.LE.parap%nst12(2,parai%mepos) ) THEN
-          ii=clsd%ibeta-parap%nst12(1,parai%mepos)+1
+       IF (clsd%ibeta.GE.parap%nst12(parai%mepos,1).AND.clsd%ibeta.LE.parap%nst12(parai%mepos,2) ) THEN
+          ii=clsd%ibeta-parap%nst12(parai%mepos,1)+1
           CALL dcopy(maxsys%nhxs*ions1%nat,dfnl(1,1,1,k,ii,1),1,dfab(1,1,2),1)
        ENDIF
        CALL mp_sum(dfab,2*ions1%nat*maxsys%nhxs,parai%allgrp)

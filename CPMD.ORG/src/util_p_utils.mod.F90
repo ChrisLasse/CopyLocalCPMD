@@ -201,15 +201,15 @@ SUBROUTINE cubefile(filename,array,center,psi,thalfmesh)
      ! find the PE who has the plane i1:
      source_pe = 0
      DO WHILE (.NOT.&
-          (ii1.GE.parap%nrxpl(1,source_pe) .AND.&
-          ii1.LE.parap%nrxpl(2,source_pe)))
+          (ii1.GE.parap%nrxpl(source_pe,1) .AND.&
+          ii1.LE.parap%nrxpl(source_pe,2)))
         source_pe = source_pe + 1
      ENDDO
      source_pe = parap%pgroup(source_pe+1)
 
      IF (parai%mepos .EQ. source_pe) THEN
         CALL dcopy(fpar%kr2s*fpar%kr3s,&
-             array(ii1-parap%nrxpl(1,parai%mepos)+1,1,1),fpar%kr1,&
+             array(ii1-parap%nrxpl(parai%mepos,1)+1,1,1),fpar%kr1,&
              psi,1)
         IF (.NOT. paral%parent) THEN
            !msglen = 8*kr2s*kr3s! one X-plane.

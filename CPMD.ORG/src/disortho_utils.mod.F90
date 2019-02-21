@@ -24,9 +24,9 @@ MODULE disortho_utils
        cuda_stream_wait_event, cuda_z_points_to
   USE cusolver_types,                  ONLY: cusolver_handle_t
   USE cuuser_utils,                    ONLY: cuuser_identity
-  USE distribution_utils,              ONLY: dist_size
   USE error_handling,                  ONLY: stopgm
   USE gsortho_utils,                   ONLY: gsortho
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8
   USE linalg_utils,                    ONLY: trans_da
   USE mp_interface,                    ONLY: mp_bcast,&
@@ -122,7 +122,7 @@ CONTAINS
     IF(cnti%disortho_bsize /= 0 ) THEN
        norbx = MIN(cnti%disortho_bsize,nstate)
     ELSE
-       CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=norbx,fw=1)
+       CALL set_orbdist(nstate,cnti%nstblk,parai%cp_nproc,norbx)
     ENDIF
     norbx1 = norbx
 
@@ -326,7 +326,7 @@ CONTAINS
     IF(cnti%disortho_bsize /= 0 ) THEN
        norbx = MIN(cnti%disortho_bsize,nstate)
     ELSE
-       CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=norbx,fw=1)
+       CALL set_orbdist(nstate,cnti%nstblk,parai%cp_nproc,norbx)
     ENDIF
     norbx1 = norbx
 
@@ -645,8 +645,8 @@ CONTAINS
     debug=.FALSE.
     IF (nstate.LE.0) RETURN
     CALL tiset(procedureN,isub)
-    CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=norbx,fw=1)
-    norb=paraw%nwa12(2,parai%mepos)-paraw%nwa12(1,parai%mepos)+1
+    CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,norbx)
+    norb=paraw%nwa12(parai%mepos,2)-paraw%nwa12(parai%mepos,1)+1
     norb=MAX(0,norb)
     ! ..overlap matrix
     mmx=MAX(nstate*norbx,norbx*norbx*parai%nproc)
@@ -664,10 +664,10 @@ CONTAINS
     CALL zeroing(rmat)!,nstate*norb)
     rmat_ptr(1:nstate,1:norbx)=>rmat
     DO ip=0,parai%nproc-1
-       nx=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+       nx=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
        CALL zeroing(tmat)!,nstate*norbx)
        IF (nx.GT.0) THEN
-          CALL ovlap2(ncpw%ngw,nstate,nx,tmat,c0,c0(1,paraw%nwa12(1,ip)),.TRUE.)
+          CALL ovlap2(ncpw%ngw,nstate,nx,tmat,c0,c0(1,paraw%nwa12(ip,1)),.TRUE.)
           CALL mp_sum(tmat,rmat_ptr,nstate*norbx,parap%pgroup(ip+1),parai%allgrp)
           IF (parai%mepos.EQ.parap%pgroup(ip+1)) THEN
              CALL dcopy(nstate*norbx,rmat,1,smat,1)
@@ -676,12 +676,12 @@ CONTAINS
     ENDDO
     ! ..Cholesky decomposition
     DO ipj=0,parai%nproc-1
-       npj=paraw%nwa12(2,ipj)-paraw%nwa12(1,ipj)+1
-       j1=paraw%nwa12(1,ipj)
+       npj=paraw%nwa12(ipj,2)-paraw%nwa12(ipj,1)+1
+       j1=paraw%nwa12(ipj,1)
        IF (npj.GT.0) THEN
           DO ipi=ipj,parai%nproc-1
-             npi=paraw%nwa12(2,ipi)-paraw%nwa12(1,ipi)+1
-             i1=paraw%nwa12(1,ipi)
+             npi=paraw%nwa12(ipi,2)-paraw%nwa12(ipi,1)+1
+             i1=paraw%nwa12(ipi,1)
              IF (npi.GT.0) THEN
                 IF (parai%mepos.LT.ipj .AND. norb.GT.0) THEN
                    CALL dgemm('N','T',npi,norb,npj,-1._real_8,smat(i1,1),nstate,&
@@ -718,17 +718,17 @@ CONTAINS
     ! ..Inversion of Cholesky-Matrix
     CALL zeroing(tmat)!,nstate*norbx)
     ! ....on site block
-    DO i=paraw%nwa12(1,parai%mepos),paraw%nwa12(2,parai%mepos)
-       i1=i-paraw%nwa12(1,parai%mepos)+1
+    DO i=paraw%nwa12(parai%mepos,1),paraw%nwa12(parai%mepos,2)
+       i1=i-paraw%nwa12(parai%mepos,1)+1
        tmat(i,i1)=1._real_8
     ENDDO
-    i1=paraw%nwa12(1,parai%mepos)
+    i1=paraw%nwa12(parai%mepos,1)
     IF (norb.GT.0)&
          CALL dtrtrs('L','N','N',norb,norb,smat(i1,1),nstate,&
          tmat(i1,1),nstate,info)
-    IF (paraw%nwa12(2,parai%mepos)+1.LE.nstate) THEN
-       i2=paraw%nwa12(2,parai%mepos)+1
-       n2=nstate-paraw%nwa12(2,parai%mepos)
+    IF (paraw%nwa12(parai%mepos,2)+1.LE.nstate) THEN
+       i2=paraw%nwa12(parai%mepos,2)+1
+       n2=nstate-paraw%nwa12(parai%mepos,2)
        IF (norb.GT.0)&
             CALL dgemm('N','N',n2,norb,norb,-1._real_8,smat(i2,1),nstate,&
             tmat(i1,1),nstate,0._real_8,tmat(i2,1),nstate)
@@ -736,8 +736,8 @@ CONTAINS
     ! ....other blocks
     CALL dcopy(nstate*norbx,smat,1,rmat,1)
     DO ip=1,parai%nproc-1
-       n1=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
-       i1=paraw%nwa12(1,ip)
+       n1=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
+       i1=paraw%nwa12(ip,1)
        IF (n1.GT.0) THEN
           CALL dcopy(nstate*norbx,rmat,1,smat,1)
           CALL mp_bcast(smat,SIZE(smat),parap%pgroup(ip+1),parai%allgrp)
@@ -748,9 +748,9 @@ CONTAINS
              IF (norb.GT.0)&
                   CALL dtrtrs('L','N','N',n1,norb,smat(i1,1),nstate,&
                   tmat(i1,1),nstate,info)
-             IF (paraw%nwa12(2,ip)+1.LE.nstate) THEN
-                i2=paraw%nwa12(2,ip)+1
-                n2=nstate-paraw%nwa12(2,ip)
+             IF (paraw%nwa12(ip,2)+1.LE.nstate) THEN
+                i2=paraw%nwa12(ip,2)+1
+                n2=nstate-paraw%nwa12(ip,2)
                 IF (norb.GT.0)&
                      CALL dgemm('N','N',n2,n1,norb,-1._real_8,smat(i2,1),&
                      nstate,tmat(i1,1),nstate,1._real_8,tmat(i2,1),nstate)
@@ -759,11 +759,11 @@ CONTAINS
        ENDIF
     ENDDO
     ! ..Transpose TMAT
-    CALL trans_da(tmat,nstate,paraw%nwa12(1,0),paraw%nwa12(2,0),&
+    CALL trans_da(tmat,nstate,paraw%nwa12(0,1),paraw%nwa12(0,2),&
          norbx,parai%mepos,parai%nproc,parai%allgrp)
     ! ..Rotate orbitals
     CALL rotate_da(1._real_8,c0,0._real_8,cscr,tmat,2*ncpw%ngw,2*ncpw%ngw,nstate,&
-         paraw%nwa12(1,0),paraw%nwa12(2,0),norbx,parai%mepos,parap%pgroup,parai%nproc,parai%allgrp,&
+         paraw%nwa12(0,1),paraw%nwa12(0,2),norbx,parai%mepos,parap%pgroup,parai%nproc,parai%allgrp,&
          .FALSE.,1,1)
     CALL dcopy(2*nstate*ncpw%ngw,cscr,1,c0,1)
     ! ==--------------------------------------------------------------==

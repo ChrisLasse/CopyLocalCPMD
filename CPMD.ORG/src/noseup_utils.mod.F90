@@ -1,5 +1,3 @@
-#include "cpmd_global.h"
-
 MODULE noseup_utils
   USE bsym,                            ONLY: bsclcs
   USE enosmove_utils,                  ONLY: enosmove
@@ -27,12 +25,10 @@ MODULE noseup_utils
   USE rekine_utils,                    ONLY: rekine
   USE rmas,                            ONLY: rmass
   USE system,                          ONLY: cntl,&
-                                             ncpw,maxsys,parap
+                                             ncpw
   USE timer,                           ONLY: tihalt,&
                                              tiset
-#ifdef _VERBOSE_IONIC_VELOCITIES_DBG
-  USE ions,                            ONLY: ions0,ions1
-#endif
+
   IMPLICIT NONE
 
   PRIVATE
@@ -50,26 +46,12 @@ CONTAINS
     CHARACTER(*), PARAMETER                  :: procedureN = 'noseup'
 
     INTEGER                                  :: i, isub, j
-#ifdef _VERBOSE_IONIC_VELOCITIES_DBG
-    INTEGER                                  :: ia, is
-#endif
     REAL(real_8)                             :: ekinc, sctot
 
     CALL tiset(procedureN,isub)
-#ifdef _VERBOSE_IONIC_VELOCITIES_DBG
-    IF (paral%io_parent) THEN
-       WRITE(6,*) "===================================="
-       WRITE(6,*) "DEBUG VELOCITIES, noseup" 
-       DO is=1,ions1%nsp
-          DO ia=1,ions0%na(is)
-             WRITE(6,*) velp(1:3,ia,is),ia,is
-          END DO
-       END DO
-    END IF
-#endif
     IF (cntl%tnosee) THEN
        CALL rekine(cm,nstate,ekinc)
-       IF (paral%io_parent) THEN
+       IF (paral%parent) THEN
           sctot=1.0_real_8
           DO i=1,nit
              DO j=1,ncalls
@@ -77,7 +59,7 @@ CONTAINS
              ENDDO
           ENDDO
        ENDIF
-       CALL mp_bcast(sctot,parai%source,parai%cp_grp)
+       CALL mp_bcast(sctot,parai%source,parai%allgrp)
        CALL dscal(2*ncpw%ngw*nstate,sctot,cm,1)
     ENDIF
     ! FOR BS_CPMD: IF WF IS HS, SKIP THE REST
@@ -86,7 +68,7 @@ CONTAINS
        RETURN
     ENDIF
     !
-    IF (cntl%tnosep.AND.paral%io_parent.AND..NOT.cntl%tnosec) THEN
+    IF (cntl%tnosep.AND.paral%parent.AND..NOT.cntl%tnosec) THEN
        DO i=1,nit
           DO j=1,ncalls
              IF (cntl%tpath.AND.cntl%tpimd) THEN
@@ -105,13 +87,13 @@ CONTAINS
     ENDIF
     ! ==--------------------------------------------------------------==
     ! AK: FIXME  
-    IF (cntl%tprcp.AND.paral%io_parent.AND.prcpl%tzflex) THEN
+    IF (cntl%tprcp.AND.paral%parent.AND.prcpl%tzflex) THEN
        CALL stopgm(procedureN,'NO NOSE THERMOSTAT FOR ZFLEXIBLE CELL',& 
             __LINE__,__FILE__)
     ENDIF
     ! 
-    IF (cntl%tprcp.AND.ip.EQ.1.AND.paral%io_parent.AND.prcpl%tisot) THEN
-       IF (cntl%tnosep.AND..NOT.cntl%tnosec) THEN
+    IF (cntl%tprcp.AND.ip.EQ.1.AND.paral%parent.AND.prcpl%tisot) THEN
+       IF ((cntl%tnosep.AND.tnosepc).AND..NOT.cntl%tnosec) THEN
           DO i=1,nit
              DO j=1,ncalls
                 IF (cntl%tpath.AND.cntl%tpimd) THEN
@@ -169,7 +151,7 @@ CONTAINS
           ENDDO
        ENDIF
        ! ==--------------------------------------------------------------==
-    ELSEIF (cntl%tprcp.AND.ip.EQ.1.AND.paral%io_parent.AND..NOT.prcpl%tisot.AND..NOT.cntl%tshock) THEN
+    ELSEIF (cntl%tprcp.AND.ip.EQ.1.AND.paral%parent.AND..NOT.prcpl%tisot.AND..NOT.cntl%tshock) THEN
        ! ==--------------------------------------------------------------==
        IF ((cntl%tnosep.AND.tnosepc).AND..NOT.cntl%tnosec) THEN
           DO i=1,nit
@@ -229,18 +211,6 @@ CONTAINS
           ENDDO
        ENDIF
     ENDIF
-#ifdef _VERBOSE_IONIC_VELOCITIES_DBG
-    IF (paral%io_parent) THEN
-       WRITE(6,*) "===================================="
-       WRITE(6,*) "DEBUG VELOCITIES, noseup" 
-       DO is=1,ions1%nsp
-          DO ia=1,ions0%na(is)
-             WRITE(6,*) velp(1:3,ia,is),ia,is
-          END DO
-       END DO
-    END IF
-#endif
-    call mp_bcast(velp,maxsys%nax*maxsys%nsx*3,parai%io_source,parai%cp_grp)
     ! ==--------------------------------------------------------------==
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==

@@ -76,7 +76,34 @@ CONTAINS
                 ! For cntl%bsymm: we have two wavefunctions
                 IF (cntl%bsymm)numx=2
              ENDIF
+             ALLOCATE(xmat1(nstate*nstate,numx),STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+                  __LINE__,__FILE__)
+             ALLOCATE(xmat2(nstate*nstate),STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+                  __LINE__,__FILE__)
+             DO i=1,numx
+                CALL unitmx(xmat1(1,i),nstate)
+             ENDDO
              icon=1
+          ELSE
+             ! To avoid Fortran runtime 'not allocated' error
+             IF(ALLOCATED(xmat1)) THEN
+                DEALLOCATE(xmat1,STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+                     __LINE__,__FILE__)
+             ENDIF
+             ALLOCATE(xmat1(1,1),STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+                  __LINE__,__FILE__)! TODO XMAT1 is not used in NOFORCE
+             IF(ALLOCATED(xmat2)) THEN
+                DEALLOCATE(xmat2,STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+                     __LINE__,__FILE__)
+             ENDIF
+             ALLOCATE(xmat2(1),STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+                  __LINE__,__FILE__)
           ENDIF
        ENDIF
     ENDIF
@@ -89,7 +116,8 @@ CONTAINS
        ELSE
           ipx=1
        ENDIF
-       CALL noforce(c0,c2,sc0,tau0,fion,eigv,rhoe,psi,nstate,tfor)
+       CALL noforce(c0,c2,sc0,tau0,fion,eigv,rhoe,psi,&
+            xmat1(1,ipx),xmat2,nstate,tfor)
     ELSE
        NULLIFY(c0_ptr)
        CALL reshape_inplace(c0, (/SIZE(c0,1),SIZE(c0,2),1/), c0_ptr)

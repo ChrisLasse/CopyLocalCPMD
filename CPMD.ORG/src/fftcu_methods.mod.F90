@@ -210,8 +210,8 @@ CONTAINS
     CALL cp_cufft_get_plan ( 'N', 'T', qr3s, m, lr3s, m, plan_p, plans_d, stream )
     CALL mltfft_cuda('N','T',t2_d,qr3s,m,t1_d,m,qr3s,lr3s,m,isign,scale, plan_p, blas_handle, stream )
 
-    n1u=lrxpl(1,mepos)
-    n1o=lrxpl(2,mepos)
+    n1u=lrxpl(mepos,1)
+    n1o=lrxpl(mepos,2)
     CALL CuUser_phasen (t1_d,qr1,qr2s,qr3s,n1u,n1o,lr2s,lr3s, stream )
 
     IF( copy_to_host ) CALL cuda_memcpy_async_device_to_host ( t1_d, f(1:qr3s*m), stream )
@@ -327,8 +327,8 @@ CONTAINS
 
     IF( copy_to_device ) CALL cuda_memcpy_async_host_to_device ( f(1:m*qr3s), t1_d, stream )
 
-    n1u=lrxpl(1,mepos)
-    n1o=lrxpl(2,mepos)
+    n1u=lrxpl(mepos,1)
+    n1o=lrxpl(mepos,2)
     CALL CuUser_phasen(t1_d,qr1,qr2s,qr3s,n1u,n1o,lr2s,lr3s, stream )
 
     CALL cp_cufft_get_plan ( 'T', 'N', m, qr3s, lr3s, m, plan_p, plans_d, stream )

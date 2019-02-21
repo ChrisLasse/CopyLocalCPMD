@@ -15,5 +15,5 @@ MODULE nort
      LOGICAL :: fcon
   END TYPE nort_com_t
   TYPE(nort_com_t), SAVE :: nort_com
-  real(real_8),allocatable, save :: nort_ovlap(:,:)
+
 END MODULE nort

@@ -39,7 +39,7 @@ CONTAINS
        WRITE(6,'(12X,A)') ' ***       ******    **      **  **   *** '
        WRITE(6,'(12X,A)') '  *******  **        **      **  *******  '
        WRITE(6,'(12X,A)') '   ******  **        **      **  ******   '
-       WRITE(6,'(/,23X,A,A,/)') '   VERSION 4.1-', SVN_REV
+       WRITE(6,'(/,23X,A,A,/)') '   VERSION 4.3-', SVN_REV
 #if defined(__GROMOS)
        WRITE(6,'(/,16X,A,/)') 'COMPILED WITH GROMOS-AMBER QM/MM SUPPORT'
 #endif

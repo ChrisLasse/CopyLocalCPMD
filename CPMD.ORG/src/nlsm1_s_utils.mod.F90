@@ -124,8 +124,8 @@ CONTAINS
                 !poption parallel, tlocal(I,IA,II)
 #endif 
                 !$omp parallel do private(I,IA,II)
-                DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                   ii=i-parap%nst12(1,parai%mepos)+1
+                DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                   ii=i-parap%nst12(parai%mepos,1)+1
                    DO ia=1,ions0%na(is)
                       becs(1,isa0+ia,iv,kk,ii,ikind)=dai(1,ia,i)
                    ENDDO
@@ -135,8 +135,8 @@ CONTAINS
                 !poption parallel, tlocal(I,IA,II)
 #endif 
                 !$omp parallel do private(I,IA,II)
-                DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                   ii=i-parap%nst12(1,parai%mepos)+1
+                DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                   ii=i-parap%nst12(parai%mepos,1)+1
                    DO ia=1,ions0%na(is)
                       becs(1,isa0+ia,iv,kk,ii,ikind)=dai(1,ia,i)
                       becs(2,isa0+ia,iv,kk,ii,ikind)=dai(2,ia,i)
@@ -144,8 +144,8 @@ CONTAINS
                 ENDDO
              ENDIF
 #else 
-             DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                ii=i-parap%nst12(1,parai%mepos)+1
+             DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                ii=i-parap%nst12(parai%mepos,1)+1
                 CALL dcopy(imagp*ions0%na(is),dai(1,1,i),1,&
                      becs(1,isa0+1,iv,kk,ii,ikind),1)
              ENDDO

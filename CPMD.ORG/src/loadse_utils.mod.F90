@@ -42,8 +42,8 @@ CONTAINS
     nh1=parm%nr1/2+1
     nh2=parm%nr2/2+1
     nh3=parm%nr3/2+1
-    parap%nrxpl(1,0)=1
-    parap%nrxpl(2,0)=parm%nr1
+    parap%nrxpl(0,1)=1
+    parap%nrxpl(0,2)=parm%nr1
     ! ALLOCATE MEMORY FOR THE PERMANENT ARRAYS
     ALLOCATE(hg(ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
@@ -111,8 +111,8 @@ CONTAINS
     ENDIF
     ! REORDER THE G S IN ORDER OF INCREASING MAGNITUDE
     CALL gsort(hg,inyh,ncpw%nhg)
-    parap%nst12(1,parai%mepos)=1
-    parap%nst12(2,parai%mepos)=crge%n
+    parap%nst12(parai%mepos,1)=1
+    parap%nst12(parai%mepos,2)=crge%n
     ! 
     norbpe=crge%n
     natpe=ions1%nat

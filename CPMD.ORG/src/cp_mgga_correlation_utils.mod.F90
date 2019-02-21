@@ -322,7 +322,7 @@ CONTAINS
     !
     sctab = functional(ab)%sc
 
-    if (scratch(a)%n > small .and. taua > small) then
+    if (scratch(a)%n > small) then
        CALL cp_spin_mgga_c_m05_m06_parallel(scratch(a),scta,v1cta,v2cta,v3cta,eua,chia,eupa,chiap,chiag)
        scta  = functional(a)%sc  + scta
        v1cta = functional(a)%v1c + v1cta
@@ -340,7 +340,7 @@ CONTAINS
        chiag = 0.0_real_8
     end if
 
-    if (scratch(b)%n > small .and. taub > small) then
+    if (scratch(b)%n > small) then
        CALL cp_spin_mgga_c_m05_m06_parallel(scratch(b),sctb,v1ctb,v2ctb,v3ctb,eub,chib,eupb,chibp,chibg)
        sctb  = functional(b)%sc  + sctb
        v1ctb = functional(b)%v1c + v1ctb
@@ -436,7 +436,7 @@ CONTAINS
 
     taua = 2.0_real_8 * scratch%tau
 
-    if (scratch%n > small .and. taua > small) then
+    if (scratch%n > small) then
        CALL cp_spin_mgga_c_m05_m06_parallel(scratch,sct,v1ct,v2ct,v3ct,eua,chia,eupa,chiap,chiag)
        sct   =  2.0_real_8*sct + functional%sc
        v1ct  =            v1ct + functional%v1c
@@ -786,7 +786,7 @@ CONTAINS
 
     sc   = 0.0_real_8
 
-    if ( scratch(a)%n > small .and. taua > small) then
+    if ( scratch(a)%n > small ) then
        CALL cp_spin_mgga_c_vs98_parallel(scratch(a), scta, v1cta, v2cta, v3cta, &
                                          eua, za, chia, eupa, chiap, chiag, zap, zat)
        v3cta = 2.0_real_8*v3cta
@@ -805,7 +805,7 @@ CONTAINS
        zat   = 0.0_real_8
     end if
 
-    if ( scratch(b)%n > small .and. taub > small) then
+    if ( scratch(b)%n > small ) then
        CALL cp_spin_mgga_c_vs98_parallel(scratch(b), sctb, v1ctb, v2ctb, v3ctb, &
                                          eub, zb, chib, eupb, chibp, chibg, zbp, zbt)
        v3ctb = 2.0_real_8*v3ctb
@@ -907,7 +907,7 @@ CONTAINS
 
     tau = 2.0_real_8 * scratch%tau
 
-    if ( scratch%n > small .and. tau > small) then
+    if ( scratch%n > small ) then
        CALL cp_spin_mgga_c_vs98_parallel(scratch, sct, v1ct, v2ct, v3ct, &
                                          eua, za, chia, eupa, chiap, chiag, zap, zat)
        sct  = 2.0_real_8*sct
@@ -1442,7 +1442,7 @@ CONTAINS
 
       tx = 2.0_real_8 * scratch%tau
 
-      if (scratch%n < small .or. tx < small) then 
+      if (scratch%n < small) then 
          eueg   = 0.0_real_8
          chi    = 0.0_real_8
          z      = 0.0_real_8

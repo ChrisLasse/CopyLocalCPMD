@@ -3,13 +3,11 @@
 MODULE vdw_utils
   USE adat,                            ONLY: covrad
   USE cnst,                            ONLY: fbohr
-  USE distribution_utils,              ONLY: dist_size
   USE error_handling,                  ONLY: stopgm
   USE fileopen_utils,                  ONLY: fileclose,&
                                              fileopen
   USE fileopenmod,                     ONLY: fo_def,&
                                              fo_old
-  USE gvec,                            ONLY: gvec_com
   USE ions,                            ONLY: ions0,&
                                              ions1
   USE kinds,                           ONLY: real_8
@@ -37,7 +35,7 @@ MODULE vdw_utils
   USE vdwcmod,                         ONLY: &
        boadwf, icontfragw, icontfragwi, ifragdata, ifragw, iwfcref, natwfcx, &
        nfrags, nfragx, npt12, nwfcx, radfrag, rwann, rwfc, spr, swann, &
-       taufrag, tauref, twannupx, vdwi,vdwl, vdwr, vdwwfi, vdwwfl, vdwwfr, wwfcref
+       taufrag, tauref, twannupx, vdwi, vdwr, vdwwfi, vdwwfl, vdwwfr, wwfcref
   USE wrgeo_utils,                     ONLY: wrgeof
   USE zeroing_utils,                   ONLY: zeroing
 
@@ -51,141 +49,9 @@ MODULE vdw_utils
   PUBLIC :: rwannier
 
 CONTAINS
-#ifdef _HAS_LIBGRIMMEVDW
+
   SUBROUTINE vdw(tau0,nvdw,idvdw,ivdw,jvdw,vdwst,vdwrm,vdwbe,&
-       vdweps,s6grim,nxvdw,nyvdw,nzvdw,evdw,fion,devdw)
-    REAL(real_8)                             :: tau0(:,:,:)
-    INTEGER                                  :: nvdw
-    INTEGER, ALLOCATABLE                     :: idvdw(:), ivdw(:), jvdw(:)
-    REAL(real_8), ALLOCATABLE                :: vdwst(:), vdwrm(:), vdwbe(:)
-    REAL(real_8)                             :: VDWEPS, S6GRIM
-    INTEGER                                  :: nxvdw, nyvdw, nzvdw
-    REAL(real_8)                             :: EVDW, fion(:,:,:), devdw(:)
-
-
-! ==--------------------------------------------------------------== 
-     ! switch between the GRIMME lib and the old cpmd implementation
-      if(vdwl%grimme) then
-       call vdw_grimme(tau0,nvdw,idvdw,ivdw,jvdw,vdwst,vdwrm,vdwbe,&
-                       vdweps,s6grim,nxvdw,nyvdw,nzvdw,evdw,fion,devdw)
-      else
-         call vdw_cpmd(tau0,nvdw,idvdw,ivdw,jvdw,vdwst,vdwrm,vdwbe,&
-                       vdweps,s6grim,nxvdw,nyvdw,nzvdw,evdw,fion,devdw)
-      endif
-       
-       
-  END SUBROUTINE
-  
-  SUBROUTINE vdw_grimme(tau0,nvdw,idvdw,ivdw,jvdw,vdwst,vdwrm,vdwbe,&
-       vdweps,s6grim,nxvdw,nyvdw,nzvdw,evdw,fion,devdw)
-    REAL(real_8)                             :: tau0(:,:,:)
-    INTEGER                                  :: nvdw
-    INTEGER, ALLOCATABLE                     :: idvdw(:), ivdw(:), jvdw(:)
-    REAL(real_8), ALLOCATABLE                :: vdwst(:), vdwrm(:), vdwbe(:)
-    REAL(real_8)                             :: VDWEPS, S6GRIM
-    INTEGER                                  :: nxvdw, nyvdw, nzvdw
-    REAL(real_8)                             :: EVDW, fion(:,:,:), devdw(:)
-! Local variables
-    INTEGER                                  :: IA,IS,ISA,IAT2IS(ions1%NAT),ISUB,ierr
-    REAL(real_8)                             :: ALAT_DUMMY,AVEC(3,3),BVEC(3,3),COORAT(3,ions1%NAT)
-    REAL(real_8)                             :: FORCES_D3(3,ions1%NAT),STRESS_D3(3,3)
-#ifdef _VERBOSE_FORCE_DBG
-    REAL(real_8),ALLOCATABLE                 :: dbg_forces(:,:,:)
-#endif
-    CHARACTER(*),PARAMETER                   :: procedureN='VDW_GRIMME'
-!     ==--------------------------------------------------------------==
-    CALL tiset(procedureN,ISUB)
-!    ==--------------------------------------------------------------==
-      ALAT_DUMMY=1.d0
-      AVEC(1:3,1)=parm%A1(1:3)
-      AVEC(1:3,2)=parm%A2(1:3)
-      AVEC(1:3,3)=parm%A3(1:3)
-      BVEC(1:3,1)=gvec_com%B1(1:3)/parm%ALAT
-      BVEC(1:3,2)=gvec_com%B2(1:3)/parm%ALAT
-      BVEC(1:3,3)=gvec_com%B3(1:3)/parm%ALAT
-!
-      !$omp parallel do private(isa,ia,is)
-      DO ISA=1, ions1%NAT
-        IA=IATPT(1,ISA)
-        IS=IATPT(2,ISA)
-        COORAT(1:3,ISA)=TAU0(1:3,IA,IS)
-        IAT2IS(ISA) = IS
-      ENDDO
-
-      !  Compatibility to QE: cellvol=1.0d0
-!          call vdw_grimme_calc_energy_forces_stress(lattice_constant, realsp_lattice_vectors, recipro_lattice_vectors,&
-!                cel_volume, num_atoms, index_atom_types, tau0, vdw_energy, forces, vdw_stress,&
-!                mpi_rank, num_mpi_procs, mpi_com, error)
-!     call vdw_grimme_calc_energy_forces_stress(lattice_constant, realsp_lattice_vectors, recipro_lattice_vectors,&
-!                cel_volume, num_atoms, index_atom_types, atomic_coordinates, vdw_energy, forces, vdw_stress,&
-!                mpi_rank, num_mpi_procs, mpi_com, error)       
-      CALL vdw_grimme_calc_energy_forces_stress(ALAT_DUMMY,AVEC,BVEC,1.0D0,ions1%nat,iat2is,coorat,&
-                     evdw,forces_d3,stress_d3,parai%cp_me,parai%cp_nproc,parai%cp_grp,ierr)
-      IF(ierr/=0) CALL stopgm(procedureN,'error from vdw_grimme_calc_energy_forces_stress',&
-               __LINE__,__FILE__)
-      ! sum partial energies from workers
-      call mp_sum(evdw,parai%cp_grp)
-      if(parai%cp_nogrp.gt.1) then
-         call mp_sum(forces_d3,3*ions1%nat,parai%cp_inter_grp)
-         call mp_sum(stress_d3,3*3,parai%cp_inter_grp)
-      endif
-! 
-!  Convert Rydberg to Hartree units:
-!
-      IF (paral%parent) THEN
-        evdw=0.5d0*evdw
-      ELSE
-        evdw=0.0d0
-      END IF
-!  Add FORCES_D3 to FION
-      !$omp parallel do private(isa,ia,is)
-      DO isa=1, ions1%nat
-        ia=iatpt(1,isa)
-        is=iatpt(2,isa)
-        fion(1,ia,is)=fion(1,ia,is)+0.5d0*forces_d3(1,isa)
-        fion(2,ia,is)=fion(2,ia,is)+0.5d0*forces_d3(2,isa)
-        fion(3,ia,is)=fion(3,ia,is)+0.5d0*forces_d3(3,isa)
-      ENDDO
-!  Add STRESS_D3 to DEVDW
-      devdw(1)=-0.5d0*stress_d3(1,1)
-      devdw(2)=-0.5d0*stress_d3(1,2)
-      devdw(3)=-0.5d0*stress_d3(1,3)
-      devdw(4)=-0.5d0*stress_d3(2,2)
-      devdw(5)=-0.5d0*stress_d3(2,3)
-      devdw(6)=-0.5d0*stress_d3(3,3)
-      
-
-#ifdef _VERBOSE_FORCE_DBG
-      ALLOCATE(dbg_forces(3,maxsys%nax,maxsys%nsx), stat=ierr)
-      IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate dbg_forces',& 
-           __LINE__,__FILE__)
-      dbg_forces=fion
-      CALL mp_sum(dbg_forces,3*maxsys%nax*maxsys%nsx,parai%allgrp)
-      IF (paral%io_parent) THEN
-         WRITE(6,*) "===================================="
-         WRITE(6,*) "DEBUG FORCES", procedureN
-         DO is=1,ions1%nsp
-            DO ia=1,ions0%na(is)
-               WRITE(6,*) dbg_forces(1:3,ia,is),ia,is
-            END DO
-         END DO
-      END IF
-      DEALLOCATE(dbg_forces,STAT=ierr)
-      IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-           __LINE__,__FILE__)
-#endif
-    CALL tihalt(procedureN,isub)
-
-    return
-  END SUBROUTINE vdw_grimme
-  
-  
-  SUBROUTINE vdw_cpmd(tau0,nvdw,idvdw,ivdw,jvdw,vdwst,vdwrm,vdwbe,&
-       vdweps,s6grim,nxvdw,nyvdw,nzvdw,evdw,fion,devdw)
-#else
-  SUBROUTINE vdw(tau0,nvdw,idvdw,ivdw,jvdw,vdwst,vdwrm,vdwbe,&
-       vdweps,s6grim,nxvdw,nyvdw,nzvdw,evdw,fion,devdw)
-#endif       
+       VDWEPS,S6GRIM,NXVDW,NYVDW,NZVDW,EVDW,FION,DEVDW)
     ! ==--------------------------------------------------------------==
     ! ==                        COMPUTES                              ==
     ! == THE EMPIRICAL VAN DER WAALS CORRECTION TO THE TOTAL ENERGY,  == 
@@ -206,15 +72,14 @@ CONTAINS
     REAL(real_8)                             :: EVDW, fion(:,:,:), devdw(:)
 
     INTEGER                                  :: iv, jv, l, l_upper, m, &
-                                                m_upper, n, nx, ny, nz,isub
+                                                m_upper, n, nx, ny, nz
     REAL(real_8)                             :: aexp, ffac, &
                                                 reps = 1.0e-2_real_8, rexp, &
                                                 rfac, rlm1, rlm2, rlm6, &
                                                 rlp(3), rphi, rpow, xlm, ylm, &
-                                                xlm_, ylm_, zlm_, zlm
-    CHARACTER(*),PARAMETER                   :: procedureN='VDW'
-!     ==--------------------------------------------------------------==
-    CALL tiset(procedureN,ISUB)
+                                                zlm, xlm_, ylm_, zlm_
+
+! ==--------------------------------------------------------------==
 
     evdw=0.0_real_8
     CALL zeroing(devdw)!,6)
@@ -316,10 +181,9 @@ CONTAINS
           ENDDO
        ENDDO
     ENDIF
-    CALL tihalt(procedureN,isub)
     ! ==================================================================
     RETURN
-  END SUBROUTINE 
+  END SUBROUTINE vdw
   ! ==================================================================
   ! ==     Next part = Wannier Functions/Centers Stuff for vdW      ==
   ! ==================================================================
@@ -837,11 +701,11 @@ CONTAINS
     wj(npoints)=hj/3._real_8
     wsum=wsum+wi(1)+wj(1)+wi(npoints)+wj(npoints)
     ! dbg   WRITE(6,*) ' Weights sum check = ',wsum
-    CALL dist_size(npoints,parai%nproc,npt12,nblock=1,nbmax=imax)
+    CALL set_ptdist(npoints,1,parai%nproc,imax)
     sum=0.0_real_8
     !$omp parallel do private(i,j) reduction(+:sum) __COLLAPSE2
     !   DO i=1,npoints
-    DO i=npt12(1,parai%mepos),npt12(2,parai%mepos)
+    DO i=npt12(parai%mepos,1),npt12(parai%mepos,2)
        DO j=1,npoints
           sum=sum+wi(i)*wj(j)*effe(x(i),y(j),a)
        ENDDO
@@ -942,11 +806,11 @@ CONTAINS
     ! 
     volume=0.0_real_8
     vfree=0.0_real_8
-    CALL dist_size(npoints,parai%nproc,npt12,nblock=1,nbmax=imax,fw=1)
+    CALL set_ptdist(npoints,1,parai%nproc,imax)
     !$omp parallel do private(NX,NY,NZ,LA,R,DISTN,DENS,DIFAC,DISTP &
     !$omp  ,WT1,WT2,FF) reduction(+:VOLUME,VFREE)
     !   DO nx=1,npoints
-    DO nx=npt12(1,parai%mepos),npt12(2,parai%mepos)
+    DO nx=npt12(parai%mepos,1),npt12(parai%mepos,2)
        r(1)=REAL(nx-1,kind=real_8)*dx-dmez+dxmez+rw(1,iin)
        DO ny=1,npoints
           r(2)=REAL(ny-1,kind=real_8)*dx-dmez+dxmez+rw(2,iin)
@@ -1587,6 +1451,43 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE rwannier
+  ! ==================================================================
+  SUBROUTINE set_ptdist(nstate,nblock,my_nproc,nbmax)
+    ! ==--------------------------------------------------------------==
+    INTEGER                                  :: nstate, nblock, my_nproc, &
+                                                nbmax
+
+    INTEGER                                  :: ip, nx
+    REAL(real_8)                             :: xsaim, xsnow, xstates
+
+! ==--------------------------------------------------------------==
+
+    nbmax=0
+    xstates=REAL(nblock,kind=real_8)
+    IF ((xstates*my_nproc).LT.nstate) THEN
+       xstates=REAL(nstate,kind=real_8)/REAL(my_nproc,kind=real_8)
+    ENDIF
+    xsnow=0.0_real_8
+    xsaim=0.0_real_8
+    DO ip=1,my_nproc
+       xsaim = xsnow + xstates
+       npt12(ip-1,1)=NINT(xsnow)+1
+       npt12(ip-1,2)=NINT(xsaim)
+       IF (NINT(xsaim).GT.nstate) THEN
+          npt12(ip-1,2)=nstate
+       ENDIF
+       IF (NINT(xsnow).GT.nstate) THEN
+          npt12(ip-1,1)=nstate+1
+       ENDIF
+       xsnow = xsaim
+    ENDDO
+    DO ip=0,my_nproc-1
+       nx=npt12(ip,2)-npt12(ip,1)+1
+       nbmax=MAX(nbmax,nx)
+    ENDDO
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END SUBROUTINE set_ptdist
   ! ==================================================================
   SUBROUTINE set_taufrag(mfrag,icontfragw,icontfragwi,iwfcref,&
        tauref,rwfc,wwfcref,taufrag)

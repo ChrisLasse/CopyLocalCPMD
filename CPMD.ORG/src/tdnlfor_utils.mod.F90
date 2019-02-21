@@ -66,9 +66,9 @@ CONTAINS
                    lj=sgpp2%lpval(jv,is)
                    IF (l2.EQ.l.AND.li.EQ.lj) THEN
                       kj=sgpp2%lfval(jv,is)
-                      DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
+                      DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
                          tt=f(i)*sgpp2%hlsg(ki,kj,l,is)
-                         ii=i-parap%nst12(1,parai%mepos)+1
+                         ii=i-parap%nst12(parai%mepos,1)+1
                          IF (cntl%tfdist) THEN
                             DO ia=1,ions0%na(is)
                                isa=isa0+ia
@@ -89,9 +89,9 @@ CONTAINS
           ELSE
              ! Other pp (numeric)
              DO iv=1,nlps_com%ngh(is)
-                DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
+                DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
                    temp=wsg(is,iv)*f(i)
-                   ii=i-parap%nst12(1,parai%mepos)+1
+                   ii=i-parap%nst12(parai%mepos,1)+1
                    IF (cntl%tfdist) THEN
                       DO ia=1,ions0%na(is)
                          isa=isa0+ia

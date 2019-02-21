@@ -76,7 +76,7 @@ MODULE nabdy_md
                                              mm_go_mm,&
                                              mm_revert,&
                                              nat_grm
-  USE mm_extrap,                       ONLY: cold
+  USE mm_extrap,                       ONLY: cold, nnow, numcold
   USE moverho_utils,                   ONLY: moverho
   USE mp_interface,                    ONLY: mp_bcast,&
                                              mp_sync
@@ -641,7 +641,7 @@ CONTAINS
           ropt_mod%calste=cntl%tpres.AND.MOD(iteropt%nfi,cnti%npres).EQ.0
           IF (cntl%textrap) THEN
              ! Extrapolate wavefunctions
-             CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra)
+             CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
           ENDIF
           ! mb - Wannier stuff for vdW-WC
           vdwwfl%twannup=vdwwfl%twannup.OR.(infi.EQ.1.AND..NOT.vdwwfl%trwannc)

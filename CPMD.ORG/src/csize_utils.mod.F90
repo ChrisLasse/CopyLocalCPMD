@@ -12,8 +12,6 @@ MODULE csize_utils
                                              ncpw,&
                                              nkpt,&
                                              spar
-  USE timer,                           ONLY: tihalt,&
-                                             tiset
   USE utils,                           ONLY: zgive
 
   IMPLICIT NONE
@@ -27,13 +25,13 @@ CONTAINS
   ! ==================================================================
   SUBROUTINE csize(c2,nstate,gemax,cnorm)
     ! ==--------------------------------------------------------------==
-    INTEGER, INTENT(IN)                      :: nstate
-    COMPLEX(real_8), INTENT(IN)              :: c2(nkpt%ngwk,nstate)
-    REAL(real_8), INTENT(OUT)                :: gemax, cnorm
+    INTEGER                                  :: nstate
+    COMPLEX(real_8)                          :: c2(nkpt%ngwk,nstate)
+    REAL(real_8)                             :: gemax, cnorm
 
     CHARACTER(*), PARAMETER                  :: procedureN = 'csize'
 
-    INTEGER                                  :: i, iiabs, nocc, nod, nou, isub
+    INTEGER                                  :: i, iiabs, nocc, nod, nou
     REAL(real_8)                             :: gd, gu
     REAL(real_8), EXTERNAL                   :: ddot
 
@@ -43,13 +41,11 @@ CONTAINS
     INTEGER, EXTERNAL                        :: izamax
 #endif
     ! ==--------------------------------------------------------------==
-    CALL tiset(procedureN,isub)
     nocc=0
     nou=0
     IF (nkpt%ngwk.GT.0) THEN
        IF (cntl%tlsd) THEN
           nou=0
-          !$omp parallel do private(i) reduction(+:nou)
           DO i=1,spin_mod%nsup
              IF (crge%f(i,1).GT.1.e-5_real_8) nou=nou+1
           ENDDO
@@ -67,7 +63,6 @@ CONTAINS
              gu=0._real_8
           ENDIF
           nod=0
-          !$omp parallel do private(i) reduction(+:nod)
           DO i=spin_mod%nsup+1,nstate
              IF (crge%f(i,1).GT.1.e-5_real_8) nod=nod+1
           ENDDO
@@ -88,33 +83,22 @@ CONTAINS
           nocc=nod+nou
           cnorm=0.0_real_8
           IF (tkpts%tkpnt) THEN
-             !$omp parallel private(i) reduction(+:cnorm)
-             !$omp do
              DO i=1,nou
                 cnorm=cnorm+ddot(2*nkpt%ngwk,c2(1,i),1,c2(1,i),1)
              ENDDO
-             !$omp end do nowait
-             !$omp do
              DO i=spin_mod%nsup+1,spin_mod%nsup+nod
                 cnorm=cnorm+ddot(2*nkpt%ngwk,c2(1,i),1,c2(1,i),1)
              ENDDO
-             !$omp end parallel
           ELSE
-             !$omp parallel private(i) reduction(+:cnorm)
-             !$omp do            
              DO i=1,nou
                 cnorm=cnorm+dotp(ncpw%ngw,c2(:,i),c2(:,i))
              ENDDO
-             !$omp end do nowait
-             !$omp do
              DO i=spin_mod%nsup+1,spin_mod%nsup+nod
                 cnorm=cnorm+dotp(ncpw%ngw,c2(:,i),c2(:,i))
              ENDDO
-             !$omp end parallel
           ENDIF
        ELSE
           nocc=0
-          !$omp parallel do private(i) reduction(+:nocc)
           DO i=1,nstate
              IF (crge%f(i,1).GT.1.e-5_real_8) nocc=nocc+1
           ENDDO
@@ -129,12 +113,10 @@ CONTAINS
 #endif
           cnorm=0.0_real_8
           IF (tkpts%tkpnt) THEN
-             !$omp parallel do private(i) reduction(+:cnorm)
              DO i=1,nocc
                 cnorm=cnorm+ddot(2*nkpt%ngwk,c2(1,i),1,c2(1,i),1)
              ENDDO
           ELSE
-             !$omp parallel do private(i) reduction(+:cnorm)
              DO i=1,nocc
                 cnorm=cnorm+dotp(ncpw%ngw,c2(:,i),c2(:,i))
              ENDDO
@@ -148,7 +130,6 @@ CONTAINS
     CALL mp_max(gemax,parai%allgrp)
     cnorm=SQRT(cnorm/REAL(nocc*spar%ngwks,kind=real_8))
     ! ==--------------------------------------------------------------==
-    CALL tihalt(procedureN,isub)
     RETURN
   END SUBROUTINE csize
   ! ==================================================================

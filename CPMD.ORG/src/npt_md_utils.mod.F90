@@ -50,7 +50,7 @@ MODULE npt_md_utils
   USE metr,                            ONLY: eps,&
                                              metr_com,&
                                              veps
-  USE mm_extrap,                       ONLY: cold
+  USE mm_extrap,                       ONLY: cold, nnow, numcold
   USE mp_interface,                    ONLY: mp_bcast
   USE newcell_utils,                   ONLY: give_scr_newcell,&
                                              newcell
@@ -942,7 +942,7 @@ CONTAINS
        ! CALCULATE THE FORCES
        IF (cntl%textrap) THEN
           ! Extrapolate wavefunctions
-          CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra)
+          CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
        ENDIF
        ifcalc=0
        CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&

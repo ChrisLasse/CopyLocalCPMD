@@ -207,7 +207,7 @@ CONTAINS
     IF (group%nogrp.GT.1) THEN
        ! Summation of density within orbital split
        nl2=parap%nlink(group%nolist(group%nogrp))
-       ix1=parap%nrxpl(1,parai%mepos)-parap%nrxpl(1,nl2)
+       ix1=parap%nrxpl(parai%mepos,1)-parap%nrxpl(nl2,1)
        msglen= 8 * nnrx
        IF (cntl%tlsd) THEN
           CALL mp_sum(rhoeg,psix,nnrx,group%meogrp)

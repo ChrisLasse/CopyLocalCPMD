@@ -19,7 +19,7 @@ MODULE fftmain_utils
   USE fft,                             ONLY: &
        lfrm, lmsq, lr1, lr1m, lr1s, lr2s, lr3s, lrxpl, lsrm, mfrays, msqf, &
        msqs, msrays, qr1, qr1s, qr2s, qr3max, qr3min, qr3s, sp5, sp8, sp9, &
-       xf, yf,fft_residual,fft_total,fft_numblocks,fft_blocksize
+       xf, yf
   USE fft_maxfft,                      ONLY: maxfftn
   USE fftcu_methods,                   ONLY: fftcu_frw_full_1,&
                                              fftcu_frw_full_2,&
@@ -30,18 +30,13 @@ MODULE fftmain_utils
                                              fftcu_inv_sprs_1,&
                                              fftcu_inv_sprs_2
   USE fftutil_utils,                   ONLY: fft_comm,&
-                                             getz,getz_n,&
+                                             getz,&
                                              pack_x2y,&
                                              pack_y2x,&
-                                             pack_y2x_n,&
                                              phasen,&
                                              putz,&
-                                             putz_n,&
                                              unpack_x2y,&
-                                             unpack_x2y_n,&
-                                             pack_x2y_n,&
-                                             unpack_y2x,&
-                                             unpack_y2x_n
+                                             unpack_y2x
   USE kinds,                           ONLY: real_8
   USE mltfft_utils,                    ONLY: mltfft_cuda,&
                                              mltfft_default,&
@@ -49,16 +44,12 @@ MODULE fftmain_utils
                                              mltfft_fftw,&
                                              mltfft_hp
   USE parac,                           ONLY: parai
-  USE system,                          ONLY: cntl,fpar
+  USE system,                          ONLY: cntl
   USE thread_view_types,               ONLY: thread_view_t
   USE timer,                           ONLY: tihalt,&
                                              tiset
 
-#ifdef _USE_SCRATCHLIBRARY
-  USE scratch_interface,               ONLY: request_scratch,&
-                                             free_scratch
-#endif
-  !$ USE omp_lib  , ONLY: omp_in_parallel, omp_get_thread_num, omp_set_num_threads, omp_set_nested
+  !$ USE omp_lib, ONLY: omp_in_parallel, omp_get_thread_num
 
 
   USE, INTRINSIC :: ISO_C_BINDING,     ONLY: C_PTR, C_NULL_PTR
@@ -69,9 +60,7 @@ MODULE fftmain_utils
 
   PUBLIC :: mltfft
   PUBLIC :: invfftn
-  PUBLIC :: invfftn_block
   PUBLIC :: fwfftn
-  PUBLIC :: fwfftn_block
   !public :: fftnew
 
 
@@ -88,26 +77,11 @@ CONTAINS
 
     CHARACTER(*), PARAMETER                  :: procedureN = 'fftnew'
 
-    COMPLEX(real_8), POINTER __CONTIGUOUS    :: xf_ptr(:), yf_ptr(:)
-    INTEGER                                  :: lda, m, mm, n1o, n1u, ierr
+    COMPLEX(real_8), DIMENSION(:), &
+      POINTER __CONTIGUOUS                   :: xf_ptr, yf_ptr
+    INTEGER                                  :: lda, m, mm, n1o, n1u
     REAL(real_8)                             :: scale
-    INTEGER                                  :: il_xf(2),il_yf(2),scr_off,lscr
 
-    il_xf(1)=maxfftn
-    il_xf(2)=1
-    il_yf(1)=maxfftn
-    il_yf(2)=1
-#ifdef _USE_SCRATCHLIBRARY
-    CALL request_scratch(il_xf,xf,procedureN//'_xf')
-    CALL request_scratch(il_yf,yf,procedureN//'_yf')
-#else    
-    ALLOCATE(xf(il_xf(1),il_xf(2)), stat=ierr)
-    IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate xf',& 
-         __LINE__,__FILE__)
-    ALLOCATE(yf(il_yf(1),il_yf(2)), stat=ierr)
-    IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate yf',& 
-         __LINE__,__FILE__)
-#endif
     xf_ptr => xf(:,1)
     yf_ptr => yf(:,1)
 
@@ -140,8 +114,8 @@ CONTAINS
           CALL mltfft('N','T',yf_ptr,qr2s,m,xf_ptr,m,qr2s,lr2s,m,isign,scale )
           m=qr1*qr2s
           CALL mltfft('N','T',xf_ptr,qr3s,m,f,m,qr3s,lr3s,m,isign,scale )
-          n1u=lrxpl(1,parai%mepos)
-          n1o=lrxpl(2,parai%mepos)
+          n1u=lrxpl(parai%mepos,1)
+          n1o=lrxpl(parai%mepos,2)
           CALL phasen(f,qr1,qr2s,qr3s,n1u,n1o,lr2s,lr3s)
        ENDIF
     ELSE
@@ -162,8 +136,8 @@ CONTAINS
           CALL mltfft('T','N',xf_ptr,m,qr1s,f,qr1s,m,lr1s,m,isign,scale )
        ELSE
           scale=1._real_8
-          n1u=lrxpl(1,parai%mepos)
-          n1o=lrxpl(2,parai%mepos)
+          n1u=lrxpl(parai%mepos,1)
+          n1o=lrxpl(parai%mepos,2)
           CALL phasen(f,qr1,qr2s,qr3s,n1u,n1o,lr2s,lr3s)
           m=qr1*qr2s
           CALL mltfft('T','N',f,m,qr3s,xf_ptr,qr3s,m,lr3s,m,isign,scale )
@@ -179,320 +153,11 @@ CONTAINS
           CALL mltfft('T','N',xf_ptr,m,qr1s,f,qr1s,m,lr1s,m,isign,scale )
        ENDIF
     ENDIF
-    NULLIFY(xf_ptr,yf_ptr)
-#ifdef _USE_SCRATCHLIBRARY
-    CALL free_scratch(il_yf,yf,procedureN//'_yf')
-    CALL free_scratch(il_xf,xf,procedureN//'_xf')
-#else
-    DEALLOCATE(xf, stat=ierr)
-    IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate xf',& 
-         __LINE__,__FILE__)
-    DEALLOCATE(yf, stat=ierr)
-    IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate yf',& 
-         __LINE__,__FILE__)
-#endif
     ! ==--------------------------------------------------------------==
   END SUBROUTINE fftnew
 
 
   ! ==================================================================
-  SUBROUTINE fftnew_block(isign,f_in,f_out,comm)
-    ! ==--------------------------------------------------------------==
-    implicit none
-    INTEGER, INTENT(IN)                      :: isign
-    COMPLEX(real_8),INTENT(IN)               :: f_in(:,:)
-    COMPLEX(real_8),INTENT(OUT)              :: f_out(:,:)
-    INTEGER, INTENT(IN)                      :: comm
-
-    CHARACTER(*), PARAMETER                  :: procedureN = 'fftnew_block'
-
-    INTEGER                                  :: m, mm, n1o, n1u ,i, is, j, ierr
-    REAL(real_8)                             :: scale
-    INTEGER                                  :: n,buff,methread,nthreads,nested_threads,swap,loop,lda
-    !real(real_8),save :: t(8)=-1.0d0
-    INTEGER                                  :: il_xf(2),il_yf(2), lscr, scr_off
-!    real(real_8) :: ti(20)
-    !$ LOGICAL                                  :: locks(fft_numblocks+1,2)
-    ! use 'own, handmade' locks not omp inbuilt locks very strange things happen
-
-!    ti=0.0_real_8
-    il_xf(1)=fpar%nnr1*fft_blocksize
-    il_xf(2)=2
-    il_yf(1)=fpar%nnr1*fft_blocksize
-    il_yf(2)=2
-#ifdef _USE_SCRATCHLIBRARY
-    CALL request_scratch(il_xf,xf,procedureN//'_xf')
-    CALL request_scratch(il_yf,yf,procedureN//'_yf')
-#else
-    ALLOCATE(xf(il_xf(1),il_xf(2)), stat=ierr)
-    IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate xf',& 
-         __LINE__,__FILE__)
-    ALLOCATE(yf(il_yf(1),il_yf(2)), stat=ierr)
-    IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot allocate yf',& 
-         __LINE__,__FILE__)
-#endif
-
-#ifdef _USE_OVERLAPPING_COM_COMP
-    nthreads=MIN(2,parai%ncpus)
-    nested_threads=(MAX(parai%ncpus-1,1))
-#else
-    nthreads=1
-    nested_threads=parai%ncpus
-#endif
-    
-    methread=1
-    !$ locks=.true.
-    !$OMP parallel num_threads(nthreads) private(loop,methread,buff,swap,m,lda,mm,n,scale) shared(LOCKS) proc_bind(close)   
-    !$ methread = omp_get_thread_num()
-    !$ IF (nested_threads .NE. parai%ncpus) THEN
-    !$    IF (methread .EQ. 1 .OR. nthreads .EQ. 1) THEN
-    !$       CALL omp_set_num_threads(nested_threads)
-#ifdef _INTEL_MKL
-    !$       CALL dfftw_plan_with_nthreads(nested_threads)
-    !$       CALL mkl_set_dynamic(0)
-#endif
-    !$       CALL omp_set_nested(1)
-    !$    END IF
-    !$ END IF
-    !$OMP barrier
-    
-    LDA=HUGE(0);MM=HUGE(0);N1U=HUGE(0);N1O=HUGE(0);M=HUGE(0)
-    scale=HUGE(0.0_real_8)
-    IF (isign.EQ.-1) THEN
-       scale=1._real_8          
-       !interleave 2 blocks of ffts and 2 blocks of alltoalls - reduces memory footprint
-       !last block may be differnt in size: fft_numblocks+1 -> n=fft_residual
-       DO loop=1,fft_numblocks+2
-          IF (methread .EQ. 1 .OR. nthreads .EQ. 1) THEN
-             ! for fft_numblocks+2 only fftyz are needed
-             IF (loop .LT. fft_numblocks+2) THEN
-                IF (loop .LE. fft_numblocks) THEN
-                   n=fft_blocksize
-                ELSE
-                   n=fft_residual
-                END IF
-                IF ( n .NE. 0) THEN
-                   swap=mod(loop,2)+1
-                   m=msrays*n
-                   !                      ti(1)=m_walltime()
-                   CALL mltfft('N','T',f_in(:,(loop-1)*fft_blocksize+1),qr1s,m,xf(:,swap),&
-                        m,qr1s,lr1s,m,isign,scale )
-                   !                      ti(2)=ti(2)+m_walltime()-ti(1)
-                   lda=lsrm*lr1m
-                   m=msrays
-                   !                      ti(3)=m_walltime()
-                   CALL pack_x2y_n(xf(:,swap),yf(:,swap),m,lda,lrxpl,sp5,maxfftn,parai%nproc,&
-                        cntl%tr4a2a,n)
-                   !                      ti(4)=ti(4)+m_walltime()-ti(3)
-                   !$ locks(loop,1) = .FALSE.
-                   !$omp flush(locks)
-                END IF
-             END IF
-          END IF
-          IF (methread .EQ. 0 .OR. nthreads .EQ. 1) THEN     
-             IF (loop .LT. fft_numblocks+2) THEN
-                IF (loop .LE. fft_numblocks) THEN
-                   n=fft_blocksize
-                ELSE
-                   n=fft_residual
-                END IF
-                IF ( n .NE. 0) THEN
-                   swap=mod(loop,2)+1
-                   lda=lsrm*lr1m*n
-                   !$omp flush(locks)
-                   !$ DO WHILE ( locks(loop,1) )
-                   !$omp flush(locks)
-                   !$ END DO
-                   !$ locks(loop,1) = .TRUE.
-                   !$omp flush(locks)
-                   CALL fft_comm(yf(:,swap),xf(:,swap),lda,cntl%tr4a2a,comm)
-                   !$ locks(loop,1)=.FALSE.
-                   !$omp flush(locks)
-                   !$ locks(loop,2)=.FALSE.
-                   !$omp flush(locks)
-                END IF
-             END IF
-          END IF
-          IF (methread .eq. 1 .or. nthreads .eq. 1) THEN     
-             ! fftyz begin in loop=2, data is related to loop-1...
-             IF (loop .GT. 1 ) THEN
-                IF (loop-1 .LE. fft_numblocks) THEN
-                   n=fft_blocksize
-                ELSE
-                   n=fft_residual
-                END IF
-                IF ( n .NE. 0) THEN
-                   swap=mod(loop-1,2)+1
-                   lda=lsrm*lr1m
-                   mm=qr2s*(qr3max-qr3min+1)
-                   m=(qr3max-qr3min+1)*qr1*qr2s
-                   !                      ti(5)=m_walltime()
-                   !$omp flush(locks)
-                   !$ DO WHILE ( locks(loop-1,2) )
-                   !$omp flush(locks)
-                   !$ END DO               
-                   !$omp flush(locks)
-                   !$ DO WHILE ( locks(loop-1,1) )
-                   !$omp flush(locks)
-                   !$ END DO
-                   !                      ti(6)=ti(6)+m_walltime()-ti(5)
-                   !                      ti(7)=m_walltime()
-                   CALL unpack_x2y_n(xf(:,swap),yf(:,swap),mm,lr1,lda,msqs,lmsq,sp9,fpar%nnr1,&
-                        parai%nproc,cntl%tr4a2a,n,m)             
-                   !                      ti(8)=ti(8)+m_walltime()-ti(7)
-                   m=(qr3max-qr3min+1)*qr1*n
-                   !                      ti(9)=m_walltime()
-                   CALL mltfft('N','T',yf(:,swap),qr2s,m,xf(:,swap),m,qr2s,lr2s,m,isign,scale )
-                   !                      ti(10)=ti(10)+m_walltime()-ti(9)
-                   m=qr1*qr2s
-                   !                      ti(11)=m_walltime()
-                   CALL putz_n(xf(:,swap),yf(:,swap),qr3min,qr3max,qr3s,qr1,qr2s,n)
-                   !                      ti(12)=ti(12)+m_walltime()-ti(11)
-                   m=qr1*qr2s*n
-                   !                      IF (n.gt.1) THEN
-                   !                         CALL mltfft('N','T',yf(:,swap),qr3s,m,xf(:,swap),m,qr3s,lr3s,m,isign,scale)
-                   !                         lda=qr1*qr2s
-                   !                         m=(loop-1)*fft_blocksize+1
-                   !                         call copy_out(xf(:,swap),lda,qr3s,n,f_out,m)
-                   !                      ELSE
-                   !                      ti(13)=m_walltime()
-                   CALL mltfft('N','T',yf(:,swap),qr3s,m,f_out(:,loop-1),m,&
-                        qr3s,lr3s,m,isign,scale)
-                   !                         ti(14)=ti(14)+m_walltime()-ti(13)
-                   !                      END IF
-                END IF
-             END IF
-          END IF
-       END DO
-
-    ELSE
-
-       DO loop=1,fft_numblocks+2
-          IF (methread .EQ. 1 .OR. nthreads .EQ. 1) THEN     
-             IF (loop .LT. fft_numblocks+2) THEN
-                IF (loop .LE. fft_numblocks+1) THEN
-                   IF (loop .LE. fft_numblocks) THEN
-                      n=fft_blocksize
-                   ELSE
-                      n=fft_residual
-                   END IF
-                   IF ( n .NE. 0) THEN
-                      swap=mod(loop,2)+1                      
-                      scale=1._real_8
-                      lda=qr1*qr2s
-                      m=qr1*qr2s*n
-                      CALL mltfft('T','N',f_in(:,loop),m,qr3s,yf(:,swap),&
-                           qr3s,m,lr3s,m,isign,scale )
-                      !                         ti(2)=ti(2)+m_walltime()-ti(1)
-                      !                         ti(3)=m_walltime()
-                      CALL getz_n(yf(:,swap),xf(:,swap),qr3min,qr3max,qr3s,qr1,qr2s,n)
-                      m=(qr3max-qr3min+1)*qr1*n
-                      !                      ti(4)=ti(4)+m_walltime()-ti(3)
-                      !                      ti(5)=m_walltime()
-                      CALL mltfft('T','N',xf(:,swap),m,qr2s,yf(:,swap),qr2s,m,lr2s,m,isign,scale )
-                      !                      ti(6)=ti(6)+m_walltime()-ti(5)
-                      lda=lsrm*lr1m
-                      mm=qr2s*(qr3max-qr3min+1)
-                      m=(qr3max-qr3min+1)*qr1*qr2s
-                      !                      ti(7)=m_walltime()
-                      CALL pack_y2x_n(xf(:,swap),yf(:,swap),mm,lr1,lda,msqs,lmsq,sp9,maxfftn,&
-                           parai%nproc,cntl%tr4a2a,n,m)
-                      !                      ti(8)=ti(8)+m_walltime()-ti(7)
-                      !$ locks(loop,1) = .FALSE.
-                      !$omp flush(locks)
-                   END IF
-                END IF
-             END IF
-          END IF
-          IF (methread .EQ. 0 .OR. nthreads .EQ. 1) THEN     
-             IF (loop .LT. fft_numblocks+2) THEN
-                IF (loop .LE. fft_numblocks+1) THEN
-                   IF (loop .LE. fft_numblocks) THEN
-                      n=fft_blocksize
-                   ELSE
-                      n=fft_residual
-                   END IF
-                   IF ( n .NE. 0) THEN
-                      swap=mod(loop,2)+1
-                      lda=lsrm*lr1m*n
-                      !$omp flush(locks)
-                      !$ DO WHILE ( locks(loop,1) )
-                      !$omp flush(locks)
-                      !$ END DO
-                      !$ locks(loop,1) = .TRUE.
-                      !$omp flush(locks)
-                      CALL fft_comm(xf(:,swap),yf(:,swap),lda,cntl%tr4a2a,comm)
-                      !$ locks(loop,1)=.FALSE.
-                      !$omp flush(locks)
-                      !$ locks(loop,2)=.FALSE.
-                      !$omp flush(locks)
-                   END IF
-                END IF
-             END IF
-          END IF
-          IF (methread .eq. 1 .or. nthreads .eq. 1) THEN
-             IF (loop .GT. 1) THEN
-                IF (loop-1 .LE. fft_numblocks+1) THEN
-                   IF (loop-1 .LE. fft_numblocks) THEN
-                      n=fft_blocksize
-                   ELSE
-                      n=fft_residual
-                   END IF
-                   IF ( n .NE. 0) THEN
-                      swap=mod(loop-1,2)+1
-                      !                      ti(9)=m_walltime()
-                      !$omp flush(locks)
-                      !$ DO WHILE ( locks(loop-1,2) )
-                      !$omp flush(locks)
-                      !$ END DO               
-                      !$omp flush(locks)
-                      !$ DO WHILE ( locks(loop-1,1) )
-                      !$omp flush(locks)
-                      !$ END DO
-                      !                      ti(10)=ti(10)+m_walltime()-ti(9)
-                      lda=lsrm*lr1m
-                      !                      ti(11)=m_walltime()
-                      CALL unpack_y2x_n(xf(:,swap),yf(:,swap),mm,msrays,lda,lrxpl,sp5,maxfftn,&
-                           parai%nproc,cntl%tr4a2a,n)
-                      !                      ti(12)=ti(12)+m_walltime()-ti(11)
-                      scale=1._real_8/REAL(lr1s*lr2s*lr3s,kind=real_8)
-                      m=msrays*n
-                      !                      ti(13)=m_walltime()
-                      CALL mltfft('T','N',xf(:,swap),m,qr1s,f_out(:,(loop-2)*fft_blocksize+1),qr1s,m,&
-                           lr1s,m,isign,scale )
-                      !                      ti(14)=ti(14)+m_walltime()-ti(13)
-                   END IF
-                END IF
-             END IF
-          END IF
-       END DO
-    END IF
-    !$omp barrier
-    !$ IF (nested_threads .NE. parai%ncpus) THEN
-    !$    IF (methread .EQ. 1 .OR. nthreads .EQ. 1) THEN
-    !$       CALL omp_set_num_threads(parai%ncpus)
-#ifdef _INTEL_MKL
-    !$       CALL dfftw_plan_with_nthreads(parai%ncpus)
-    !$       CALL mkl_set_dynamic(1)
-#endif
-    !$       CALL omp_set_nested(0)
-    !$    END IF
-    !$ END IF
-
-    !$omp  END parallel  
-#ifdef _USE_SCRATCHLIBRARY
-    CALL free_scratch(il_yf,yf,procedureN//'_yf')
-    CALL free_scratch(il_xf,xf,procedureN//'_xf')
-#else
-    DEALLOCATE(xf, stat=ierr)
-    IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate xf',& 
-         __LINE__,__FILE__)
-    DEALLOCATE(yf, stat=ierr)
-    IF (ierr /= 0) CALL stopgm(procedureN, 'Cannot deallocate yf',& 
-         __LINE__,__FILE__)
-#endif
-    ! ==--------------------------------------------------------------==
-  END SUBROUTINE fftnew_block
   SUBROUTINE fftnew_cuda(isign,f,sparse,comm,thread_view, copy_data_to_device, copy_data_to_host )
     ! ==--------------------------------------------------------------==
     INTEGER, INTENT(IN)                      :: isign
@@ -766,41 +431,4 @@ CONTAINS
   END SUBROUTINE fwfftn
   ! ==================================================================
 
-  SUBROUTINE fwfftn_block(f_in,f_out)
-    ! ==--------------------------------------------------------------==
-    ! == COMPUTES THE FORWARD FOURIER TRANSFORM OF A COMPLEX          ==
-    ! == FUNCTION F. THE FOURIER TRANSFORM IS                         ==
-    ! == RETURNED IN F IN OUTPUT (THE INPUT F IS OVERWRITTEN).        ==
-    ! ==--------------------------------------------------------------==
-    COMPLEX(real_8),intent(in)               :: f_in(:,:)
-    COMPLEX(real_8),intent(out)              :: f_out(:,:)
-    CHARACTER(*), PARAMETER                  :: procedureN = 'fwfftn_block'
-
-    INTEGER                                  :: isign, isub
-
-    CALL tiset(procedureN,isub)
-    isign=1
-    CALL fftnew_block(isign,f_in,f_out, parai%allgrp)
-    CALL tihalt(procedureN,isub)
-    ! ==--------------------------------------------------------------==
-  END SUBROUTINE fwfftn_block
-  ! ==================================================================
-  SUBROUTINE invfftn_block(f_in,f_out)
-    ! ==--------------------------------------------------------------==
-    ! == COMPUTES THE INVERSE FOURIER TRANSFORM OF A COMPLEX          ==
-    ! == FUNCTION F. THE FOURIER TRANSFORM IS                         ==
-    ! == RETURNED IN F (THE INPUT F IS OVERWRITTEN).                  ==
-    ! ==--------------------------------------------------------------==
-    COMPLEX(real_8),intent(in)               :: f_in(:,:)
-    COMPLEX(real_8),intent(out)              :: f_out(:,:)
-    CHARACTER(*), PARAMETER                  :: procedureN = 'invfftn_block'
-
-    INTEGER                                  :: isign, isub
-
-    CALL tiset(procedureN,isub)
-    isign=-1
-    CALL fftnew_block(isign,f_in,f_out,parai%allgrp)
-    CALL tihalt(procedureN,isub)
-    ! ==--------------------------------------------------------------==
-  END SUBROUTINE invfftn_block
 END MODULE fftmain_utils

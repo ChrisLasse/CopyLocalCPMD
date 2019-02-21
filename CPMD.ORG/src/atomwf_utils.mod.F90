@@ -121,8 +121,7 @@ CONTAINS
     ! vw    1) still bugs with cntl%cdft = T
     ! vw    2) not yet implemented with TKPNT = T 
     ! vw so we hack...
-    ! tk    3) some bugs with pslo_com%tivan = T
-    IF (.NOT.pslo_com%tivan.AND..NOT.tkpts%tkpnt.AND..NOT.cntl%cdft) cntl%tdmal = .TRUE.
+    IF (.NOT.tkpts%tkpnt.AND..NOT.cntl%cdft) cntl%tdmal = .TRUE.
     ! vw<<<
     IF (cntl%tdmal.AND.paral%io_parent) THEN
        WRITE(6,*)&
@@ -309,7 +308,7 @@ CONTAINS
              CALL fnl_set('SAVE')
              CALL fnlalloc(atwp%nattot,.FALSE.,.FALSE.)
              CALL rnlsm(catom,atwp%nattot,ikpt,ikind,.FALSE.)
-             CALL csmat(xsmat,catom,fnl,atwp%nattot,ikind,.FALSE.)
+             CALL csmat(xsmat,catom,fnl,atwp%nattot,ikind)
              CALL summat(xxmat,atwp%nattot)
              CALL fnldealloc(.FALSE.,.FALSE.)
              CALL fnl_set('RECV')

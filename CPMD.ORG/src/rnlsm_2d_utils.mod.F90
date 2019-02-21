@@ -115,8 +115,8 @@ CONTAINS
              CALL dgemm('T','N',6,nstate,2*ncpw%ngw,tfac,eiscr(1,1),2*ncpw%ngw,c0(&
                   1,1),2*ncpw%ngw,0.0_real_8,dai(1,1),6)
              CALL mp_sum(dai,6*nstate,parai%allgrp)
-             DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                ii=i-parap%nst12(1,parai%mepos)+1
+             DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                ii=i-parap%nst12(parai%mepos,1)+1
                 ddfnl(isa,iv,1,ii)=dai(1,i)
                 ddfnl(isa,iv,2,ii)=dai(2,i)
                 ddfnl(isa,iv,3,ii)=dai(3,i)

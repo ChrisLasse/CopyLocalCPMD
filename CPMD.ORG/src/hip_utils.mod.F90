@@ -91,7 +91,7 @@ CONTAINS
           DO ix=1,fpar%kr1
              v(ix,1,iz)=CMPLX(0.0_real_8,0.0_real_8,kind=real_8)
           ENDDO
-          IF (parap%nrxpl(1,parai%mepos).EQ.1) THEN
+          IF (parap%nrxpl(parai%mepos,1).EQ.1) THEN
              DO iy=1,fpar%kr2s
                 v(1,iy,iz)=CMPLX(0.0_real_8,0.0_real_8,kind=real_8)
              ENDDO
@@ -116,10 +116,10 @@ CONTAINS
 #ifdef _vpp_
        !OCL NOALIAS
 #endif
-       DO iz=parap%nrzpl(1,i),parap%nrzpl(2,i)
+       DO iz=parap%nrzpl(i,1),parap%nrzpl(i,2)
           DO iy=1,spar%nr2s
              DO ix=1,parm%nr1
-                ixyz=ix+(iy-1)*nx+(iz-parap%nrzpl(1,i))*nxy
+                ixyz=ix+(iy-1)*nx+(iz-parap%nrzpl(i,1))*nxy
                 xf(i*nr1m*spar%nr2s*nr3m+ixyz,1)=v(ix,iy,iz)
              ENDDO
           ENDDO
@@ -131,12 +131,12 @@ CONTAINS
     ! Unpack data
     !$omp parallel do private(I,IZ,IY,IX,IXYZ,IQPH,nx,nxy)
     DO i=0,parai%nproc-1
-       nx=1+parap%nrxpl(2,i)-parap%nrxpl(1,i)
+       nx=1+parap%nrxpl(i,2)-parap%nrxpl(i,1)
        nxy=nx*spar%nr2s
        DO iz=1,nr3pl
           DO iy=1,spar%nr2s
-             DO ix=parap%nrxpl(1,i),parap%nrxpl(2,i)
-                ixyz=1+ix-parap%nrxpl(1,i)+(iy-1)*nx+(iz-1)*nxy
+             DO ix=parap%nrxpl(i,1),parap%nrxpl(i,2)
+                ixyz=1+ix-parap%nrxpl(i,1)+(iy-1)*nx+(iz-1)*nxy
                 iqph=ix+(iy-1)*(nr1h+1)+(iz-1)*(nr1h+1)*nr2h
                 qphi(iqph)=yf(i*nr1m*spar%nr2s*nr3m+ixyz,1)! YF(IXYZ,I+1)
              ENDDO
@@ -187,15 +187,15 @@ CONTAINS
     ! Pack data for transpose
     !$omp parallel do private(I,IZ,IY,IX,IXYZ,IQPH,NX,NXY)
     DO i=0,parai%nproc-1
-       nx=1+parap%nrxpl(2,i)-parap%nrxpl(1,i)
+       nx=1+parap%nrxpl(i,2)-parap%nrxpl(i,1)
        nxy=nx*spar%nr2s
 #ifdef _vpp_
        !OCL NOALIAS
 #endif
        DO iz=1,nr3pl
           DO iy=1,spar%nr2s
-             DO ix=parap%nrxpl(1,i),parap%nrxpl(2,i)
-                ixyz=1+ix-parap%nrxpl(1,i)+(iy-1)*nx+(iz-1)*nxy
+             DO ix=parap%nrxpl(i,1),parap%nrxpl(i,2)
+                ixyz=1+ix-parap%nrxpl(i,1)+(iy-1)*nx+(iz-1)*nxy
                 iqph=ix+(iy-1)*(nr1h+1)+(iz-1)*(nr1h+1)*nr2h
                 yf(i*nr1m*spar%nr2s*nr3m+ixyz,1)=qphi(iqph)
              ENDDO
@@ -212,10 +212,10 @@ CONTAINS
     nxy=nx*spar%nr2s
     !$omp parallel do private(I,IZ,IY,IX,IXYZ)
     DO i=0,parai%nproc-1
-       DO iz=parap%nrzpl(1,i),parap%nrzpl(2,i)
+       DO iz=parap%nrzpl(i,1),parap%nrzpl(i,2)
           DO iy=1,spar%nr2s
              DO ix=1,parm%nr1
-                ixyz=ix+(iy-1)*nx+(iz-parap%nrzpl(1,i))*nxy
+                ixyz=ix+(iy-1)*nx+(iz-parap%nrzpl(i,1))*nxy
                 va(ix,iy,iz)=xf(i*nr1m*spar%nr2s*nr3m+ixyz,1)! XF(IXYZ,I+1)
              ENDDO
           ENDDO

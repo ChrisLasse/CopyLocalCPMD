@@ -67,7 +67,7 @@ MODULE mm_mddiag_utils
                                              mm_go_mm,&
                                              mm_go_qm,&
                                              mm_revert
-  USE mm_extrap,                       ONLY: cold
+  USE mm_extrap,                       ONLY: cold, nnow, numcold
   USE mm_forces_diag_utils,            ONLY: mm_forces_diag
   USE mm_forces_prop_utils,            ONLY: mm_forces_prop
   USE mm_input,                        ONLY: cgrest_i,&
@@ -834,7 +834,7 @@ CONTAINS
           ropt_mod%calste=cntl%tpres.AND.MOD(infi,cnti%npres).EQ.0
           IF (cntl%textrap) THEN
              ! Extrapolate wavefunctions
-             CALL extrapwf(infi,c0,scr,cold,crge%n,cnti%mextra)
+             CALL extrapwf(infi,c0,scr,cold,nnow,numcold,crge%n,cnti%mextra)
           ENDIF
           ! mb - Wannier stuff for vdW-WC
           vdwwfl%twannup=vdwwfl%twannup.OR.(infi.EQ.1.AND..NOT.vdwwfl%trwannc)

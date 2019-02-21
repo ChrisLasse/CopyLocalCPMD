@@ -2,8 +2,6 @@
 
 MODULE rotate_utils
   USE error_handling,                  ONLY: stopgm
-  USE cp_grp_utils,                    ONLY: cp_grp_redist_array,&
-                                             cp_grp_split_states  
   USE kinds,                           ONLY: int_1,&
                                              int_2,&
                                              int_4,&
@@ -11,9 +9,6 @@ MODULE rotate_utils
                                              real_4,&
                                              real_8
   USE nvtx_utils
-  USE parac,                           ONLY: parai
-  USE part_1d,                         ONLY: part_1d_get_blk_bounds
-  USE system,                          ONLY: parap
   USE timer,                           ONLY: tihalt,&
                                              tiset
 
@@ -25,76 +20,29 @@ MODULE rotate_utils
   !!public :: rotate_c
   !!public :: rotate_da
   PUBLIC :: rottr
-  PUBLIC :: rottr_fnl
 
 CONTAINS
-  ! ==================================================================
-  SUBROUTINE rottr_fnl(a,fnl,gam,transa,nstate,n,tlsd,na,nb,gid,np,me)
-    ! ==--------------------------------------------------------------==
-    ! ==         FNL <= A*FNL*GAM                                     ==
-    ! ==   SPECIAL CASE FOR GAM UPPER TRIAGONAL                       ==
-    ! ==--------------------------------------------------------------==
-    REAL(real_8),INTENT(INOUT)               :: fnl(n,*)
-    REAL(real_8),INTENT(IN)                  :: a, gam(:,:)
-    CHARACTER(len=*),INTENT(IN)              :: transa
-    LOGICAL,INTENT(IN)                       :: tlsd
-    INTEGER,INTENT(IN)                       :: nstate, n, na, nb, gid, np, me
 
-    INTEGER                                  :: isub, naa, i, n_loc,&
-                                                l_chunks(2,0:np-1), n_start, n_end, ierr,&
-                                                t_chunks(2,0:np-1)
-    CHARACTER(*), PARAMETER                  :: procedureN = 'rottr_fnl'
-! ==--------------------------------------------------------------==
-    IF (n.EQ.0 .OR. nstate.EQ.0) RETURN
-    CALL tiset(procedureN,isub)
-    IF(np.GT.1)THEN
-       DO i = 0,np-1
-          CALL part_1d_get_blk_bounds(n,i,np,l_chunks(1,i),l_chunks(2,i))
-       END DO
-       n_end=l_chunks(2,me)
-       n_start=l_chunks(1,me)
-    ELSE
-       n_end=n
-       n_start=1
-    END IF
-    n_loc=n_end-n_start+1
-    IF (tlsd) THEN
-       naa=na+1
-       CALL dtrmm('R','U',transa,'N',n_loc,na,a,gam,nstate,fnl(n_start,1),n)
-       CALL dtrmm('R','U',transa,'N',n_loc,nb,a,gam(naa,naa),nstate,&
-            fnl(n_start,naa),n)
-    ELSE
-       CALL dtrmm('R','U',transa,'N',n_loc,nstate,a,gam,nstate,fnl(n_start,1),n)
-    END IF
-    IF (np .GT. 1) THEN
-       t_chunks(1,:)=1
-       t_chunks(2,:)=nstate
-       call mp_allgatherv_intranode_inplace_real(fnl,n,nstate,l_chunks,t_chunks,np,me,gid)
-    END IF
-    CALL tihalt(procedureN,isub)
-    ! ==--------------------------------------------------------------==
-  END SUBROUTINE rottr_fnl
   ! ==================================================================
   SUBROUTINE rottr(a,c1,gam,transa,nstate,n,tlsd,na,nb)
     ! ==--------------------------------------------------------------==
     ! ==         C1 <= A*C1*GAM                                       ==
     ! ==   SPECIAL CASE FOR GAM UPPER TRIAGONAL                       ==
     ! ==--------------------------------------------------------------==
-    REAL(real_8),intent(in)                  :: a
-    COMPLEX(real_8),TARGET                   :: c1(:,:)
+    REAL(real_8)                             :: a
+    COMPLEX(real_8)                          :: c1(:,:)
     REAL(real_8)                             :: gam(:,:)
     CHARACTER(len=*)                         :: transa
     INTEGER                                  :: nstate, n
     LOGICAL                                  :: tlsd
     INTEGER                                  :: na, nb
 
-    INTEGER                                  :: isub, naa, il_c1_loc(3), ig, ig1, i, n_loc,&
-                                                n_proc(3,0:parai%cp_nogrp-1), grp, n_start, ierr
-    CHARACTER(*), PARAMETER                  :: procedureN = 'rottr'
-    COMPLEX(real_8),ALLOCATABLE              :: c1_loc(:,:,:)
+    INTEGER                                  :: isub, naa
+
 !(nstate,nstate)
 ! Variables
 ! ==--------------------------------------------------------------==
+
     IF (n.EQ.0 .OR. nstate.EQ.0) RETURN
     CALL tiset('     ROTTR',isub)
     IF (tlsd) THEN
@@ -103,64 +51,16 @@ CONTAINS
        CALL dtrmm('R','U',transa,'N',2*n,nb,a,gam(naa,naa),nstate,&
             c1(1,naa),2*n)
     ELSE
-       IF (parai%cp_nogrp .gt. 1) THEN
-          DO i = 0,parai%cp_nogrp-1
-             CALL part_1d_get_blk_bounds(n,i,parai%cp_nogrp,n_proc(1,i),n_proc(2,i))
-             n_proc(3,i)=n_proc(2,i)- n_proc(1,i)+1
-          END DO
-
-          il_c1_loc(1)=MAXVAL(n_proc(3,:))
-          il_c1_loc(2)=nstate
-          il_c1_loc(3)=parai%cp_nogrp
-          ALLOCATE(c1_loc(il_c1_loc(1),il_c1_loc(2),il_c1_loc(3)),STAT=ierr)
-          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-               __LINE__,__FILE__)
-          n_loc=n_proc(3,parai%cp_inter_me)
-          n_start=n_proc(1,parai%cp_inter_me)
-       ELSE
-          n_loc=n
-          n_start=1
-       END if
-
-       
-       CALL dtrmm('R','U',transa,'N',2*n_loc,&
-            nstate,a,gam,nstate,c1(n_start,1),2*n)
-
-       IF (parai%cp_nogrp .GT. 1) THEN
-          !$omp parallel do private (i,ig,ig1) 
-          DO i=1,nstate
-             DO ig=n_proc(1,parai%cp_inter_me),n_proc(2,parai%cp_inter_me)
-                ig1=ig-n_proc(1,parai%cp_inter_me)+1
-                c1_loc(ig1,i,parai%cp_inter_me+1)=c1(ig,i)
-             END DO
-          END DO
-
-          CALL my_concat_inplace(c1_loc,il_c1_loc(1)*nstate*2,parai%cp_inter_grp)
-
-          !$omp parallel private(i,ig,ig1,grp)
-          DO grp=1,parai%cp_nogrp
-             IF (grp .NE. parai%cp_inter_me+1) THEN
-                !$omp do 
-                DO i=1,nstate
-                   DO ig=n_proc(1,grp-1),n_proc(2,grp-1)
-                      ig1=ig-n_proc(1,grp-1)+1
-                      c1(ig,i)=c1_loc(ig1,i,grp)
-                   END DO
-                END DO
-                !$omp end do nowait
-             END IF
-          END DO
-          !$omp end parallel
-          DEALLOCATE(c1_loc,STAT=ierr)
-          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-               __LINE__,__FILE__)
-       END IF
-    END IF
+       CALL dtrmm('R','U',transa,'N',2*n,nstate,a,gam,nstate,c1,2*n)
+    ENDIF
     CALL tihalt('     ROTTR',isub)
     ! ==--------------------------------------------------------------==
   END SUBROUTINE rottr
   ! ==================================================================
-  SUBROUTINE rotate(a,c1,b,c2,gam,nstate,n,tlsd,na,nb,redist)
+
+
+  ! ==================================================================
+  SUBROUTINE rotate(a,c1,b,c2,gam,nstate,n,tlsd,na,nb)
     ! ==--------------------------------------------------------------==
     ! ==         C2 <= B*C2 + A*C1*GAM                                ==
     ! ==   ALSO FOR LSD                                               ==
@@ -174,26 +74,16 @@ CONTAINS
     INTEGER                                  :: n
     LOGICAL                                  :: tlsd
     INTEGER                                  :: na, nb
-    LOGICAL,INTENT(IN),OPTIONAL              :: redist
 
     CHARACTER(*), PARAMETER                  :: procedureN = 'rotate'
 
-    INTEGER                                  :: isub, isub1, naa
-    INTEGER                                  :: first_state,nstate_grp
-    LOGICAL                                  :: redst
-    ! split states between cp groups
-
+    INTEGER                                  :: isub, naa
 
 ! Variables
 ! ==--------------------------------------------------------------==
+
     CALL tiset(procedureN,isub)
     __NVTX_TIMER_START ( procedureN )
-
-    IF (PRESENT(redist)) THEN
-       redst=redist
-    ELSE
-       redst=.true.
-    END IF
 
     IF (n>0) THEN
        IF (tlsd) THEN
@@ -201,19 +91,10 @@ CONTAINS
           CALL dgemm('N','N',n,na,na,a,c1(1,1),n,gam(1,1),nstate,b,c2(1,1),n)
           CALL dgemm('N','N',n,nb,nb,a,c1(1,naa),n,gam(naa,naa),nstate,b,c2(1,naa),n)
        ELSE
-          call cp_grp_split_states(nstate,nstate_grp=nstate_grp,first_state=first_state)
-          CALL dgemm('N','N',n,nstate_grp,nstate,a,c1,n,gam(1,first_state),nstate,b,c2(1,first_state),n)
+          CALL dgemm('N','N',n,nstate,nstate,a,c1,n,gam,nstate,b,c2,n)
        ENDIF
     ENDIF
-    
-    IF (parai%cp_nogrp.GT.1.AND..NOT.tlsd) THEN
-       !fixme: tlsd requieres parap%first_state_up and parap%first_state_down
-       IF (redst) THEN
-          CALL tiset(procedureN//'_grpsb',isub1)
-          CALL cp_grp_redist_array(c2,n/2,nstate)
-          CALL tihalt(procedureN//'_grpsb',isub1)
-       END IF
-    END IF
+
     __NVTX_TIMER_STOP
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==

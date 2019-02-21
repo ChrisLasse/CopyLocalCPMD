@@ -326,8 +326,10 @@ MODULE cp_xc_utils
 
   TYPE(cp_xc_env_t), SAVE, PUBLIC :: cp_xc_functional_env
   TYPE(cp_xc_env_t), SAVE, PUBLIC :: cp_xc_kernel_env
+  TYPE(cp_xc_env_t), SAVE, PUBLIC :: cp_xc_mts_low_func_env
 
   TYPE(cp_xc_t), SAVE, TARGET,  PUBLIC :: cp_xc_functional
+  TYPE(cp_xc_t), SAVE, TARGET,  PUBLIC :: cp_xc_mts_low_func
   TYPE(cp_xc_t), SAVE, TARGET,  PUBLIC :: cp_xc_kernel
   TYPE(cp_xc_t), SAVE, POINTER, PUBLIC :: cp_xc => NULL()
 
@@ -1300,7 +1302,9 @@ CONTAINS
        !
        cpfunc%n_funcs                  = cpfunc%n_funcs + 1
        cpfunc%funcs( cpfunc%n_funcs )  = "CP_MGGA_X_M05_M06"
-       cpfunc%scales( cpfunc%n_funcs ) = 0.73*cp_xc_env%scales( env_index )
+       ! Definition differs from M05; HFX scaling is included in
+       ! at00
+       cpfunc%scales( cpfunc%n_funcs ) = cp_xc_env%scales( env_index )
        cp_mgga_x_param%M05_M06%add_vs98=  .true.
        cp_mgga_x_param%M05_M06%at00    =  5.877943e-01_real_8
        cp_mgga_x_param%M05_M06%at01    = -1.371776e-01_real_8
@@ -1353,7 +1357,9 @@ CONTAINS
        !
        cpfunc%n_funcs                  = cpfunc%n_funcs + 1
        cpfunc%funcs( cpfunc%n_funcs )  = "CP_MGGA_X_M05_M06"
-       cpfunc%scales( cpfunc%n_funcs ) = 0.46*cp_xc_env%scales( env_index )
+       ! Definition differs from M05-2X; HFX scaling is included in
+       ! at00
+       cpfunc%scales( cpfunc%n_funcs ) = cp_xc_env%scales( env_index )
        cp_mgga_x_param%M05_M06%add_vs98=  .false.
        cp_mgga_x_param%M05_M06%at00    =  4.600000e-01_real_8
        cp_mgga_x_param%M05_M06%at01    = -2.206052e-01_real_8
@@ -1858,6 +1864,12 @@ CONTAINS
                'MU [BOHR]:', this%hfx_screening, &
                '; ALPHA:', this%hfx_constant, &
                '; BETA:', this%hfx_attenuated
+          WRITE(write_to_unit,'(A)')
+          WRITE(write_to_unit,'(1X,A)') 'FOR THE RECIPROCAL SPACE IMPLEMENTATION OF CAM, PLEASE REFER TO:'
+          WRITE(write_to_unit,'(1X,A)') '                               M.P. Bircher and U. Rothlisberger'
+          WRITE(write_to_unit,'(1X,A)') '             J. Chem. Theory Comput., 2018, 14 (6), pp 3184–3195'
+          WRITE(write_to_unit,'(1X,A)') '                                   DOI: 10.1021/acs.jctc.8b00069'
+          WRITE(write_to_unit,'(A)')
 
        CASE DEFAULT
           WRITE(write_to_unit,'(4x,F5.1,A1,1x,A,3x,A)') 100_real_8*this%hfx_constant , '%', 'HFX', 'EXACT EXCHANGE'
@@ -2125,7 +2137,7 @@ CONTAINS
   ! ==================================================================
 
   ! ==================================================================
-  SUBROUTINE cp_xc_set_functional( cp_xc, functional )
+  SUBROUTINE cp_xc_set_functional( cp_xc, functional, dual_is_set)
     ! ==--------------------------------------------------------------==
     ! Sets a functional pointer to the procedure specified in
     ! cp_xc%cpfunc for n_funcs functionals; sets Coulomb attenuation
@@ -2134,16 +2146,23 @@ CONTAINS
 
     CLASS(cp_xc_t), INTENT(in)               :: cp_xc
     TYPE(cp_xc_functional_p_t), INTENT(out)  :: functional
+    LOGICAL, INTENT(in), OPTIONAL            :: dual_is_set
 
     CHARACTER(len=*), PARAMETER              :: procedureN = 'set_functional'
 
     INTEGER                                  :: i_func
 
     LOGICAL                                  :: initialisation_OK
+    LOGICAL                                  :: dual_set_manually
+    LOGICAL                                  :: dual_OK
+
+    dual_set_manually = .false.
+    IF (present(dual_is_set)) dual_set_manually = dual_is_set
 
     DO i_func=1,cp_xc%cpfunc%n_funcs
 
        initialisation_OK = .false.
+       dual_OK           = .true.
 
        SELECT CASE(TRIM(ADJUSTL(cp_xc%cpfunc%funcs( i_func ))))
        !
@@ -2195,14 +2214,17 @@ CONTAINS
           functional%K( i_func )%compute  => CP_MGGA_X_M05_M06
           functional%Ks( i_func )%compute => CP_SPIN_MGGA_X_M05_M06
           initialisation_OK               =  cp_mgga_x_check(cp_xc%cpfunc%funcs( i_func ))
+          dual_OK                         =  dual_set_manually
        CASE("CP_MGGA_X_M08_M11")
           functional%K( i_func )%compute  => CP_MGGA_X_M08_M11
           functional%Ks( i_func )%compute => CP_SPIN_MGGA_X_M08_M11
           initialisation_OK               =  cp_mgga_x_check(cp_xc%cpfunc%funcs( i_func ))
+          dual_OK                         =  dual_set_manually
        CASE("CP_MGGA_X_MN12")
           functional%K( i_func )%compute  => CP_MGGA_X_MN12
           functional%Ks( i_func )%compute => CP_SPIN_MGGA_X_MN12
           initialisation_OK               =  cp_mgga_x_check(cp_xc%cpfunc%funcs( i_func ))
+          dual_OK                         =  dual_set_manually
        !
        ! Correlation functionals
        !
@@ -2258,10 +2280,12 @@ CONTAINS
           functional%K( i_func )%compute  => CP_MGGA_C_M05_M06
           functional%Ks( i_func )%compute => CP_SPIN_MGGA_C_M05_M06
           initialisation_OK               =  cp_mgga_c_check(cp_xc%cpfunc%funcs( i_func ))
+          dual_OK                         =  dual_set_manually
        CASE("CP_MGGA_C_M08_M11")
           functional%K( i_func )%compute  => CP_MGGA_C_M08_M11
           functional%Ks( i_func )%compute => CP_SPIN_MGGA_C_M08_M11
           initialisation_OK               =  cp_mgga_c_check(cp_xc%cpfunc%funcs( i_func ))
+          dual_OK                         =  dual_set_manually
           !
           ! This should not happen
           !
@@ -2270,6 +2294,11 @@ CONTAINS
                &functional '//trim(adjustl(cp_xc%cpfunc%funcs( i_func )))//' n/a',&
                __LINE__,__FILE__)
        END SELECT
+       
+       IF (.not. dual_OK)  CALL stopgm(procedureN,'Invalid setup for Minnesota functional. Please set DUAL to 8-12 '// &
+                                 'and refer to the manual for more information. See also: '// &
+                                 'dx.doi.org/10.1021/acs.jctc.8b00897', &
+                                 __LINE__,__FILE__)
 
        IF (.not. initialisation_OK) CALL stopgm(procedureN,'Functional parameters have not been properly set; &
                &concerns '//trim(adjustl(cp_xc%cpfunc%funcs( i_func ))), &

@@ -1,5 +1,3 @@
-#include "cpmd_global.h"
-
 #if defined(__SR11000)
 !option OPT(O(ss))
 #endif
@@ -17,10 +15,6 @@ MODULE utils
   USE reshaper,                        ONLY: reshape_inplace
   USE system,                          ONLY: parap
   USE zeroing_utils,                   ONLY: zeroing
-#ifdef _USE_SCRATCHLIBRARY
-  USE scratch_interface,               ONLY: request_scratch,&
-                                             free_scratch
-#endif
 
   IMPLICIT NONE
 
@@ -31,13 +25,9 @@ MODULE utils
   PUBLIC :: zclean
   PUBLIC :: icopy
   PUBLIC :: symma
-  PUBLIC :: symmat_pack
-  PUBLIC :: symmat_unpack
   PUBLIC :: numcpus
   PUBLIC :: invmat
   PUBLIC :: inversemat
-  PUBLIC :: dsyevd_driver
-  PUBLIC :: dsyevx_driver
   PUBLIC :: dspevy
   PUBLIC :: zgthr
   PUBLIC :: zgthr_no_omp
@@ -162,78 +152,6 @@ CONTAINS
     RETURN
   END SUBROUTINE symma
   ! ==================================================================
-  SUBROUTINE symmat_pack(a,packeda,n,n1,n2)
-    ! ==--------------------------------------------------------------==
-    INTEGER,INTENT(IN)                       :: n,n1,n2
-    REAL(real_8),INTENT(IN)                  :: a(:,:)
-    REAL(real_8)                             :: packeda(:)
-
-    INTEGER                                  :: offset, i, j
-    !for lsd=>n=nstate,n1=spind_mod%nsup,n2=spin_mod%nsdown
-    !else=>n=nstate,n1=nstate,n2=0
-    ! ==--------------------------------------------------------------==
-    offset=n1*(n1+1)/2
-    !$omp parallel private(i,j)
-    !$omp do schedule(static)
-    DO i=0,n1-1
-       j=i*(i-1)/2+i+1
-       packeda(j:j+i)=a(1:i+1,i+1)
-    END DO
-    !$omp end do nowait
-    !$omp do schedule(static)
-    DO i=0,n2-1
-       j=i*(i-1)/2+i+1+offset
-       packeda(j:j+i)=a(n1+1:n1+i+1,n1+i+1)
-    END DO 
-    !$omp end parallel
-    RETURN
-  END SUBROUTINE symmat_pack
-  ! ==================================================================
-  SUBROUTINE symmat_unpack(a,packeda,n,n1,n2,full)
-    ! ==--------------------------------------------------------------==
-    INTEGER,INTENT(IN)                       :: n,n1,n2
-    REAL(real_8),INTENT(INOUT)               :: a(:,:)
-    REAL(real_8),INTENT(IN)                  :: packeda(:)
-    LOGICAL,INTENT(IN)                       :: full
-
-    INTEGER                                  :: offset, i, j
-    !for lsd=>n=nstate,n1=spind_mod%nsup,n2=spin_mod%nsdown
-    !else=>n=nstate,n1=nstate,n2=0
-    ! ==--------------------------------------------------------------==
-    offset=n1*(n1+1)/2
-    !$omp parallel private(i,j)
-    !$omp do schedule(static)
-    DO i=0,n1-1
-       j=i*(i-1)/2+i+1
-       a(1:i+1,i+1)=packeda(j:j+i)
-    END DO
-    !$omp end do nowait
-    !$omp do schedule(static)
-    DO i=0,n2-1
-       j=i*(i-1)/2+i+1+offset
-       a(n1+1:n1+i+1,n1+i+1)=packeda(j:j+i)
-    END DO
-    !$omp end parallel
-    IF(full)THEN
-       !$omp parallel private(i,j)
-       !$omp do schedule(static)
-       DO i=1,n1
-          DO j=i,n1
-             a(j,i)=a(i,j)
-          END DO
-       END DO
-       !$omp end do nowait
-       !$omp do schedule(static)
-       DO i=n1+1,n
-          DO j=i,n
-             a(j,i)=a(i,j)
-          END DO
-       END DO
-       !$omp end parallel
-    END IF
-    RETURN
-  END SUBROUTINE symmat_unpack
-  ! ==================================================================
   SUBROUTINE numcpus(ncpus)
     ! ==--------------------------------------------------------------==
     ! == Number of CPU for a distributed machine                      ==
@@ -329,152 +247,6 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE inversemat
-  ! ==================================================================
-  SUBROUTINE dsyevd_driver(iopt,a,w,n)
-    ! ==--------------------------------------------------------------==
-    ! == DIAGONALIZATION ROUTINE: FOLLOW THE ESSL CONVENTION          ==
-    ! == DIVIDE AND CONQUER UNPACKED MEMORY INTENSE VARIANT OF DSPEVY ==
-    ! ==--------------------------------------------------------------==
-    INTEGER,INTENT(IN)                       :: iopt, n
-    REAL(real_8),INTENT(INOUT)               :: w(:), a(:,:)
-    !local
-    INTEGER                                  :: il_work(1), il_iwork, dummy_int(1)
-#ifdef _USE_SCRATCHLIBRARY
-    REAL(real_8), POINTER __CONTIGUOUS       :: work(:)
-#else
-    REAL(real_8), ALLOCATABLE                :: work(:)
-#endif
-    INTEGER, ALLOCATABLE                     :: iwork(:)
-    REAL(real_8)                             :: dummy_real(1)
-    CHARACTER(1)                             :: jobz, uplo
-    CHARACTER(*),PARAMETER                   :: procedureN='dsyevd_driver'
-    INTEGER                                  :: info, ierr
-    IF(iopt.EQ.0)THEN
-       jobz='N'
-       uplo='L'
-    ELSEIF(iopt.EQ.1)THEN
-       jobz='V'
-       uplo='L'
-    ELSEIF(iopt.EQ.20)THEN
-       jobz='N'
-       uplo='U'
-    ELSEIF(iopt.EQ.21)THEN
-       jobz='V'
-       uplo='U'
-    END IF
-    !workspace query
-    il_work(1)=-1
-    il_iwork=-1
-    CALL dsyevd(jobz,uplo,n,a,n,w,dummy_real,il_work(1),dummy_int,il_iwork,info)
-    il_work(1)=INT(dummy_real(1))
-    il_iwork=dummy_int(1)
-#ifdef _USE_SCRATCHLIBRARY
-    CALL request_scratch(il_work,work,procedureN//'work')
-#else
-    ALLOCATE(work(il_work(1)),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-#endif
-    ALLOCATE(iwork(il_iwork),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-    !actual calculation
-    CALL dsyevd(jobz,uplo,n,a,n,w,work,il_work(1),iwork,il_iwork,info)
-    IF (info.NE.0) CALL stopgm(procedureN,'FAILED TO DIAGONALIZE',&
-         __LINE__,__FILE__)
-#ifdef _USE_SCRATCHLIBRARY
-    CALL free_scratch(il_work,work,procedureN//'work')
-#else
-    DEALLOCATE(work,STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-         __LINE__,__FILE__)
-#endif
-    DEALLOCATE(iwork,STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-         __LINE__,__FILE__)   
-  END SUBROUTINE dsyevd_driver
-  ! ==================================================================
-  SUBROUTINE dsyevx_driver(iopt,a,z,w,n,il,iu,abstol)
-    ! ==--------------------------------------------------------------==
-    ! == DIAGONALIZATION ROUTINE: FOLLOW THE ESSL CONVENTION          ==
-    ! == UNPACKED MEMORY INTENSE VARIANT OF DSPEVY, PARALLELIZATION   ==
-    ! == POSSIBLE SELECTING DIFFERENT EIGEVECTOR INDIZES ON EACH PROC ==
-    ! ==--------------------------------------------------------------==
-    INTEGER,INTENT(IN)                       :: iopt, n, il, iu
-    REAL(real_8),INTENT(IN)                  :: abstol
-    REAL(real_8),INTENT(INOUT)               :: w(:), a(:,:), z(:,:)
-    !local
-    INTEGER                                  :: il_work(1), il_iwork, il_ifail, m
-#ifdef _USE_SCRATCHLIBRARY
-    REAL(real_8), POINTER __CONTIGUOUS       :: work(:)
-#else
-    REAL(real_8), ALLOCATABLE                :: work(:)
-#endif
-    INTEGER, ALLOCATABLE                     :: iwork(:), ifail(:)
-    REAL(real_8)                             :: dummy_real(1)
-    CHARACTER(1)                             :: jobz, uplo, range
-    CHARACTER(*),PARAMETER                   :: procedureN='dsyevr_driver'
-    INTEGER                                  :: info, ierr
-    IF(iopt.EQ.0)THEN
-       jobz='N'
-       uplo='L'
-       range='I'
-       IF(il.EQ.1.AND.iu.EQ.n)range='A'
-    ELSEIF(iopt.EQ.1)THEN
-       jobz='V'
-       uplo='L'
-       range='I'
-       IF(il.EQ.1.AND.iu.EQ.n)range='A'
-    ELSEIF(iopt.EQ.20)THEN
-       jobz='N'
-       uplo='U'
-       range='I'
-       IF(il.EQ.1.AND.iu.EQ.n)range='A'
-    ELSEIF(iopt.EQ.21)THEN
-       jobz='V'
-       uplo='U'
-       range='I'
-       IF(il.EQ.1.AND.iu.EQ.n)range='A'
-    END IF
-    il_ifail=n
-    il_iwork=5*n
-    ALLOCATE(ifail(il_ifail),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-    ALLOCATE(iwork(il_iwork),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-    !workspace query
-    il_work(1)=-1
-    CALL dsyevx(jobz,range,uplo,n,a,n,1.0_real_8,1.0_real_8,il,iu,-1_real_8,m,w,&
-         z,n,dummy_real,il_work(1),iwork,ifail,info)
-    il_work(1)=INT(dummy_real(1))
-#ifdef _USE_SCRATCHLIBRARY
-    CALL request_scratch(il_work,work,procedureN//'_work')
-#else
-    ALLOCATE(work(il_work(1)),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-#endif
-    !actual calculation
-    CALL dsyevx(jobz,range,uplo,n,a,n,1.0_real_8,1.0_real_8,il,iu,-1_real_8,m,w,&
-         z,n,work,il_work(1),iwork,ifail,info)
-    IF (info.NE.0) CALL stopgm(procedureN,'FAILED TO DIAGONALIZE',&
-         __LINE__,__FILE__)
-#ifdef _USE_SCRATCHLIBRARY
-    CALL free_scratch(il_work,work,procedureN//'_work')
-#else
-    DEALLOCATE(work,STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-         __LINE__,__FILE__)
-#endif
-    DEALLOCATE(iwork,STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-         __LINE__,__FILE__)   
-    DEALLOCATE(ifail,STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-         __LINE__,__FILE__)   
-  END SUBROUTINE dsyevx_driver
   ! ==================================================================
   SUBROUTINE dspevy(iopt,ap,w,z,ldz,n,aux,naux)
     ! ==--------------------------------------------------------------==
@@ -770,7 +542,7 @@ CONTAINS
     n1=0
     n2=0
     DO i=0,parai%nproc-1
-       ns=parap%nst12(2,i)-parap%nst12(1,i)+1
+       ns=parap%nst12(i,2)-parap%nst12(i,1)+1
        n1=MAX(n1,ns)
        n2=MAX(n2,parap%sparm(3,i))
     ENDDO

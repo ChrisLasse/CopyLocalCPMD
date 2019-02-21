@@ -13,7 +13,6 @@ MODULE dist_prowfn_utils
                                              satch,&
                                              satch3,&
                                              satch4
-  USE distribution_utils,              ONLY: dist_size
   USE dotp_utils,                      ONLY: dotp
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
@@ -24,6 +23,7 @@ MODULE dist_prowfn_utils
   USE forcep_utils,                    ONLY: rhoe_psi_size
   USE ions,                            ONLY: ions0,&
                                              ions1
+  USE jrotation_utils,                 ONLY: my_set_orbdist
   USE kinds,                           ONLY: real_8
   USE linalg_utils,                    ONLY: symm_da
   USE mp_interface,                    ONLY: mp_bcast,&
@@ -156,8 +156,8 @@ CONTAINS
     ENDIF
     debug=.FALSE.
     IF (atwp%nattot.LE.0) RETURN
-    CALL dist_size(atwp%nattot,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=norbx,&
-         nblocal=norb,fw=1)
+    CALL my_set_orbdist(atwp%nattot,cnti%nstblk,norbx)
+    norb=paraw%nwa12(parai%mepos,2)-paraw%nwa12(parai%mepos,1)+1
     norb=MAX(0,norb)
     sz = parai%nproc
     ALLOCATE(cscr(ncpw%ngw,atwp%nattot),STAT=ierr)
@@ -178,7 +178,7 @@ CONTAINS
        ENDDO
        nolan = 0
        DO index4=1, sz
-          IF ((paraw%nwa12(2,index4-1)-paraw%nwa12(1,index4-1)+1).NE.0) THEN
+          IF ((paraw%nwa12(index4-1,2)-paraw%nwa12(index4-1,1)+1).NE.0) THEN
              lanlist(index4) = index4-1
              nolan = nolan + 1
           ENDIF
@@ -234,10 +234,10 @@ CONTAINS
          __LINE__,__FILE__)
     CALL zeroing(xsmat)!,atwp%nattot*norbx)
     DO ip=0,parai%nproc-1
-       nx=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+       nx=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
        CALL zeroing(tmat)!,atwp%nattot*norbx)
        IF (nx.GT.0) THEN
-          CALL ovlap2(ncpw%ngw,atwp%nattot,nx,tmat,catom,catom(1,paraw%nwa12(1,ip)),&
+          CALL ovlap2(ncpw%ngw,atwp%nattot,nx,tmat,catom,catom(1,paraw%nwa12(ip,1)),&
                .TRUE.)
           CALL mp_sum(tmat,rmat,atwp%nattot*norbx,parai%allgrp)
           IF (parai%me.EQ.ip) THEN
@@ -266,7 +266,7 @@ CONTAINS
     ! ONLY PROCESSORS THAT HAVE A NON-ZERO CHUNK OF THE RESTRICTED
     ! HAMILTONIAN PARTICIPATE IN LANCZOS
     ! ==================================================================
-    IF ((paraw%nwa12(2,parai%me)-paraw%nwa12(1,parai%me)+1).NE.0) THEN
+    IF ((paraw%nwa12(parai%me,2)-paraw%nwa12(parai%me,1)+1).NE.0) THEN
        ! ==================================================================
        ! START THE LANCZOS ITERATION WITH FULL GRAM-SCHIDT REORTH.
        ! ==================================================================
@@ -276,9 +276,9 @@ CONTAINS
        ! EACH PROCESSOR ALLOCATES MEMORY FOR ROW-WISE DISTRIBUTED LANCZOS
        ! BASIS
        sz = 0
-       chunk_new = paraw%nwa12(2,parai%me)-paraw%nwa12(1,parai%me)+1
+       chunk_new = paraw%nwa12(parai%me,2)-paraw%nwa12(parai%me,1)+1
        DO ip=0, parai%nproc-1
-          IF ((paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1).NE.0) sz = sz+1
+          IF ((paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1).NE.0) sz = sz+1
        ENDDO
        nolan = sz
        lan_max = atwp%nattot+1
@@ -329,8 +329,8 @@ CONTAINS
           w(is)=0._real_8
        ENDDO
        beta = 0._real_8
-       chunk_begin = paraw%nwa12(1,parai%me)
-       chunk_end   = paraw%nwa12(2,parai%me)
+       chunk_begin = paraw%nwa12(parai%me,1)
+       chunk_end   = paraw%nwa12(parai%me,2)
        ! INITIALIZE FIRST LANCZOS VECTOR
        CALL dcopy(chunk_new, vcur(chunk_begin), 1, lanv(1), 1)
        ! INITIALIZE INITIAL SUM OF WANTED EIGENVALUES
@@ -413,8 +413,8 @@ CONTAINS
        ! END OF LANCZOS LOOP
        ! ===================
        IF (.NOT.conv_flag) index4 = index4-1
-       chunk_begin_e = paraw%nwa12(1,parai%mepos)
-       chunk_end_e   = paraw%nwa12(2,parai%mepos)
+       chunk_begin_e = paraw%nwa12(parai%mepos,1)
+       chunk_end_e   = paraw%nwa12(parai%mepos,2)
        chunk_new_e   = chunk_end_e - chunk_begin_e +1
        ! ==================================================================
        ! DETERMINE SEND  BUFFERS
@@ -588,10 +588,10 @@ CONTAINS
     ! Overlap AO with wavefunctions
     ! =================================================================
     DO ip=0,parai%nproc-1
-       nx=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+       nx=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
        CALL zeroing(z_temp(1:atwp%nattot*norbx))!,atwp%nattot*norbx)
        IF (nx.GT.0) THEN
-          CALL ovlap2(ncpw%ngw,nx,prop2%numorb,z_temp,catom(1,paraw%nwa12(1,ip)),c0,&
+          CALL ovlap2(ncpw%ngw,nx,prop2%numorb,z_temp,catom(1,paraw%nwa12(ip,1)),c0,&
                .TRUE.)
           CALL mp_sum(z_temp,rmat,prop2%numorb*norbx,parai%allgrp)
           IF (parai%me.EQ.ip) THEN
@@ -698,7 +698,7 @@ CONTAINS
           CALL dgemv('N',atwp%nattot,chunk_new,1._real_8,xsmat(1,1),atwp%nattot,&
                xxmat(index1,1),atwp%nattot,0._real_8,scr(1),1)
           CALL mp_sum(scr,eig_vec,atwp%nattot,langrp)
-          CALL dcopy(chunk_new, eig_vec(paraw%nwa12(1,parai%me)),&
+          CALL dcopy(chunk_new, eig_vec(paraw%nwa12(parai%me,1)),&
                1, xxmat(index1,1), atwp%nattot)
        ENDDO
     ENDIF
@@ -973,7 +973,7 @@ CONTAINS
              DO index4=1, send_cnt(index1)
                 teig_vec(str+strc) = xxmat(index2,index4) *&
                      z_temp((str1-1)*atwp%nattot+index4+&
-                     paraw%nwa12(1,parai%me)-1 )
+                     paraw%nwa12(parai%me,1)-1 )
                 str = str+1
              ENDDO
              str1 = str1 + 1
@@ -1028,8 +1028,8 @@ CONTAINS
                       iat2=iat2+1
                       IF (iat2.LT.iat1) THEN
                          DO i2=iao2+1,iao2+nao2
-                            IF ((i1.GE.paraw%nwa12(1,parai%me)).AND.&
-                                 (i1.LE.paraw%nwa12(2,parai%me))) THEN
+                            IF ((i1.GE.paraw%nwa12(parai%me,1)).AND.&
+                                 (i1.LE.paraw%nwa12(parai%me,2))) THEN
 
                                eig_vec(iat2) = eig_vec(iat2) +&
                                     teig_vec(chunk_new*(i2-1)+str)

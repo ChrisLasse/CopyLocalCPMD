@@ -187,8 +187,8 @@ CONTAINS
                    DO  i3=1,fpar%kr3s
                       DO i2=1,fpar%kr2s
                          DO i1=1,fpar%kr1
-                            ia=parap%nrxpl(1,parai%me)
-                            ib=parap%nrxpl(2,parai%me)
+                            ia=parap%nrxpl(parai%me,1)
+                            ib=parap%nrxpl(parai%me,2)
                             ic=ib-ia
                             l=l+1
                             ii=INT((ia+i1-1)*(cldos%nlayer+1)/fpar%kr1s)

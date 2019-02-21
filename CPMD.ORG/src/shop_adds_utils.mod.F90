@@ -1,8 +1,7 @@
 MODULE shop_adds_utils
   USE coor,                            ONLY: fion,&
                                              velp
-  USE distribution_utils,              ONLY: dist_size
-  USE elct,                            ONLY: crge  
+  USE elct,                            ONLY: crge
   USE ener,                            ONLY: ener_com
   USE error_handling,                  ONLY: stopgm
   USE fileopen_utils,                  ONLY: fileclose,&
@@ -108,6 +107,7 @@ CONTAINS
     CHARACTER(len=*)                         :: tag
 
     INTEGER                                  :: i
+    REAL(real_8)                             :: xsaim, xsnow, xstates
 
     IF (tag.EQ."S0" ) THEN
        IF ( paral%parent ) THEN
@@ -126,9 +126,18 @@ CONTAINS
           crge%n=sh02%nst_s0
        ENDIF
        ! -PARALLEL
-       CALL dist_size(crge%n,parai%nproc,parap%nst12,nblocal=norbpe,iloc=parai%mepos)
-
-       ! WRITE(6,*)'S0',me,NORBPE,MEPOS,NST12(2,MEPOS),NST12(1,MEPOS)
+       xstates=REAL(crge%n,kind=real_8)
+       xsnow=0.0_real_8
+       DO i=parai%nproc,1,-1
+          xsaim = xsnow + xstates/parai%nproc
+          parap%nst12(i-1,1)=NINT(xsnow)+1
+          parap%nst12(i-1,2)=NINT(xsaim)
+          IF ( NINT(xsaim).GT.crge%n ) parap%nst12(i-1,2)=crge%n
+          IF ( i.EQ.1 ) parap%nst12(i-1,2)=crge%n
+          xsnow = xsaim
+       ENDDO
+       norbpe=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
+       ! WRITE(6,*)'S0',me,NORBPE,MEPOS,NST12(MEPOS,2),NST12(MEPOS,1)
        ! -ENDPARALLEL
        CALL dcopy(sh02%nst_s0,fs0,1,crge%f,1)
     ELSEIF (tag.EQ."S1") THEN
@@ -144,8 +153,18 @@ CONTAINS
        clsd%nlsx=3
        crge%n=sh02%nst_s1
        ! -PARALLEL---------------------------------
-       CALL dist_size(crge%n,parai%nproc,parap%nst12,nblocal=norbpe,iloc=parai%mepos)
-       ! WRITE(6,*)'S1',me,NORBPE,MEPOS,NST12(2,MEPOS),NST12(1,MEPOS)
+       xstates=REAL(crge%n,kind=real_8)
+       xsnow=0.0_real_8
+       DO i=parai%nproc,1,-1
+          xsaim = xsnow + xstates/parai%nproc
+          parap%nst12(i-1,1)=NINT(xsnow)+1
+          parap%nst12(i-1,2)=NINT(xsaim)
+          IF (NINT(xsaim).GT.crge%n) parap%nst12(i-1,2)=crge%n
+          IF (i.EQ.1) parap%nst12(i-1,2)=crge%n
+          xsnow = xsaim
+       ENDDO
+       norbpe=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
+       ! WRITE(6,*)'S1',me,NORBPE,MEPOS,NST12(MEPOS,2),NST12(MEPOS,1)
        ! -ENDPARALLEL   
        ! McB   copy NST_S0-NST_S1 ZEROS, TOO !
        CALL dcopy(sh02%nst_s0,fs1,1,crge%f,1)

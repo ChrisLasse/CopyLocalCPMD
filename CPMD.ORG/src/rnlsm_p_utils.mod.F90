@@ -106,8 +106,8 @@ CONTAINS
                 CALL dgemm('T','N',ions0%na(is),nstate,2*nkpt%ngwk,tfac,eiscr(1,1),2*&
                      nkpt%ngwk,c0(1,1),2*nkpt%ngwk,0.0_real_8,dai(1,1,1),maxsys%nax)
                 CALL mp_sum(dai,imagp*maxsys%nax*nstate,parai%allgrp)
-                DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                   ii=i-parap%nst12(1,parai%mepos)+1
+                DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                   ii=i-parap%nst12(parai%mepos,1)+1
                    CALL dcopy(imagp*ions0%na(is),dai(1,1,i),1,dd_fnl(1,isa0+1,iv,&
                         k,k2,ii,1),1)
                 ENDDO

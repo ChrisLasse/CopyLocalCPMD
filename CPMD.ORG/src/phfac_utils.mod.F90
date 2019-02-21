@@ -18,9 +18,6 @@ MODULE phfac_utils
   USE sfac,                            ONLY: ei1,&
                                              ei2,&
                                              ei3,&
-                                             ei1t,&
-                                             ei2t,&
-                                             ei3t,&
                                              eigr,&
                                              eigrb,&
                                              natx
@@ -104,15 +101,6 @@ CONTAINS
        ALLOCATE(ei3(natx,(2*spar%nr3s-1)),STAT=ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
             __LINE__,__FILE__)
-       ALLOCATE(ei1t((2*spar%nr1s-1),natx),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-            __LINE__,__FILE__)
-       ALLOCATE(ei2t((2*spar%nr2s-1),natx),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-            __LINE__,__FILE__)
-       ALLOCATE(ei3t((2*spar%nr3s-1),natx),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-            __LINE__,__FILE__)
        ifirst  = 1
        IF (paral%parent) THEN
           CALL prmem('     PHFAC')
@@ -135,9 +123,9 @@ CONTAINS
        ar1=parm%tpiba*sum1
        ar2=parm%tpiba*sum2
        ar3=parm%tpiba*sum3
-       ei1t(1,isa)=CMPLX(1.0_real_8,0.0_real_8,kind=real_8)
-       ei2t(1,isa)=CMPLX(1.0_real_8,0.0_real_8,kind=real_8)
-       ei3t(1,isa)=CMPLX(1.0_real_8,0.0_real_8,kind=real_8)
+       ei1(isa,1)=CMPLX(1.0_real_8,0.0_real_8,kind=real_8)
+       ei2(isa,1)=CMPLX(1.0_real_8,0.0_real_8,kind=real_8)
+       ei3(isa,1)=CMPLX(1.0_real_8,0.0_real_8,kind=real_8)
        ctep1=CMPLX(COS(ar1),-SIN(ar1),kind=real_8)
        ctep2=CMPLX(COS(ar2),-SIN(ar2),kind=real_8)
        ctep3=CMPLX(COS(ar3),-SIN(ar3),kind=real_8)
@@ -148,50 +136,50 @@ CONTAINS
        svtmpp=ctep1
        svtmpm=ctem1
        DO i=2,spar%nr1s
-          ei1t(i,isa)=svtmpp
+          ei1(isa,i)=svtmpp
           svtmpp=svtmpp*ctep1
-          ei1t(spar%nr1s+i-1,isa)=svtmpm
+          ei1(isa,spar%nr1s+i-1)=svtmpm
           svtmpm=svtmpm*ctem1
        ENDDO
 
        svtmpp=ctep2
        svtmpm=ctem2
        DO j=2,spar%nr2s
-          ei2t(j,isa)=svtmpp
+          ei2(isa,j)=svtmpp
           svtmpp=svtmpp*ctep2
-          ei2t(spar%nr2s+j-1,isa)=svtmpm
+          ei2(isa,spar%nr2s+j-1)=svtmpm
           svtmpm=svtmpm*ctem2
        ENDDO
 
        svtmpp=ctep3
        svtmpm=ctem3
        DO k=2,spar%nr3s
-          ei3t(k,isa)=svtmpp
+          ei3(isa,k)=svtmpp
           svtmpp=svtmpp*ctep3
-          ei3t(spar%nr3s+k-1,isa)=svtmpm
+          ei3(isa,spar%nr3s+k-1)=svtmpm
           svtmpm=svtmpm*ctem3
        ENDDO
 
-       ei10=1._real_8/ei1t(nh1,isa)
-       ei20=1._real_8/ei2t(nh2,isa)
-       ei30=1._real_8/ei3t(nh3,isa)
+       ei10=1._real_8/ei1(isa,nh1)
+       ei20=1._real_8/ei2(isa,nh2)
+       ei30=1._real_8/ei3(isa,nh3)
 #ifdef __SR8000
        !poption parallel, tlocal(I)
 #endif 
        DO i=1,2*spar%nr1s-1
-          ei1t(i,isa)=ei1t(i,isa)*ei10
+          ei1(isa,i)=ei1(isa,i)*ei10
        ENDDO
 #ifdef __SR8000
        !poption parallel, tlocal(J)
 #endif 
        DO j=1,2*spar%nr2s-1
-          ei2t(j,isa)=ei2t(j,isa)*ei20
+          ei2(isa,j)=ei2(isa,j)*ei20
        ENDDO
 #ifdef __SR8000
        !poption parallel, tlocal(K)
 #endif 
        DO k=1,2*spar%nr3s-1
-          ei3t(k,isa)=ei3t(k,isa)*ei30
+          ei3(isa,k)=ei3(isa,k)*ei30
        ENDDO
     ENDDO
     ! ==--------------------------------------------------------------==
@@ -204,7 +192,8 @@ CONTAINS
     !$omp parallel do private (ISA,IG)
     DO isa=1,ions1%nat
        DO ig=1,ncpw%ngw
-          eigr(ig,isa,1)=ei1t(inyh(1,ig),isa)*ei2t(inyh(2,ig),isa)*ei3t(inyh(3,ig),isa)
+          eigr(ig,isa,1)=ei1(isa,inyh(1,ig))*ei2(isa,inyh(2,ig))*&
+               ei3(isa,inyh(3,ig))
        ENDDO
     ENDDO
     IF (cntl%bigmem) THEN
@@ -216,33 +205,12 @@ CONTAINS
 #endif
        !$omp parallel do private (ISA,IG)
        DO isa=1,ions1%nat
-          do ig=1,ncpw%ngw
-             eigrb(ig,isa)=eigr(ig,isa,1)
-          end do
-          DO ig=ncpw%ngw+1,ncpw%nhg
-             eigrb(ig,isa)=ei1t(inyh(1,ig),isa)*ei2t(inyh(2,ig),isa)*ei3t(inyh(3,ig),isa)
+          DO ig=1,ncpw%nhg
+             eigrb(ig,isa)=ei1(isa,inyh(1,ig))*ei2(isa,inyh(2,ig))*ei3(&
+                  isa,inyh(3,ig))
           ENDDO
        ENDDO
     ENDIF
-!$omp parallel do private(ig,isa)
-    do isa=1,ions1%nat
-       do ig=1,2*spar%nr1s-1
-          ei1(isa,ig)=ei1t(ig,isa)
-       end do
-    end do
-!$omp parallel do private(ig,isa)
-    do isa=1,ions1%nat
-       do ig=1,2*spar%nr2s-1
-          ei2(isa,ig)=ei2t(ig,isa)
-       end do
-    end do
-!$omp parallel do private(ig,isa)
-    do isa=1,ions1%nat
-       do ig=1,2*spar%nr3s-1
-          ei3(isa,ig)=ei3t(ig,isa)
-       end do
-    end do
-
     ! ==--------------------------------------------------------------==
     IF (tkpts%tkpnt) THEN
        DO ikpt=1,nkpt%nblkp

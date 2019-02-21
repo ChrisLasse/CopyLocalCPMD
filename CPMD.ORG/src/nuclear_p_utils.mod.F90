@@ -475,7 +475,7 @@ CONTAINS
        DO i3 = 1,fpar%kr3s
           DO i2 = 1,fpar%kr2s
              iii = 0
-             DO i1 = parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)
+             DO i1 = parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)
                 iii = iii + 1
                 vol = .FALSE.
                 DO spec = 1,response2%tdumnum! loop1 to check if u r outside RAD_DUM
@@ -590,7 +590,7 @@ CONTAINS
           DO i3 = 1,fpar%kr3s
              DO i2 = 1,fpar%kr2s
                 iii = 0
-                DO i1 = parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)
+                DO i1 = parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)
                    iii = iii + 1
                    rho1(iii+(i2-1)*fpar%kr1+(i3-1)*fpar%kr1*fpar%kr2s,sig,isp) = 0.0_real_8
                    vol = .FALSE.
@@ -744,7 +744,7 @@ CONTAINS
     DO i3 = 1,fpar%kr3s
        DO i2 = 1,fpar%kr2s
           iii = 0
-          DO i1 = parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)
+          DO i1 = parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)
              iii  = iii + 1
              CALL distance(iat,isp,i1,i2,i3,dist)
              deltaV(iii,i2,i3,1) = EXP(-0.5_real_8*(dist**2)/(sgpp2%rcsg(isp)**2))&
@@ -782,7 +782,7 @@ CONTAINS
        DO i3 = 1,fpar%kr3s
           DO i2 = 1,fpar%kr2s
              iii = 0
-             DO i1 = parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)
+             DO i1 = parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)
                 iii = iii + 1
                 CALL distance(iat,isp,i1,i2,i3,dist)
                 term(1) = rhoe(iii+(i2-1)*fpar%kr1+(i3-1)*fpar%kr1*fpar%kr2s) *&
@@ -803,7 +803,7 @@ CONTAINS
        DO i3 = 1,fpar%kr3s
           DO i2 = 1,fpar%kr2s
              iii = 0
-             DO i1 = parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)
+             DO i1 = parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)
                 iii = iii + 1
                 CALL distance(iat,isp,i1,i2,i3,dist)
                 term(4) = EXP(-(dist**2)/(2*sgpp2%rcnl(1,isp)**2))

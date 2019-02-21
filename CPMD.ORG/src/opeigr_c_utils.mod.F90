@@ -59,12 +59,12 @@ CONTAINS
     CALL reshape_inplace(c2, (/lenbk, parai%nproc/), c2s)
     CALL reshape_inplace(sc0, (/lenbk, parai%nproc/), sc0s)
     DO ip=1,parai%nproc
-       nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-       n1=parap%nst12(1,ip-1)
+       nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+       n1=parap%nst12(ip-1,1)
        CALL dcopy(2*nkpt%ngwk*nn,c0(1,n1),1,c2s(1,ip),1)
     ENDDO
     CALL my_trans(c2s,sc0s,16*lenbk,1)
-    nn=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+    nn=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
     DO ip=1,parai%nproc
        nggp=parap%sparm(3,ip-1)
 #ifdef __VECTOR 
@@ -87,8 +87,8 @@ CONTAINS
     ALLOCATE(aux(ngg1*ngg2*ngg3),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
-    DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-       ii=i-parap%nst12(1,parai%mepos)+1
+    DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+       ii=i-parap%nst12(parai%mepos,1)+1
        CALL zeroing(aux)!,ngg1*ngg2*ngg3)
 #ifdef __NEC
        !CDIR NODEP
@@ -105,7 +105,7 @@ CONTAINS
           sc0(ig,ii)=aux(mapful(1,ig))
        ENDDO
     ENDDO
-    nn=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+    nn=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
     DO ip=1,parai%nproc
        nggp=parap%sparm(3,ip-1)
 #ifdef __VECTOR 
@@ -127,8 +127,8 @@ CONTAINS
     ENDDO
     CALL my_trans(c2s,sc0s,16*lenbk,1)
     DO ip=1,parai%nproc
-       nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-       n1=parap%nst12(1,ip-1)
+       nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+       n1=parap%nst12(ip-1,1)
        CALL dcopy(2*nkpt%ngwk*nn,sc0s(1,ip),1,c2(1,n1),1)
     ENDDO
     ! IF(cntl%tlsd) THEN

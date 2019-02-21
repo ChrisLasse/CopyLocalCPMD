@@ -22,10 +22,9 @@ MODULE hubbardu
       LOGICAL      :: uverb,tpom
       LOGICAL      :: portho,pnorm
       INTEGER      :: firstcall=0,pfrqom=0
-      INTEGER      :: nuatm=0,l_om=0,uatm(maxuatm)=0,nuproj=0,maxproj=0
-      INTEGER      :: muatm(2,maxuatm)=0,nl(maxuatm)=0
+      INTEGER      :: nuatm=0,l_om=0,uatm(maxuatm)=0,nuproj=0
+      INTEGER      :: muatm(2,2,maxuatm)=0,nl(maxuatm)=0
       INTEGER      :: l(maxuatm,maxluatm)=0,s(maxuatm,maxluatm)=0
-      INTEGER      :: uat_cp_first=0,uat_cp_last=0,uat_cp_num=0
       REAL(real_8) :: ehub = 0.0_real_8
       REAL(real_8) :: u(maxuatm)= 0.0_real_8,a(maxuatm)= 0.0_real_8
       REAL(real_8) :: hs(maxuatm)= 0.0_real_8,bs(maxuatm)= 0.0_real_8

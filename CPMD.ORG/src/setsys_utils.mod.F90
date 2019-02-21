@@ -60,8 +60,7 @@ MODULE setsys_utils
                                              mm_go_qm,&
                                              mmdim,&
                                              cpsp
-  USE mm_extrap,                       ONLY: nnow,&
-                                             numcold
+  USE mm_extrap,                       ONLY: nnow, numcold
   USE mm_input,                        ONLY: lqmmm
   USE mp_interface,                    ONLY: mp_bcast
   USE multtb_utils,                    ONLY: multtb
@@ -1378,7 +1377,7 @@ CONTAINS
     ! RMASS
     CALL mp_bcast_byte(rmass, size_in_bytes_of(rmass),parai%io_source,parai%cp_grp)
     ! HUBBARDU
-    CALL mp_bcast_byte(hubbu,size_in_bytes_of(hubbu),parai%io_source,parai%cp_grp)
+    CALL mp_bcast_byte(hubbu,size_in_bytes_of(hubbu),parai%io_source,parai%allgrp)
     ! KPOINTS
     CALL mp_bcast_byte(tkpts, size_in_bytes_of(tkpts),parai%io_source,parai%cp_grp)
     CALL mp_bcast(nkpt%nkpts,parai%io_source,parai%cp_grp)

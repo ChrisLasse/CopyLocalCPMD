@@ -12,13 +12,10 @@ MODULE qvan2_utils
   USE fitpack_utils,                   ONLY: curv2
   USE kinds,                           ONLY: real_8
   USE nlps,                            ONLY: nlps_com
-  USE parac,                           ONLY: parai
-  USE pslo,                            ONLY: pslo_com
   USE qspl,                            ONLY: ggnh,&
                                              nsplpo,&
                                              qspl1
-  USE system,                          ONLY: cntl,&
-                                             nbrx,&
+  USE system,                          ONLY: nbrx,&
                                              ncpw,&
                                              nlx,&
                                              parm
@@ -38,7 +35,7 @@ CONTAINS
     ! ==  Q(G,L,K) = SUM_LM (-I)^L AP(LM,L,K) YR_LM(G^) QRAD(G,L,L,K)    ==
     ! ==-----------------------------------------------------------------==
     INTEGER                                  :: iv, jv, is
-    COMPLEX(real_8)                          :: qg(ncpw%nhg_cp)
+    COMPLEX(real_8)                          :: qg(ncpw%nhg)
 
     CHARACTER(*), PARAMETER                  :: procedureN = 'qvan2'
 
@@ -50,10 +47,11 @@ CONTAINS
     REAL(real_8), ALLOCATABLE, SAVE          :: spline(:)
 
 ! ==-----------------------------------------------------------------==
+
     IF (ifirst.EQ.0) THEN
        ifirst=1
        IF (qspl1%qspline) THEN
-          ALLOCATE(spline(ncpw%nhg_cp),STAT=ierr)
+          ALLOCATE(spline(ncpw%nhg),STAT=ierr)
           IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
                __LINE__,__FILE__)
        ENDIF
@@ -93,25 +91,22 @@ CONTAINS
        sigi=AIMAG(sig)
        IF (qspl1%qspline) THEN
           ! SPLINE
-          !$omp parallel do private(ig)
-          DO ig=1,ncpw%nhg_cp
+          DO ig=1,ncpw%nhg
              spline(ig)=vol*&
-                  curv2(hg(ncpw%nhg_start-1+ig),nsplpo,ggnh(1),&
+                  curv2(hg(ig),nsplpo,ggnh(1),&
                   qrad(1,ivs,jvs,l,is),qrad(nsplpo+1,ivs,jvs,l,is),0.0_real_8)
           ENDDO
           IF (ABS(sigr).GT.0.5_real_8) THEN
              sigr=sigr*ap(lp,ivl,jvl)
-             !$omp parallel do private(ig)
-             DO ig=1,ncpw%nhg_cp
-                qg(ig)=CMPLX(  REAL(qg(ig),KIND=real_8) + sigr*ylmb(ncpw%nhg_start-1+ig,lp,1)*spline(ncpw%nhg_start-1+ig), &
+             DO ig=1,ncpw%nhg
+                qg(ig)=CMPLX(  REAL(qg(ig),KIND=real_8) + sigr*ylmb(ig,lp,1)*spline(ig), &
                      & AIMAG(qg(ig)) , KIND=real_8 )
                 !qg(1,ig)=qg(1,ig)+sigr*ylmb(ig,lp,1)*spline(ig)
              ENDDO
           ELSE
              sigi=sigi*ap(lp,ivl,jvl)
-             !$omp parallel do private(ig)
-             DO ig=1,ncpw%nhg_cp
-                qg(ig)=CMPLX( REAL(qg(ig),KIND=real_8), AIMAG(qg(ig))+sigi*ylmb(ncpw%nhg_start-1+ig,lp,1)*spline(ncpw%nhg_start-1+ig) , &
+             DO ig=1,ncpw%nhg
+                qg(ig)=CMPLX( REAL(qg(ig),KIND=real_8), AIMAG(qg(ig))+sigi*ylmb(ig,lp,1)*spline(ig) , &
                      & KIND=real_8 )
                 !qg(2,ig)=qg(2,ig)+sigi*ylmb(ig,lp,1)*spline(ig)
              ENDDO
@@ -119,18 +114,16 @@ CONTAINS
        ELSE
           IF (ABS(sigr).GT.0.5_real_8) THEN
              sigr=sigr*ap(lp,ivl,jvl)
-             !$omp parallel do private(ig)
-             DO ig=1,ncpw%nhg_cp
-                qg(ig)=CMPLX( REAL(qg(ig),KIND=real_8)+vol*sigr*ylmb(ncpw%nhg_start-1+ig,lp,1)*qrad(igl(ncpw%nhg_start-1+ig),ivs,jvs,l,is), &
+             DO ig=1,ncpw%nhg
+                qg(ig)=CMPLX( REAL(qg(ig),KIND=real_8)+vol*sigr*ylmb(ig,lp,1)*qrad(igl(ig),ivs,jvs,l,is), &
                      & AIMAG(qg(ig)) , KIND=real_8 )
                 !qg(1,ig)=qg(1,ig)+vol*sigr*ylmb(ig,lp,1)*qrad(igl(ig),ivs,jvs,l,is)
              ENDDO
           ELSE
              sigi=sigi*ap(lp,ivl,jvl)
-             !$omp parallel do private(ig)
-             DO ig=1,ncpw%nhg_cp
+             DO ig=1,ncpw%nhg
                 qg(ig)=CMPLX( REAL(qg(ig),KIND=real_8), &
-                     & AIMAG(qg(ig))+vol*sigi*ylmb(ncpw%nhg_start-1+ig,lp,1)*qrad(igl(ncpw%nhg_start-1+ig),ivs,jvs,l,is), KIND=real_8 )
+                     & AIMAG(qg(ig))+vol*sigi*ylmb(ig,lp,1)*qrad(igl(ig),ivs,jvs,l,is), KIND=real_8 )
                 !qg(2,ig)=qg(2,ig)+vol*sigi*ylmb(ig,lp,1)*qrad(igl(ig),ivs,jvs,l,is)
              ENDDO
           ENDIF

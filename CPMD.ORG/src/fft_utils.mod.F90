@@ -25,12 +25,12 @@ CONTAINS
 
     INTEGER                                  :: ierr
 
-    ALLOCATE( lrxpl(2,0:max_nproc-1), &
+    ALLOCATE( lrxpl(0:max_nproc-1,2), &
          &    sp5(0:max_nproc-1), &
          &    sp8(0:max_nproc-1), &
          &    sp9(0:max_nproc-1), &
          &    mxy(max_nproc-1), &
-         &    lrxpool(2,0:max_nproc-1,fftpoolsize), &
+         &    lrxpool(0:max_nproc-1,2,fftpoolsize), &
          &    spm(9,0:max_nproc-1,fftpoolsize), &
          &    STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &

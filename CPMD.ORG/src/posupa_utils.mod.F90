@@ -1,16 +1,15 @@
 MODULE posupa_utils
   USE dotp_utils,                      ONLY: dotp
   USE error_handling,                  ONLY: stopgm
-  USE distribution_utils,              ONLY: dist_size
   USE harm,                            ONLY: dcgt,&
                                              dsgtw,&
                                              dtan2w,&
                                              wdsgt,&
                                              xmu
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8
   USE kpts,                            ONLY: tkpts
   USE mp_interface,                    ONLY: mp_sum
-  USE nort,                            ONLY: nort_com
   USE parac,                           ONLY: parai
   USE pslo,                            ONLY: pslo_com
   USE ropt,                            ONLY: ropt_mod
@@ -29,10 +28,6 @@ MODULE posupa_utils
   USE tpar,                            ONLY: dt2hbe,&
                                              dt_elec,&
                                              dtb2me
-#ifdef _USE_SCRATCHLIBRARY
-  USE scratch_interface,               ONLY: request_scratch,&
-                                             free_scratch
-#endif
 !!use rotate_utils, only : rotate
 !!se rotate_utils, only : rotate_da
 
@@ -56,15 +51,11 @@ CONTAINS
     COMPLEX(real_8)                          :: cm(ncpw%ngw,nstate), &
                                                 c0(ncpw%ngw,nstate)
 
-    INTEGER                                  :: i, ig, isub, nstx, il_ai1(2)
+    INTEGER                                  :: i, ig, isub, nstx
     LOGICAL                                  :: prtev, tnon
     REAL(real_8)                             :: ai(3), odt, pf1, pf2, pf3, &
                                                 pf4, xi
-#ifdef _USE_SCRATCHLIBRARY
-    REAL(real_8), POINTER __CONTIGUOUS       :: ai1(:,:)
-#else
-    REAL(real_8),ALLOCATABLE                 :: ai1(:,:)
-#endif
+
 ! Variables
 ! ==--------------------------------------------------------------==
 ! ==  WAVEFUNCTIONS                                               ==
@@ -116,55 +107,18 @@ CONTAINS
              CALL daxpy(2*ncpw%ngw,xi/dt_elec,c0(1,i),1,cm(1,i),1)
           ENDDO
        ELSE
-          if ( nort_com%scond .gt. nort_com%slimit) then
-             il_ai1(1)=nstate
-             il_ai1(2)=3
-#ifdef _USE_SCRATCHLIBRARY
-             CALL request_scratch(il_ai1,ai1,procedureN//'_ai1')
-#else
-             ALLOCATE(AI1(il_ai1(1),il_ai1(2)))
-#endif
-             !$OMP parallel do private (I)
-             DO I=1,NSTATE
-                AI1(I,1)=dotp(ncpw%ngw,c0(:,i),c0(:,i))
-                ai1(i,2)=dotp(ncpw%ngw,c2(:,i),c0(:,i))
-                ai1(i,3)=dotp(ncpw%ngw,C2(:,I),C2(:,I))
-             END DO
-             CALL mp_sum(AI1,3*NSTATE,parai%ALLGRP)
-             !$OMP parallel do private(I,XI)           
-             DO i=1,nstate
-                ai1(i,3)=ai1(i,3)-1.0_real_8
-                xi=(-ai1(i,2)+SQRT(ai1(i,2)*ai1(i,2)-ai1(i,1)*ai1(i,3)))/(ai1(i,1))
-                CALL daxpy(2*ncpw%ngw,xi,c0(1,i),1,c2(1,i),1)
-                CALL daxpy(2*ncpw%ngw,xi/dt_elec,c0(1,i),1,cm(1,i),1)
-             ENDDO
-          ELSE
-             il_ai1(1)=nstate
-             il_ai1(2)=1
-#ifdef _USE_SCRATCHLIBRARY
-             CALL request_scratch(il_ai1,ai1,procedureN//'_ai1')
-#else
-             ALLOCATE(AI1(il_ai1(1),il_ai1(2)))
-#endif
-             !$OMP parallel do private (I)
-             DO I=1,NSTATE
-                AI1(I,1)=dotp(ncpw%ngw,C2(:,I),C2(:,I))
-             END DO
-             CALL mp_sum(AI1,NSTATE,parai%ALLGRP)
-             !$OMP parallel do private(I,XI)           
-             DO I=1,NSTATE
-                !             AI1(I,3)=AI1(I,3)-1.0D0
-                XI=(-1+SQRT(2._real_8-AI1(I,1)))
-                CALL DAXPY(2*ncpw%ngw,XI,C0(1,I),1,C2(1,I),1)
-                CALL DAXPY(2*ncpw%ngw,XI/DT_ELEC,C0(1,I),1,CM(1,I),1)
-             ENDDO
-#ifdef _USE_SCRATCHLIBRARY
-             CALL free_scratch(il_ai1,ai1,procedureN//'_ai1')
-#else
-             DEALLOCATE(AI1)
-#endif
-          ENDIF
-       end if
+          DO i=1,nstate
+             ai(1)=dotp(ncpw%ngw,c0(:,i),c0(:,i))
+             ai(2)=2.0_real_8*dotp(ncpw%ngw,c2(:,i),c0(:,i))
+             ai(3)=dotp(ncpw%ngw,c2(:,i),c2(:,i))
+             CALL mp_sum(ai,3,parai%allgrp)
+             ai(3)=ai(3)-1.0_real_8
+             xi=(-ai(2)+SQRT(ai(2)*ai(2)-4._real_8*ai(1)*ai(3)))/&
+                  (2._real_8*ai(1))
+             CALL daxpy(2*ncpw%ngw,xi,c0(1,i),1,c2(1,i),1)
+             CALL daxpy(2*ncpw%ngw,xi/dt_elec,c0(1,i),1,cm(1,i),1)
+          ENDDO
+       ENDIF
        CALL dcopy(2*ncpw%ngw*nstate,c2(1,1),1,c0(1,1),1)
     ELSE
        IF (cntl%tharm) THEN
@@ -216,10 +170,9 @@ CONTAINS
        odt=1.0_real_8/dt_elec
        IF (ncpw%ngw.GT.0) THEN
           IF (cntl%tdmal) THEN
-             CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,&
-                  fw=1)
+             CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
              CALL rotate_da(odt,c0,1._real_8,cm,gamx,2*ncpw%ngw,2*ncpw%ngw,nstate,&
-                  paraw%nwa12(1,0),paraw%nwa12(2,0),nstx,parai%mepos,parap%pgroup,parai%nproc,&
+                  paraw%nwa12(0,1),paraw%nwa12(0,2),nstx,parai%mepos,parap%pgroup,parai%nproc,&
                   parai%allgrp,cntl%tlsd,spin_mod%nsup,spin_mod%nsdown)
           ELSE
              CALL rotate(odt,c0,1.0_real_8,cm,gamx,nstate,2*ncpw%ngw,cntl%tlsd,&
@@ -244,10 +197,10 @@ CONTAINS
 ! ==--------------------------------------------------------------==
 
     IF (cntl%nonort) THEN
-       lposupa=nstate*3
+       lposupa=0
     ELSE
        IF (cntl%tdmal) THEN
-          CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+          CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
           lrotate=nstate*nstx
        ELSE
           lrotate=0

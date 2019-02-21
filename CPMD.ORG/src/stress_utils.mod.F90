@@ -135,7 +135,7 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     ! SCR partition
     il_auxc=2*nkpt%ngwk*maxsys%nax         ! NLSM1_S
-    il_gam =imagp*maxsys%nax*MAX(parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1,nstate) ! NLSM1_S
+    il_gam =imagp*maxsys%nax*MAX(parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1,nstate) ! NLSM1_S
     IF (pslo_com%tivan) THEN
        il_qg   =2*ncpw%nhg         ! DRHOV
        il_ctmp =2*ncpw%nhg         ! DRHOV
@@ -179,9 +179,9 @@ CONTAINS
        beta(5) =2
        beta(6) =3
 
-       ! NSTATE=NST12(2,MEPOS)-NST12(1,MEPOS)+1  !=NDFN
+       ! NSTATE=NST12(MEPOS,2)-NST12(MEPOS,1)+1  !=NDFN
        ! This works also for parallel
-       lbecs=imagp*ions1%nat*maxsys%nhxs*6*(parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1)*nkpt%nkpnt
+       lbecs=imagp*ions1%nat*maxsys%nhxs*6*(parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1)*nkpt%nkpnt
        IF (lbecs.LE.0) lbecs=1
        ALLOCATE(becs(imagp,ions1%nat,maxsys%nhxs,6,ndfnl,nkpt%nkpnt),STAT=ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
@@ -308,8 +308,8 @@ CONTAINS
              DO kk=1,6
                 IF (delta(alpha(kk),beta(kk)).GT.0.5_real_8) THEN
                    DO iv=1,nlps_com%ngh(is)
-                      DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                         ii=i-parap%nst12(1,parai%mepos)+1
+                      DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                         ii=i-parap%nst12(parai%mepos,1)+1
                          CALL daxpy(imagp*ions0%na(is),-0.5_real_8,&
                               fnl (1,isa0+1,iv,i,ikind),1,&
                               becs(1,isa0+1,iv,kk,ii,ikind),1)
@@ -478,8 +478,8 @@ CONTAINS
                    DO jv=1,nlps_com%ngh(is)
                       DO kk=1,6
                          sum=0.0_real_8
-                         DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                            ii=i-parap%nst12(1,parai%mepos)+1
+                         DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                            ii=i-parap%nst12(parai%mepos,1)+1
                             IF (f(i,ikk).NE.0._real_8) THEN
                                weight=wk(ikk)*f(i,ikk)
                                sum=sum+weight*ddot(imagp*ions0%na(is),&
@@ -503,8 +503,8 @@ CONTAINS
                          kj=sgpp2%lfval(jv,is)
                          DO kk=1,6
                             sum=0.0_real_8
-                            DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                               ii=i-parap%nst12(1,parai%mepos)+1
+                            DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                               ii=i-parap%nst12(parai%mepos,1)+1
                                IF (f(i,ikk).NE.0._real_8) THEN
                                   weight=wk(ikk)*f(i,ikk)
                                   sum=sum+weight*ddot(imagp*ions0%na(is),&
@@ -522,8 +522,8 @@ CONTAINS
                 DO iv=1,nlps_com%ngh(is)
                    DO kk=1,6
                       sum=0.0_real_8
-                      DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                         ii=i-parap%nst12(1,parai%mepos)+1
+                      DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                         ii=i-parap%nst12(parai%mepos,1)+1
                          IF (f(i,ikk).NE.0._real_8) THEN
                             weight=wk(ikk)*f(i,ikk)
                             sum=sum+weight*ddot(imagp*ions0%na(is),&
@@ -637,7 +637,7 @@ CONTAINS
 ! NLSM1_S
 
     lstress=2*ncpw%ngw*maxsys%nax+&
-         maxsys%nax*(parap%nst12(2,parai%mepos)-parap%nst12(2,parai%mepos)+1)
+         maxsys%nax*(parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,2)+1)
     ! DRHOV
     IF (pslo_com%tivan) lstress=MAX(lstress,4*ncpw%nhg)
     IF (tkpts%tkblock) THEN

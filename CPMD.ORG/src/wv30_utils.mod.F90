@@ -45,8 +45,7 @@ MODULE wv30_utils
   USE mm_dimmod,                       ONLY: clsaabox
   USE mm_extrap,                       ONLY: cold,&
                                              nnow,&
-                                             numcold,&
-                                             scold
+                                             numcold
   USE mp_interface,                    ONLY: mp_sum
   USE mw,                              ONLY: mwi,&
                                              tmw
@@ -1255,10 +1254,6 @@ CONTAINS
           ENDIF
           CALL w_wfnio(nw,ierror,nstate,cold(1,1,1,is),tau0,&
                'C0',irecord)
-          IF(ALLOCATED(scold))THEN
-             CALL w_wfnio(nw,ierror,nstate,scold(1,1,1,is),tau0,&
-                  'SC0',irecord)
-          END IF
        ENDDO
     ELSE
        IF (paral%io_parent) THEN
@@ -1323,7 +1318,7 @@ SUBROUTINE wr30pot(nw,ierror,potr)
   DO ir=1,spar%nr1s
      ! Find the processor which has the given plane.
      DO ipp=1,parai%nproc
-        IF (ir.GE.parap%nrxpl(1,ipp-1).AND.ir.LE.parap%nrxpl(2,ipp-1)) THEN
+        IF (ir.GE.parap%nrxpl(ipp-1,1).AND.ir.LE.parap%nrxpl(ipp-1,2)) THEN
            ipx=ipp
            GOTO 10
         ENDIF
@@ -1334,7 +1329,7 @@ SUBROUTINE wr30pot(nw,ierror,potr)
      ip=parap%pgroup(ipx)
      ! IP has the plane.
      IF (parai%me.EQ.ip) THEN
-        irr=ir-parap%nrxpl(1,parai%mepos)+1
+        irr=ir-parap%nrxpl(parai%mepos,1)+1
         CALL dcopy(kk,potr(irr,1),fpar%kr1,pscr(1),1)
         IF (.NOT.paral%parent) THEN
            ! IP sends array.

@@ -7,6 +7,8 @@ MODULE dftin_utils
   USE cp_gga_correlation_utils,        ONLY: cp_gga_c_param
   USE cp_gga_exchange_utils,           ONLY: cp_gga_x_param
   USE cp_xc_utils,                     ONLY: cp_xc,&
+                                             cp_xc_mts_low_func_env,&
+                                             cp_xc_mts_low_func,&
                                              cp_xc_functional_env,&
                                              cp_xc_functional,&
                                              cp_xc_kernel,&
@@ -58,6 +60,8 @@ MODULE dftin_utils
   USE vdwcmod,                         ONLY: empvdwc
   USE wann,                            ONLY: wannl
   USE zeroing_utils,                   ONLY: zeroing
+  USE mts_utils,                       ONLY: mts
+
 #include "sizeof.h"
 
   IMPLICIT NONE
@@ -94,6 +98,8 @@ CONTAINS
     ! ==                MODX3LYP,B1LYP,OLDB1LYP,MODB1LYP,             ==
     ! ==                PBE0,PBE1W,PBES,REVPBE0}                      ==
     ! ==    FUNCTIONAL {TPSS}                                         ==
+    ! ==    MTS_HIGH_FUNC (alias for FUNCTIONAL)                      ==
+    ! ==    MTS_LOW_FUNC (same as for FUNCTIONAL)                     ==
     ! ==    HARTREE                                                   ==
     ! ==    HARTREE-FOCK                                              ==
     ! ==    ACM0                                                      ==
@@ -131,19 +137,24 @@ CONTAINS
     CHARACTER(len=input_string_len)          :: line, previous_line, &
                                                 next_words, error_message, &
                                                 xc_functional, xc_kernel, &
-                                                unknown(max_unknown_lines)
+                                                xc_mts_low_func, unknown(max_unknown_lines) 
     INTEGER                                  :: ia, ie
     INTEGER                                  :: i, first, last, ierr, iunit, nbr_unknown_lines, &
                                                 j, tr_c, tr_gc, tr_gx, tr_x
     INTEGER                                  :: cp_xc_functional_n_scale_control, cp_xc_functional_n_lib_control
     INTEGER                                  :: cp_xc_kernel_n_scale_control, cp_xc_kernel_n_lib_control
+    INTEGER                                  :: cp_xc_mts_low_func_n_scale_control, cp_xc_mts_low_func_n_lib_control
     LOGICAL                                  :: cp_xc_functional_has_scales, cp_xc_functional_has_library
     LOGICAL                                  :: cp_xc_kernel_has_scales, cp_xc_kernel_has_library
-    LOGICAL :: erread, force_cpfunc, &
-      force_div_analytical, force_div_numerical, force_libxc, force_new_hfx, &
-      overwrite_pcgc, overwrite_pclda, overwrite_phfx, overwrite_pxgc, overwrite_pxlda, &
-      tr_code, treff, something_went_wrong, go_on_reading, get_functional, get_kernel, functional_is_defined, &
-      set_via_gc_or_sx, set_via_acm_keyword
+    LOGICAL                                  :: cp_xc_mts_low_func_has_scales, cp_xc_mts_low_func_has_library
+    LOGICAL                                  :: erread, force_cpfunc, force_div_analytical
+    LOGICAL                                  :: force_div_numerical, force_libxc, force_new_hfx
+    LOGICAL                                  :: overwrite_pcgc, overwrite_pclda, overwrite_phfx 
+    LOGICAL                                  :: overwrite_pxgc, overwrite_pxlda
+    LOGICAL                                  :: tr_code, treff, something_went_wrong, go_on_reading
+    LOGICAL                                  :: get_functional, get_kernel, get_mts_low_func
+    LOGICAL                                  :: functional_is_defined
+    LOGICAL                                  :: set_via_gc_or_sx, set_via_acm_keyword, need_dft
     REAL(real_8)                             :: a1par, a2par, a3par, &
                                                 new_pcgc, new_pclda, &
                                                 new_phfx, new_pxgc, &
@@ -168,6 +179,10 @@ CONTAINS
        cp_xc_kernel_has_library     = .FALSE.
        cp_xc_kernel_n_scale_control = 0
        cp_xc_kernel_n_lib_control   = 0
+       cp_xc_mts_low_func_has_scales      = .FALSE.
+       cp_xc_mts_low_func_has_library     = .FALSE.
+       cp_xc_mts_low_func_n_scale_control = 0
+       cp_xc_mts_low_func_n_lib_control   = 0
        force_div_analytical  = .FALSE.
        force_div_numerical   = .FALSE.
        force_cpfunc          = .FALSE.
@@ -177,6 +192,8 @@ CONTAINS
        functional_is_defined = .FALSE.
        xc_kernel             = ' '
        get_kernel            = .FALSE.
+       xc_mts_low_func       = ' '
+       get_mts_low_func      = .FALSE.
        set_via_gc_or_sx      = .FALSE.
        set_via_acm_keyword   = .FALSE.
        line                  = ' '
@@ -215,6 +232,7 @@ CONTAINS
        cntl%thybrid        = .FALSE.
        cntl%tsmooth        = .FALSE.
        cntl%div_analytical = .TRUE.
+       cntl%use_scaled_hfx = .FALSE.
        cntl%thubb          = .FALSE.
        cntr%gceps          = 1.0e-8_real_8
        toldcode            = .FALSE.
@@ -266,8 +284,11 @@ CONTAINS
        tabx%rmaxxc=2.0_real_8
        tabx%rmaxbx=100.0_real_8
        !
-       ! If the DFT section is not there, we simply move on.
+       need_dft = .true.
+       ! dft section is not always needed with the MTS scheme
+       if (cntl%use_mts) need_dft = mts%low_level=='DFT' .or. mts%high_level=='DFT'
        !
+       ! If the DFT section is not there, we simply move on.
        !
        ierr = inscan(iunit,'&DFT')
        !
@@ -345,11 +366,13 @@ CONTAINS
                            __LINE__,__FILE__)
                       cp_xc_functional_env%via_libxc(i) = .FALSE.
                    ELSEIF (keyword_contains(next_words(first:last),'LXC',alias='LIBXC')) THEN
-                      IF (force_cpfunc) CALL stopgm(procedureN,' You may not choose a libxc functional when forcing CP/INTERNAL ',&
+                      IF (force_cpfunc) CALL stopgm(procedureN,&
+                           ' You may not choose a libxc functional when forcing CP/INTERNAL ',&
                            __LINE__,__FILE__)
                       cp_xc_functional_env%via_libxc(i) = .TRUE.
                    ELSE
-                      CALL stopgm(procedureN,' Unknown xc library (CP (INTERNAL) or LIBXC): '//TRIM(ADJUSTL(next_words(ia:ie))) ,&
+                      CALL stopgm(procedureN,&
+                           ' Unknown xc library (CP (INTERNAL) or LIBXC): '//TRIM(ADJUSTL(next_words(ia:ie))) ,&
                            __LINE__,__FILE__)
                    ENDIF
                    next_words = next_words(last+1:)
@@ -386,6 +409,35 @@ CONTAINS
                 cp_xc_kernel_n_lib_control = i-1
                 cp_xc_kernel_has_library   = .TRUE.
 
+             ELSEIF (keyword_contains(line,'MTS_LOW_FUNC_LIBRARY')) THEN
+                CALL xstring(line,first,last)
+                next_words = line(last+1:)
+                i = 1
+                mts_low_func_library_loop: DO
+                   CALL xstring(next_words,first,last)
+                   IF (last - first < 0) EXIT mts_low_func_library_loop
+                   IF (i > cp_xc_max_nbr_funcs) CALL stopgm(procedureN,' LIBRARY: Request exceeds cp_xc_max_nbr_funcs, &
+                                                                                  &increase its value in cp_xc_utils',&
+                                                             __LINE__,__FILE__)
+                   IF (keyword_contains(next_words(first:last),'CP',alias='INTERNAL')) THEN
+                      IF (force_libxc) CALL stopgm(procedureN,' You may not choose a CP MTS low functional when forcing libxc ',&
+                           __LINE__,__FILE__)
+                      cp_xc_mts_low_func_env%via_libxc(i) = .FALSE.
+                   ELSEIF (keyword_contains(next_words(first:last),'LXC',alias='LIBXC')) THEN
+                      IF (force_cpfunc) CALL stopgm(procedureN,&
+                           ' You may not choose a libxc MTS low functional when forcing CP/INTERNAL ',&
+                           __LINE__,__FILE__)
+                      cp_xc_mts_low_func_env%via_libxc(i) = .TRUE.
+                   ELSE
+                      CALL stopgm(procedureN,' Unknown xc library (CP (INTERNAL) or LIBXC): '//TRIM(ADJUSTL(next_words(ia:ie))) ,&
+                           __LINE__,__FILE__)
+                   ENDIF
+                   next_words = next_words(last+1:)
+                   i = i+1
+                ENDDO mts_low_func_library_loop
+                cp_xc_mts_low_func_n_lib_control = i-1
+                cp_xc_mts_low_func_has_library   = .TRUE.
+
              ELSEIF (keyword_contains(line,'SCALES',alias='SCALE',but_not='HFX')) THEN
                 CALL xstring(line,first,last)
                 next_words = line(last+1:)
@@ -421,6 +473,24 @@ CONTAINS
                 ENDDO kernel_scale_loop
                 cp_xc_kernel_n_scale_control = i-1
                 cp_xc_kernel_has_scales     = .TRUE.
+
+             ELSEIF (keyword_contains(line,'MTS_LOW_FUNC_SCALES',alias='MTS_LOW_FUNC_SCALE',but_not='HFX')) THEN
+                CALL xstring(line,first,last)
+                next_words = line(last+1:)
+                i=1
+                mts_low_func_scale_loop: DO 
+                   erread=.FALSE.
+                   CALL readsr(next_words,first,last,scalei,erread)
+                   IF (erread) EXIT mts_low_func_scale_loop
+                   IF (i > cp_xc_max_nbr_funcs) CALL stopgm(procedureN,' SCALES: Request exceeds cp_xc_max_nbr_funcs, &
+                                                                         &increase its value in cp_xc_utils',&
+                                                             __LINE__,__FILE__)
+                   cp_xc_mts_low_func_env%scales(i) = scalei
+                   first = last
+                   i = i+1
+                ENDDO mts_low_func_scale_loop
+                cp_xc_mts_low_func_n_scale_control = i-1
+                cp_xc_mts_low_func_has_scales     = .TRUE.
 
              ELSEIF (keyword_contains(line,'COMPATIBILITY',alias='OLD_DEFINITIONS')) THEN
                 cp_xc_functional_env%use_compatibility_mode = .TRUE.
@@ -582,6 +652,8 @@ CONTAINS
                    something_went_wrong = .true.
                    go_on_reading        = .false.
                 ENDIF
+             ELSEIF (keyword_contains(line,'SCALED',and='EXCHANGE',alias='SCEX')) THEN
+                cntl%use_scaled_hfx = .true.
              ELSEIF (keyword_contains(line,'HFX_DISTRIBUTION')) THEN
                 IF (keyword_contains(line,'BLOCK_CYCLIC')) THEN
                    hfxc5%hfx_distribution=hfx_dist_block_cyclic
@@ -613,6 +685,14 @@ CONTAINS
                 cp_xc_kernel_env%hfx_screening  = cp_xc_functional_env%hfx_screening 
                 cp_xc_kernel_env%hfx_constant   = cp_xc_functional_env%hfx_constant  
                 cp_xc_kernel_env%hfx_attenuated = cp_xc_functional_env%hfx_attenuated
+                !
+                cp_xc_mts_low_func_env%overwrite_hfx  = cp_xc_functional_env%overwrite_hfx     
+                cp_xc_mts_low_func_env%get_hfx        = cp_xc_functional_env%get_hfx           
+                cp_xc_mts_low_func_env%hfx_operator   = cp_xc_functional_env%hfx_operator      
+                cp_xc_mts_low_func_env%get_CAM_GGA    = cp_xc_functional_env%get_CAM_GGA       
+                cp_xc_mts_low_func_env%hfx_screening  = cp_xc_functional_env%hfx_screening 
+                cp_xc_mts_low_func_env%hfx_constant   = cp_xc_functional_env%hfx_constant  
+                cp_xc_mts_low_func_env%hfx_attenuated = cp_xc_functional_env%hfx_attenuated
                 !
                 ! Screening for HFX _ONLY_
              ELSEIF(keyword_contains(line,'SCREENED',and='EXCHANGE')) THEN
@@ -664,6 +744,7 @@ CONTAINS
                 func2%srxa      = cp_xc_functional_env%hfx_screening
                 func2%cam_alpha = cp_xc_functional_env%hfx_constant
                 func2%cam_beta  = cp_xc_functional_env%hfx_attenuated
+                !
                 cp_xc_kernel_env%overwrite_hfx  = cp_xc_functional_env%overwrite_hfx     
                 cp_xc_kernel_env%get_hfx        = cp_xc_functional_env%get_hfx           
                 cp_xc_kernel_env%hfx_operator   = cp_xc_functional_env%hfx_operator      
@@ -671,6 +752,14 @@ CONTAINS
                 cp_xc_kernel_env%hfx_screening  = cp_xc_functional_env%hfx_screening 
                 cp_xc_kernel_env%hfx_constant   = cp_xc_functional_env%hfx_constant  
                 cp_xc_kernel_env%hfx_attenuated = cp_xc_functional_env%hfx_attenuated
+                !
+                cp_xc_mts_low_func_env%overwrite_hfx  = cp_xc_functional_env%overwrite_hfx     
+                cp_xc_mts_low_func_env%get_hfx        = cp_xc_functional_env%get_hfx           
+                cp_xc_mts_low_func_env%hfx_operator   = cp_xc_functional_env%hfx_operator      
+                cp_xc_mts_low_func_env%get_CAM_GGA    = cp_xc_functional_env%get_CAM_GGA       
+                cp_xc_mts_low_func_env%hfx_screening  = cp_xc_functional_env%hfx_screening 
+                cp_xc_mts_low_func_env%hfx_constant   = cp_xc_functional_env%hfx_constant  
+                cp_xc_mts_low_func_env%hfx_attenuated = cp_xc_functional_env%hfx_attenuated
              ELSEIF(keyword_contains(line,'BECKE',and='BETA')) THEN
                 ! ..Parameter value for Becke exchange
                 READ(iunit,*,iostat=ierr) func2%bbeta
@@ -723,6 +812,17 @@ CONTAINS
                 CALL xstring(line,first,last)
                 next_words = line(last+1:)
                 READ(next_words,*, iostat=ierr) cp_xc_kernel_env%hfx_constant
+                IF (ierr /= 0) THEN
+                   error_message        = 'COULD NOT READ HFX SCALING VALUE'
+                   something_went_wrong = .true.
+                   go_on_reading        = .false.
+                ENDIF
+             ELSEIF (keyword_contains(line,'MTS_LOW_FUNC_HFX_SCALE',alias='MTS_LOW_FUNC_HFX_SCALES')) THEN
+                cp_xc_mts_low_func_env%overwrite_hfx = .TRUE.
+                cp_xc_mts_low_func_env%get_hfx       = .TRUE.
+                CALL xstring(line,first,last)
+                next_words = line(last+1:)
+                READ(next_words,*, iostat=ierr) cp_xc_mts_low_func_env%hfx_constant
                 IF (ierr /= 0) THEN
                    error_message        = 'COULD NOT READ HFX SCALING VALUE'
                    something_went_wrong = .true.
@@ -811,10 +911,14 @@ CONTAINS
                 func3%pcgc   = 1.0_real_8-a3par
                 func3%phfx   = a1par
                 func1%mhfx   = mhfx_is_hfx
-             ELSEIF (keyword_contains(line,'FUNCTIONAL')) THEN
+             ELSEIF (keyword_contains(line,'FUNCTIONAL',alias='MTS_HIGH_FUNC')) THEN
                 functional_is_defined = .true.
                 xc_functional  = line
                 get_functional = .true.
+             ELSEIF (keyword_contains(line,'MTS_LOW_FUNC')) THEN
+                functional_is_defined = .true.
+                xc_mts_low_func  = line
+                get_mts_low_func = .true.
              ELSEIF (keyword_contains(line,'REFUNCT')) THEN
                 treff=.TRUE.
                 tr_x=0
@@ -997,7 +1101,7 @@ __LINE__,__FILE__)
              something_went_wrong = .true.
              error_message        = 'XC_DRIVER: ACM HAS TO BE SET UP MANUALLY VIA KEYWORD "SCALES"'
           END IF
-       ELSE
+       ELSE IF (need_dft) then
            something_went_wrong = .true.
            error_message        = 'MISSING &DFT SECTION - SECTION MANDATORY'
        ENDIF
@@ -1020,7 +1124,15 @@ __LINE__,__FILE__)
        !
        if (get_functional) CALL set_xc_functional(xc_functional)
        if (get_kernel)     CALL set_xc_kernel(xc_kernel)
+       if (get_mts_low_func)  CALL set_xc_mts_low_func(xc_mts_low_func)
 
+       ! 
+       ! MTS: set names for high and low level functionals in mts structure
+       ! 
+       if (cntl%use_mts) then
+          if (mts%low_level=='DFT') mts%low_dft_func = xc_mts_low_func
+          if (mts%high_level=='DFT') mts%high_dft_func = xc_functional
+       end if
        !
        ! Check for conflicting options and do some variable magic
        !
@@ -1031,16 +1143,18 @@ __LINE__,__FILE__)
        !
        IF (cntl%use_xc_driver) THEN
 
-          ! Sanity check
-          IF ((cp_xc_functional_has_scales) .and. &
-              (cp_xc_functional_n_scale_control /= cp_xc_functional_env%n_funcs)) CALL stopgm(procedureN,'Number '&
-              &//'of scaling values and functionals does not match',& 
-              __LINE__,__FILE__)
-          IF ((cp_xc_functional_has_library) .and. &
-              (cp_xc_functional_n_lib_control /= cp_xc_functional_env%n_funcs)) CALL stopgm(procedureN,'Number ' &
-              //'of library entries and functionals does not match',& 
-              __LINE__,__FILE__)
-          CALL cp_xc_functional_env%report( func2%salpha, cntr%gceps, output_unit )
+          ! Sanity checks
+          IF (cp_xc_functional_env%init) THEN
+             IF ((cp_xc_functional_has_scales) .and. &
+                (cp_xc_functional_n_scale_control /= cp_xc_functional_env%n_funcs)) CALL stopgm(procedureN,'Number '&
+                &//'of scaling values and functionals does not match',& 
+                __LINE__,__FILE__)
+             IF ((cp_xc_functional_has_library) .and. &
+                (cp_xc_functional_n_lib_control /= cp_xc_functional_env%n_funcs)) CALL stopgm(procedureN,'Number ' &
+                //'of library entries and functionals does not match',& 
+                __LINE__,__FILE__)
+             CALL cp_xc_functional_env%report( func2%salpha, cntr%gceps, output_unit )
+          ENDIF
 
           IF (cp_xc_kernel_env%init) THEN
              IF ((cp_xc_kernel_has_scales) .and. &
@@ -1053,6 +1167,19 @@ __LINE__,__FILE__)
                  __LINE__,__FILE__)
 
              CALL cp_xc_kernel_env%report( func2%salpha, cntr%gceps, output_unit ) 
+          ENDIF
+
+          IF (cp_xc_mts_low_func_env%init) THEN
+             IF ((cp_xc_mts_low_func_has_scales) .and. &
+                 (cp_xc_mts_low_func_n_scale_control /= cp_xc_mts_low_func_env%n_funcs)) CALL stopgm(procedureN,'Number '&
+                 &//'of scaling values and MTS low functionals does not match',& 
+                 __LINE__,__FILE__)
+             IF ((cp_xc_mts_low_func_has_library) .and. &
+                 (cp_xc_mts_low_func_n_lib_control /= cp_xc_mts_low_func_env%n_funcs)) CALL stopgm(procedureN,'Number ' &
+                 //'of library entries and MTS low functionals does not match',& 
+                 __LINE__,__FILE__)
+
+             CALL cp_xc_mts_low_func_env%report( func2%salpha, cntr%gceps, output_unit ) 
           ENDIF
 
        ELSE
@@ -1088,8 +1215,21 @@ __LINE__,__FILE__)
        IF (cp_xc_functional_env%init) THEN
           CALL cp_xc_functional%create( cp_xc_functional_env )
        ELSE
-          CALL stopgm(procedureN,'cp_xc_functional_env has not been initialised',&
-__LINE__,__FILE__)
+          IF (cntl%use_mts .and. mts%high_level/='DFT') THEN
+             !
+             ! If the functional environment is not set, we set functional = mts_low_func
+             !
+             IF (cp_xc_mts_low_func_env%init) THEN
+                CALL cp_xc_functional%create( cp_xc_mts_low_func_env )
+             ELSE
+                CALL stopgm(procedureN,'cp_xc_mts_low_func_env has not been initialised',&
+                   __LINE__,__FILE__)
+             ENDIF
+          ELSE
+
+             CALL stopgm(procedureN,'cp_xc_functional_env has not been initialised',&
+                __LINE__,__FILE__)
+          END IF
        ENDIF
        !
        IF (cp_xc_kernel_env%init) THEN
@@ -1100,6 +1240,15 @@ __LINE__,__FILE__)
           !
           CALL cp_xc_kernel%create( cp_xc_functional_env )
        ENDIF
+       !
+       if (cntl%use_mts .and. mts%low_level == 'DFT') then
+          IF (cp_xc_mts_low_func_env%init) THEN
+             CALL cp_xc_mts_low_func%create( cp_xc_mts_low_func_env )
+          ELSE
+             CALL stopgm(procedureN,'cp_xc_mts_low_func_env has not been initialised',&
+                __LINE__,__FILE__)
+          ENDIF
+       end if
        !
        ! Copy back values from cp_xc types into ex-COMMONs
        !
@@ -1129,7 +1278,7 @@ __LINE__,__FILE__)
           DO
              CALL xstring(next_words,first,last)
              IF (last-first < 0) EXIT
-             IF (i > cp_xc_max_nbr_funcs) CALL stopgm(procedureN,' FUNCTIONAL: Request exceeds cp_xc_functional_max_nbr_funcs, &
+             IF (i > cp_xc_max_nbr_funcs) CALL stopgm(procedureN,' FUNCTIONAL: Request exceeds cp_xc_max_nbr_funcs, &
                                                                   &increase its value in cp_xc_utils',&
                                                       __LINE__,__FILE__)
              cp_xc_functional_env%funcs(i) = next_words(first:last)
@@ -1672,6 +1821,84 @@ __LINE__,__FILE__)
 
     END SUBROUTINE set_xc_functional
     ! ==--------------------------------------------------------------==
+    SUBROUTINE set_xc_mts_low_func(line)
+       !
+       ! TODO: Once we get rid of the old xc code, move to cp_xc_utils
+
+
+       CHARACTER(len=*), INTENT(in) :: line
+       
+       IF( cntl%use_xc_driver ) THEN
+
+          cp_xc_mts_low_func_env%set_name  = 'MTS LOW FUNCTIONAL EXCHANGE-CORRELATION'
+          cp_xc_mts_low_func_env%init = .TRUE.
+          cp_xc_mts_low_func_env%polarized = cntl%tlsd
+          CALL xstring(line,first,last)
+          next_words = line(last+1:)
+          i=1
+          DO
+             CALL xstring(next_words,first,last)
+             IF (last-first < 0) EXIT
+             IF (i > cp_xc_max_nbr_funcs) CALL stopgm(procedureN,' FUNCTIONAL: Request exceeds cp_xc_max_nbr_funcs, &
+                                                                  &increase its value in cp_xc_utils',&
+                                                      __LINE__,__FILE__)
+             cp_xc_mts_low_func_env%funcs(i) = next_words(first:last)
+             next_words = next_words(last+1:)
+             i = i+1
+          ENDDO
+          cp_xc_mts_low_func_env%n_funcs = i-1
+          !
+          ! these are always 0 for xc_driver functionals
+          !
+          func1%mfxcc = mfxcc_is_skipped
+          func1%mfxcx = mfxcx_is_skipped
+
+          !
+          ! Add HFX for hybrids
+          !
+          CALL cp_xc_mts_low_func_env%set_hybrid_defaults(default_divergence=cntl%div_analytical)
+
+          !
+          ! Postprocess the VDW string for Grimme
+          !
+          IF (cp_xc_mts_low_func_env%n_funcs == 1) THEN
+             IF     (cp_xc_mts_low_func_env%funcs(1) == 'GGA_XC_BLYP') THEN
+                empvdwc%dft_func='BLYP'
+             ELSEIF (cp_xc_mts_low_func_env%funcs(1) == 'HYB_GGA_XC_B3LYP') THEN
+                empvdwc%dft_func='B3LYP'
+             ELSEIF (cp_xc_mts_low_func_env%funcs(1) == 'GGA_XC_PBE') THEN
+                empvdwc%dft_func='PBE'
+             ELSEIF (cp_xc_mts_low_func_env%funcs(1) == 'HYB_GGA_XC_PBE0') THEN
+                empvdwc%dft_func='PBE0'
+             ELSEIF (cp_xc_mts_low_func_env%funcs(1) == 'GGA_XC_BP' .OR. &
+                     cp_xc_mts_low_func_env%funcs(1) == 'GGA_XC_BP86') THEN
+                empvdwc%dft_func='BP86'
+             ELSEIF (cp_xc_mts_low_func_env%funcs(1) == 'MGGA_XC_TPSS') THEN
+                empvdwc%dft_func='TPSS'
+             ENDIF
+          ELSEIF (cp_xc_mts_low_func_env%n_funcs == 2) THEN
+             IF     ( any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_X_B88') .AND. &
+                      any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_C_LYP') ) THEN
+                empvdwc%dft_func='BLYP'
+             ELSEIF ( any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_X_PBE') .AND. &
+                      any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_C_PBE') ) THEN
+                empvdwc%dft_func='PBE'
+             ELSEIF ( any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_X_B88') .AND. &
+                      any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_C_P86') ) THEN
+                empvdwc%dft_func='BP86'
+             ELSEIF ( any(cp_xc_mts_low_func_env%funcs(:) == 'MGGA_X_TPSS') .AND. &
+                      any(cp_xc_mts_low_func_env%funcs(:) == 'MGGA_C_TPSS') ) THEN
+                empvdwc%dft_func='TPSS'
+             ENDIF
+          ENDIF
+
+       ELSE
+          CALL stopgm(procedureN,' MTS: low functional has to be set up with XC_DRIVER',&
+                                                      __LINE__,__FILE__)
+       ENDIF
+
+    END SUBROUTINE set_xc_mts_low_func
+    ! ==--------------------------------------------------------------==
     SUBROUTINE set_xc_kernel(line)
 
        CHARACTER(len=*), INTENT(in) :: line
@@ -1855,6 +2082,26 @@ __LINE__,__FILE__)
                __LINE__,__FILE__)
           cntl%div_analytical = .FALSE.
        ENDIF
+       !
+       ! MTS check
+       if (cntl%use_mts) then
+          if (.not. cntl%use_xc_driver .and. need_dft) then
+             call stopgm(procedureN,'MTS only comptatible with XC_DRIVER in DFT section',&
+                __LINE__,__FILE__)
+          end if
+
+          if ( (mts%high_level=='DFT') .and. (.not. cp_xc_functional_env%init) ) then
+             write(output_unit,*) 'ERROR: add FUNCTIONAL or MTS_HIGH_FUNC keyword to DFT section'
+             call stopgm(procedureN,'MTS set up requires a functional for the high level forces',&
+                __LINE__,__FILE__)
+          end if
+
+          if ( (mts%low_level=='DFT') .and. (.not. cp_xc_mts_low_func_env%init) ) then
+             write(output_unit,*) 'ERROR: add MTS_LOW_FUNC keyword to DFT section'
+             call stopgm(procedureN,'MTS set up requires a functional for the low level forces',&
+                __LINE__,__FILE__)
+          end if
+       end if
 
     END SUBROUTINE check_options
     ! ==--------------------------------------------------------------==
@@ -1887,6 +2134,13 @@ __LINE__,__FILE__)
                 WRITE(output_unit,'(A)') ' USE DYNAMIC DISTRIBUTION'
              END SELECT
              WRITE(output_unit,'(A,T62,I4)') ' BLOCK SIZE ',hfxc5%hfx_block_size
+          ENDIF
+          IF (cntl%use_scaled_hfx) THEN
+             WRITE(output_unit,'(1X,A)') 'USE COORDINATE-SCALED EXACT EXCHANGE (ScEX) FOR ISOLATED SYSTEMS'
+             WRITE(output_unit,'(1X,A)') 'AND THE TUCKERMAN-MARTYNA POISSON SOLVER. PLEASE CITE:'
+             WRITE(output_unit,'(1X,A)') '                               M.P. Bircher and U. Rothlisberger'
+             WRITE(output_unit,'(1X,A)') '                J. Phys. Chem. Lett., 2018, 9 (14), pp 3886–3890'
+             WRITE(output_unit,'(1X,A)') '                                DOI: 10.1021/acs.jpclett.8b01620'
           ENDIF
        ENDIF
 
@@ -2283,6 +2537,8 @@ __LINE__,__FILE__)
        CALL mp_bcast_byte(cp_xc_functional_env, size_in_bytes_of(cp_xc_functional_env),&
             parai%io_source,parai%cp_grp)
        CALL mp_bcast_byte(cp_xc_kernel_env, size_in_bytes_of(cp_xc_kernel_env),&
+            parai%io_source,parai%cp_grp)
+       CALL mp_bcast_byte(cp_xc_mts_low_func_env, size_in_bytes_of(cp_xc_mts_low_func_env),&
             parai%io_source,parai%cp_grp)
        CALL mp_bcast_byte(cp_gga_x_param, size_in_bytes_of(cp_gga_x_param),parai%io_source,parai%cp_grp)
        CALL mp_bcast_byte(cp_gga_c_param, size_in_bytes_of(cp_gga_c_param),parai%io_source,parai%cp_grp)

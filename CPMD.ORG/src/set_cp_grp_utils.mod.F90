@@ -14,8 +14,7 @@ MODULE set_cp_grp_utils
                                              mp_get_version,&
                                              mp_max,&
                                              mp_sum,&
-                                             mp_sync,&
-                                             mp_split_type
+                                             mp_sync
   USE parac,                           ONLY: parai,&
                                              paral
   USE pimd,                            ONLY: grandparent
@@ -42,7 +41,7 @@ CONTAINS
                                                 ierr, iprc, subversion, &
                                                 version
     INTEGER, ALLOCATABLE, DIMENSION(:)       :: cp_nolist, cp_nplist
-    character(80) :: hostname
+
 ! ==--------------------------------------------------------------==
 ! 
 ! check that there is enough processes for the number of groups
@@ -78,9 +77,6 @@ CONTAINS
     ALLOCATE(cp_nolist(parai%cp_nproc),cp_nplist(parai%cp_nproc),stat=ierr)
     IF (ierr.NE.0) CALL stopgm(proceduren,'allocation problem',& 
          __LINE__,__FILE__)
-!    CALL mp_cart(mp_comm_world,cp_npgrp,parai%cp_nogrp,cp_nplist,cp_nolist,&
-!         parai%allgrp,parai%cp_inter_grp)
-!maps groups close
     CALL mp_cart(mp_comm_world,parai%cp_nogrp,cp_npgrp,cp_nolist,cp_nplist,&
          parai%cp_inter_grp,parai%allgrp)
     DEALLOCATE(cp_nolist,cp_nplist,stat=ierr)
@@ -131,15 +127,6 @@ CONTAINS
     cp_grp_get_cp_rank(parai%me,parai%cp_inter_me) = parai%cp_me
     CALL mp_sum(cp_grp_get_cp_rank,parai%cp_nproc,parai%cp_grp)
 
-    ! set the node group
-    
-    CALL mp_split_type(0,parai%allgrp,parai%node_grp)
-    CALL mp_environ(parai%node_grp,parai%node_nproc,parai%node_me)
-
-    ! set node group splitted from cp_inter_grp -> cp_group synchronization via mpi shared memory window!
-    CALL mp_split_type(0,parai%cp_inter_grp,parai%cp_inter_node_grp)
-    CALL mp_environ(parai%cp_inter_node_grp,parai%cp_inter_node_nproc,parai%cp_inter_node_me)
-
     ! 
     ! some tests
     ! 
@@ -161,13 +148,7 @@ CONTAINS
        WRITE(6,'(1x,a,i0,a,i0)') 'MPI version of the standard: ',version, '.', subversion
        WRITE(6,'(1x,2(a,i0),a)') 'cp_groups: we are using a ',&
             parai%cp_nogrp,' x ',cp_npgrp,' grid (groups x nprocs).'
-       WRITE(6,'(1x,a,1x,i0)') 'node_grp nproc:',parai%node_nproc
-       WRITE(6,'(1x,a,1x,i0)') 'cp_inter_node_grp nproc:',parai%cp_inter_node_nproc
     ENDIF
-    IF (paral%parent) THEN
-       CALL hostnm(hostname)
-       WRITE(6,'(1x,a,i0,1x,a)') 'global rank:',parai%cp_me,hostname
-    END IF
 
     IF (PRINT_GROUP_INFOS) THEN
        DO iprc=0,parai%cp_nproc-1

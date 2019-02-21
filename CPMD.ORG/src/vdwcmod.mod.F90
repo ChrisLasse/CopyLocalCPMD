@@ -1,4 +1,3 @@
-#include "cpmd_global.h"
 MODULE vdwcmod
   USE kinds,                           ONLY: real_8
 
@@ -11,9 +10,6 @@ MODULE vdwcmod
      LOGICAL :: dcacp
      LOGICAL :: vdwc
      LOGICAL :: vdwd
-#ifdef _HAS_LIBGRIMMEVDW
-     LOGICAL :: grimme
-#endif
   END TYPE vdwl_t
   TYPE(vdwl_t), SAVE :: vdwl
   TYPE :: vdwi_t
@@ -103,7 +99,7 @@ MODULE vdwcmod
   END TYPE vdwwfr_t
   TYPE(vdwwfr_t) :: vdwwfr
 
-  INTEGER, DIMENSION(:,:), ALLOCATABLE :: npt12!(2,0:maxcpu)
+  INTEGER, DIMENSION(:,:), ALLOCATABLE :: npt12!(0:maxcpu,2)
   ! ==================================================================
 
 

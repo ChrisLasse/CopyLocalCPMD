@@ -14,7 +14,6 @@ MODULE control_def_utils
                                              nbc
   USE cotr,                            ONLY: sdpl
   USE cp_cuda_types,                   ONLY: cp_cuda_env
-  USE fft,                             ONLY: blocking_fft,a2a_msgsize
   USE fileopenmod,                     ONLY: fo_info
   USE fint,                            ONLY: fint1,&
                                              fint4,&
@@ -115,6 +114,7 @@ CONTAINS
     cntl%tqmmech=.FALSE.
     cntl%tsampl=.FALSE.
     cntl%proper=.FALSE.
+    cntl%use_mts=.false.
     restart1%restart=.FALSE.
     cntl%cnstmd=.TRUE.
     cntl%gaudyn=.FALSE.
@@ -663,15 +663,6 @@ CONTAINS
     iface1%intwrite = .FALSE.
     intfn = "interface.bin"
     ! ==--------------------------------------------------------------==
-    blocking_fft=.FALSE.
-    a2a_msgsize=256
-    cnti%rnlsm1_bc=3
-    cnti%rnlsm2_bc=3
-    cntr%rnlsm1_b1=0.5
-    cntr%rnlsm1_b2=0.3
-    cntr%rnlsm2_b1=0.5
-    cntr%rnlsm2_b2=0.3
-    cnti%rnlsm_autotune_maxit=0
     RETURN
   END SUBROUTINE control_def
   ! ==================================================================

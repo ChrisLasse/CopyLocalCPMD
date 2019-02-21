@@ -100,13 +100,16 @@ MODULE md_driver
   USE meta_multiple_walkers_utils,     ONLY: mw_assign_filenames,&
                                              mw_filename
   USE mfep,                            ONLY: mfepi
-  USE mm_extrap,                       ONLY: cold,&
-                                             scold
+  USE mm_extrap,                       ONLY: cold , cold_high, &
+                                             numcold, numcold_high, &
+                                             nnow, nnow_high
   USE moverho_utils,                   ONLY: give_scr_moverho,&
                                              moverho
   USE mp_interface,                    ONLY: mp_bcast,&
                                              mp_sum,&
                                              mp_sync
+  USE interface_utils,                 ONLY: get_external_forces
+  USE mts_utils,                       ONLY: mts, set_mts_functional
   USE mw,                              ONLY: mwi,&
                                              tmw
   USE nlcc,                            ONLY: corel
@@ -130,7 +133,8 @@ MODULE md_driver
   USE posupi_utils,                    ONLY: posupi
   USE printave_utils,                  ONLY: paccc
   USE printp_utils,                    ONLY: printp,&
-                                             printp2
+                                             printp2,&
+                                             print_mts_forces
   USE proppt_utils,                    ONLY: give_scr_propcal,&
                                              propcal
   USE pslo,                            ONLY: pslo_com
@@ -178,7 +182,7 @@ MODULE md_driver
        cprint, irec_ac, irec_nop1, irec_nop2, irec_nop3, irec_nop4, irec_vel, &
        restart1, rout1, store1
   USE system,                          ONLY: &
-       cnti, cntl, cntr, fpar, maxsys, nacc, ncpw, nkpt, restf
+       cnti, cntl, cntr, fpar, maxsys, nacc, ncpw, nkpt, restf, iatpt
   USE td_utils,                        ONLY: initialize_ehrenfest_dyn
   USE testex_utils,                    ONLY: testex,&
                                              testex_mw
@@ -232,6 +236,16 @@ CONTAINS
     REAL(real_8), ALLOCATABLE :: eigs(:), eigv(:,:), norms(:), rhoe(:,:), &
       rinp(:), rm1(:), scr(:), soc_array(:), taui(:,:,:), tauio(:,:), &
       taur(:,:,:)
+    ! MTS[
+    ! number of inner steps between two large steps and total number of large steps
+    integer :: n_inner_steps, n_large_steps
+    ! logical to know if the current step is a large step in the MTS scheme
+    logical :: mts_large_step, mts_pure_dft
+    ! high level ionic forces
+    real(real_8), allocatable :: fion_high(:,:,:)
+    ! high level wave-function parameters
+    complex(real_8), allocatable :: c0_high(:,:,:)
+    ! MTS]
 
     CALL tiset(procedureN,isub)
     IF (cntl%tddft.AND.cntl%tresponse) CALL stopgm("MDDIAG",&
@@ -240,6 +254,26 @@ CONTAINS
     ! ==--------------------------------------------------------------==
 
     time1 =m_walltime()
+
+    mts_pure_dft = .false.
+    if (cntl%use_mts) then
+
+       ! allocate high level forces array
+       allocate(fion_high(3,maxsys%nax,maxsys%nsx),stat=ierr)
+       if(ierr/=0) call stopgm(proceduren,'allocation problem: fion_high',&
+          __LINE__,__FILE__)
+       call zeroing(fion_high)
+
+       ! allocate high level WF param array only if needed
+       mts_pure_dft = ( (mts%low_level == 'DFT') .and. (mts%high_level == 'DFT') ) 
+       if (mts_pure_dft) then
+          allocate( c0_high(size(c0,1),size(c0,2),size(c0,3)), stat=ierr )
+          if(ierr/=0) call stopgm(proceduren,'allocation problem : c0_high',&
+             __LINE__,__FILE__)
+       end if
+
+    end if 
+
     ! EHR[
     IF (cntl%tmdeh) THEN
        ALLOCATE(ch(nkpt%ngwk,crge%n,1),STAT=ierr)
@@ -568,15 +602,20 @@ CONTAINS
     IF (cntl%textrap) THEN
        lenext=2*nkpt%ngwk*nstate*nkpt%nkpts*cnti%mextra
        rmem = 16._real_8*lenext*1.e-6_real_8
-       ALLOCATE(cold(nkpt%ngwk,crge%n,nkpt%nkpnt,cnti%mextra),STAT=ierr)
+       ALLOCATE(cold(nkpt%ngwk,crge%n,nkpt%nkpnt,lenext/(crge%n*nkpt%ngwk*nkpt%nkpnt)),STAT=ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
             __LINE__,__FILE__)
-       IF(pslo_com%tivan)THEN
-          ALLOCATE(scold(nkpt%ngwk,crge%n,nkpt%nkpnt,cnti%mextra),STAT=ierr)
-          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+       call zeroing(cold)
+
+       ! allocate array for high level WF extrapolation
+       if (mts_pure_dft) then
+          allocate(cold_high(nkpt%ngwk,crge%n,nkpt%nkpnt,lenext/(crge%n*nkpt%ngwk*nkpt%nkpnt)),stat=ierr)
+          if(ierr/=0) call stopgm(proceduren,'allocation problem: cold_high',&
                __LINE__,__FILE__)
-          rmem=rmem*2.0_real_8
-       END IF
+          call zeroing(cold_high)
+          rmem=rmem*2._real_8
+       endif
+
        IF (paral%io_parent)&
             WRITE(6,'(A,T51,F8.3,A)') ' MDDIAG| '&
             // 'EXTRAPOLATION WAVEFUNCTION HISTORY TAKES ',rmem,' MBYTES'
@@ -833,23 +872,28 @@ CONTAINS
     ifcalc=0
     IF (cntl%bsymm) THEN
        CALL bs_forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
-            rhoe,psi,&
-            tau0,velp,taui,fion,ifcalc,&
-            irec,.TRUE.,.TRUE.)
-    ELSE
-       ! EHR[
-       IF (cntl%tmdeh) THEN
-          CALL forces_prop(nstate,c0,ch,c2,cm,sc0,cm(nx:),vpp,eigv,&
-               rhoe,psi,&
-               tau0,velp,taui,fion,ifcalc,&
-               irec,.TRUE.,.TRUE.)
-       ELSE
-          CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
-               rhoe,psi,&
-               tau0,velp,taui,fion,ifcalc,&
-               irec,.TRUE.,.TRUE.)
-       ENDIF
+          rhoe,psi,&
+          tau0,velp,taui,fion,ifcalc,&
+          irec,.TRUE.,.TRUE.)
+    ELSE IF (cntl%tmdeh) THEN ! EHR[
+       CALL forces_prop(nstate,c0,ch,c2,cm,sc0,cm(nx:),vpp,eigv,&
+          rhoe,psi,&
+          tau0,velp,taui,fion,ifcalc,&
+          irec,.TRUE.,.TRUE.)
        ! EHR]
+
+    ELSE IF (cntl%use_mts) then
+       n_inner_steps=0
+       n_large_steps=0
+       call get_mts_forces(.true.,.true.,n_inner_steps,n_large_steps,&
+          mts_pure_dft,fion_high,c0_high,cold_high,nnow_high,numcold_high,infi,&
+          nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
+          rhoe,psi,tau0,velp,taui,fion,ifcalc,irec,.true.,.true.)
+
+    else 
+       CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
+          rhoe,psi,tau0,velp,taui,fion,ifcalc,irec,.TRUE.,.TRUE.)
+
     ENDIF
     IF (cntl%tddft) THEN
        CALL lr_tddft(c0(:,:,1),c1,c2(:,:,1),sc0,rhoe,psi,tau0,fion,eigv,&
@@ -929,12 +973,25 @@ CONTAINS
     CALL hpm_start('MD LOOP')
 #endif
     infi=0
+    n_inner_steps=0
+    n_large_steps=0
     nfimin=iteropt%nfi+1
     nfimax=iteropt%nfi+cnti%nomore
     DO loopnfi=nfimin,nfimax
        time1=m_walltime()
        CALL mp_sync(parai%cp_grp)
        infi=infi+1
+
+       ! MTS time step counters
+       n_inner_steps=n_inner_steps+1
+       mts_large_step=.false.
+       ! check if it is a large step
+       if (n_inner_steps==mts%timestep_factor) then
+          mts_large_step=.true.
+          n_large_steps=n_large_steps+1
+          n_inner_steps=0
+       endif
+
        ! ..TSH[
        IF (tshl%tdtully) tshi%shstep=tshi%shstep+1
        ! ..TSH]
@@ -948,13 +1005,15 @@ CONTAINS
           hubbu%tpom=.False.
        ENDIF
        ! ANNEALING
-       CALL anneal(velp,c2,nstate,scr)
-       CALL berendsen(velp,c2,nstate,scr,0.0_real_8,0.0_real_8)
-       ! UPDATE NOSE THERMOSTATS
-       CALL noseup(velp,c2,nstate,ipwalk)
-       ! FIRST HALF OF GLE EVOLUTION
-       CALL gle_step
-
+       ! thermostats only if 1) standard dynamics 2) larger MTS step
+       if ( .not.cntl%use_mts .or. mts_large_step ) then
+          CALL anneal(velp,c2,nstate,scr)
+          CALL berendsen(velp,c2,nstate,scr,0.0_real_8,0.0_real_8)
+          ! UPDATE NOSE THERMOSTATS
+          CALL noseup(velp,c2,nstate,ipwalk)
+          ! FIRST HALF OF GLE EVOLUTION
+          CALL gle_step
+       endif 
        ! SUBTRACT CENTER OF MASS VELOCITY
        IF (paral%io_parent.AND.comvl%subcom) CALL comvel(velp,vcmio,.TRUE.)
        ! SUBTRACT ROTATION AROUND CENTER OF MASS
@@ -996,7 +1055,7 @@ CONTAINS
        ropt_mod%calste=cntl%tpres.AND.MOD(iteropt%nfi,cnti%npres).EQ.0
        IF (cntl%textrap) THEN
           ! Extrapolate wavefunctions
-          CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra,.FALSE.)
+          CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
        ENDIF
        IF (cntl%tlanc) nx=1
        IF (cntl%tdavi) nx=cnti%ndavv*nkpt%nkpnt+1
@@ -1014,38 +1073,34 @@ CONTAINS
 
           ! switch off the info printing
           dmbi%inter_pt_firstcall=.FALSE.
-       ELSE
+       ELSE 
+
           IF (cntl%bsymm) THEN
              CALL bs_forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
-                  rhoe,psi,&
-                  taup,velp,taui,fion,ifcalc,&
-                  irec,.TRUE.,.FALSE.)
+                rhoe,psi,&
+                taup,velp,taui,fion,ifcalc,&
+                irec,.TRUE.,.FALSE.)
+          ELSE IF (cntl%tmdeh) THEN
+             CALL forces_prop(nstate,c0,ch,c2,cm,sc0,cm(nx:),vpp,eigv,&
+                rhoe,psi,&
+                tau0,velp,taui,fion,ifcalc,&
+                irec,.TRUE.,.TRUE.)
+
+          ELSE IF (cntl%use_mts) then
+             call get_mts_forces(mts_large_step,.false.,n_inner_steps,n_large_steps,&
+                mts_pure_dft,fion_high,c0_high,cold_high,nnow_high,numcold_high,infi,&
+                nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
+                rhoe,psi,taup,velp,taui,fion,ifcalc,irec,.true.,.false.)
+
           ELSE
-             ! EHR[
-             IF (cntl%tmdeh) THEN
-                CALL forces_prop(nstate,c0,ch,c2,cm,sc0,cm(nx:),vpp,eigv,&
-                     rhoe,psi,&
-                     tau0,velp,taui,fion,ifcalc,&
-                     irec,.TRUE.,.TRUE.)
-             ELSE
-                CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
-                     rhoe,psi,&
-                     taup,velp,taui,fion,ifcalc,&
-                     irec,.TRUE.,.FALSE.)
-             ENDIF
-             ! call debug_eh
-             ! EHR]
+             CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
+                rhoe,psi,taup,velp,taui,fion,ifcalc,irec,.TRUE.,.FALSE.)
           ENDIF
           IF (cntl%tddft) THEN
              CALL lr_tddft(c0(:,:,1),c1,c2(:,:,1),sc0,rhoe,psi,taup,fion,eigv,&
                   nstate,.TRUE.,td01%ioutput)
           ENDIF
        ENDIF
-       IF (cntl%textrap) THEN
-          ! Extrapolate wavefunctions
-          CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra,.TRUE.)
-       ENDIF
-
        ! ..TSH[
        IF (tshl%tdtully) THEN 
           ![ EXACT FACTORIZATION
@@ -1181,14 +1236,17 @@ CONTAINS
        ! SUBTRACT CENTER OF MASS VELOCITY
        IF (paral%io_parent.AND.comvl%subcom) CALL comvel(velp,vcmio,.FALSE.)
 
-       ! SECOND HALF OF GLE EVOLUTION
-       CALL gle_step
+       ! thermostats only if 1) standard dynamics 2) larger MTS step
+       if ( .not.cntl%use_mts .or. mts_large_step ) then
+          ! SECOND HALF OF GLE EVOLUTION
+          CALL gle_step
 
-       ! UPDATE NOSE THERMOSTATS
-       CALL noseup(velp,c2,nstate,ipwalk)
-       CALL berendsen(velp,c2,nstate,scr,0.0_real_8,0.0_real_8)
-       ! ANNEALING
-       CALL anneal(velp,c2,nstate,scr)
+          ! UPDATE NOSE THERMOSTATS
+          CALL noseup(velp,c2,nstate,ipwalk)
+          CALL berendsen(velp,c2,nstate,scr,0.0_real_8,0.0_real_8)
+          ! ANNEALING
+          CALL anneal(velp,c2,nstate,scr)
+       endif
        IF (paral%io_parent) THEN
           CALL ekinpp(ekinp,velp)
           IF (lmeta%lextlagrange.AND. ltcglobal) THEN
@@ -1523,16 +1581,24 @@ CONTAINS
     DEALLOCATE(scr,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
          __LINE__,__FILE__)
-    IF (cntl%textrap) THEN
-       DEALLOCATE(cold,STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
-            __LINE__,__FILE__)
-       IF(pslo_com%tivan)THEN
-          DEALLOCATE(scold,STAT=ierr)
-          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
-               __LINE__,__FILE__)
-       END IF
-    END IF
+    IF (cntl%textrap) DEALLOCATE(cold,STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+         __LINE__,__FILE__)
+    if (cntl%use_mts) then
+       deallocate(fion_high,stat=ierr)
+       if(ierr/=0) call stopgm(proceduren,'deallocation problem: fion_high',&
+          __LINE__,__FILE__)
+       if (mts_pure_dft) then
+          deallocate(c0_high,stat=ierr)
+          if(ierr/=0) call stopgm(proceduren,'deallocation problem: c0_high',&
+             __LINE__,__FILE__)
+          if (cntl%textrap) then 
+             deallocate(cold_high,stat=ierr)
+             if(ierr/=0) call stopgm(proceduren,'deallocation problem: cold_high',&
+                __LINE__,__FILE__)
+          end if
+       end if
+    endif 
     IF (comvl%tsubrot) DEALLOCATE(tauio,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
          __LINE__,__FILE__)
@@ -1621,6 +1687,138 @@ CONTAINS
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==
   END SUBROUTINE mddiag
+
+
+  ! Purpose: returns effective ionic forces in MTS algorithm
+  !      The forces are either from the low level or from a 
+  !      combination of high and low levels.
+  !
+  ! Author: Pablo Baudin
+  ! Date: May 2018
+  subroutine get_mts_forces(large_step,initialization,n_inner_steps, n_large_steps,&
+        mts_pure_dft,fion_high,c0_high,cold_high,nnow_high,numcold_high,infi,&
+        nstate,c0,c2,cr,csc0,cscr,vpp,eigv,&
+        rhoe,psi,tau0,velp,taui,fion,ifcalc,irec,tfor,tinfo)
+
+     implicit none
+
+     logical, intent(in) :: large_step, initialization, mts_pure_dft
+     integer, intent(inout) :: n_inner_steps
+     integer, intent(in) :: n_large_steps
+     logical :: tfor, tinfo
+     integer :: nnow_high, numcold_high
+     integer :: infi, nstate
+     integer :: ifcalc, irec(:)
+     real(real_8), allocatable :: fion_high(:,:,:)
+     real(real_8) :: vpp(ncpw%ngw), eigv(*), rhoe(:,:)
+     real(real_8) :: tau0(:,:,:), velp(:,:,:), taui(:,:,:), fion(:,:,:)
+     complex(real_8), allocatable :: c0_high(:,:,:), cold_high(:,:,:,:)
+     complex(real_8) :: c0(:,:,:), c2(nkpt%ngwk,nstate), cr(*)
+     complex(real_8) :: csc0(nkpt%ngwk,nstate), cscr(*)
+     complex(real_8) :: psi(:,:)
+
+     character(*), parameter :: proceduren = 'get_mts_forces'
+     character(len=100) :: title
+     integer :: i, ia, is, x, N
+
+
+     ! GET LOW LEVEL FORCES
+     if (paral%io_parent) write(6,'(1x,3a)') 'MTS: LOW LEVEL FORCES: ', &
+        mts%low_level, mts%low_dft_func
+     select case(mts%low_level)
+     case('EXTERNAL')
+        call get_external_forces('EXT_LOW_FORCES', tau0, fion)
+
+     case('DFT')
+        if (initialization .and. mts_pure_dft) then
+           ! copy wf for extrapolation 
+           call dcopy(2*size(c0,1)*size(c0,2)*size(c0,3),c0,1,c0_high,1)
+        end if
+
+        call set_mts_functional('LOW')
+
+        call forces_diag(nstate,c0,c2,cr,csc0,cscr,vpp,eigv,&
+           rhoe,psi,tau0,velp,taui,fion,ifcalc,irec,tfor,tinfo)
+
+     case default
+        if(paral%io_parent) print *, 'Low level forces not available with', mts%low_level
+        call stopgm(proceduren,'wrong option for high level forces',&
+           __LINE__,__FILE__)
+
+     end select
+
+     ! print low level forces to file
+     if (mts%print_forces) then
+        write(title,'(1x,a,i10,10x,a,i10)') 'STEP:',iteropt%nfi,'N_INNER_STEPS:',n_inner_steps
+        call print_mts_forces(fion, title, 'LOW')
+     end if
+
+     if (large_step) then
+        ! GET HIGH LEVEL FORCES
+        if (paral%io_parent) write(6,'(1x,3a)') 'MTS: HIGH LEVEL FORCES: ', &
+           mts%high_level, mts%high_dft_func
+        select case(mts%high_level)
+        case('EXTERNAL')
+           call get_external_forces('EXT_HIGH_FORCES', tau0, fion_high)
+
+        case('DFT')
+
+           call set_mts_functional('HIGH')
+
+           if (mts_pure_dft) then
+
+              ! wf extrapolation
+              if (.not.initialization .and. cntl%textrap) then
+                 call extrapwf(infi,c0_high,cscr,cold_high,nnow_high,numcold_high,nstate,cnti%mextra)
+              end if
+
+              ! get forces
+              call forces_diag(nstate,c0_high,c2,cr,csc0,cscr,vpp,eigv,&
+                 rhoe,psi,tau0,velp,taui,fion_high,ifcalc,irec,tfor,tinfo)
+           else
+
+              ! In this case the wf extrap. is done in the main (outside) routine
+              call forces_diag(nstate,c0,c2,cr,csc0,cscr,vpp,eigv,&
+                 rhoe,psi,tau0,velp,taui,fion_high,ifcalc,irec,tfor,tinfo)
+           end if
+
+        case default
+           if(paral%io_parent) print *, 'High level forces not available with', mts%high_level
+           call stopgm(proceduren,'wrong option for high level forces',&
+              __LINE__,__FILE__)
+
+        end select
+
+        ! print high level forces to file
+        if (mts%print_forces) then
+           write(title,'(1x,a,i10,10x,a,i10)') 'STEP:',iteropt%nfi,'N_LARGE_STEPS:',n_large_steps
+           call print_mts_forces(fion_high, title, 'HIGH')
+        end if
+
+        ! get effective forces from difference between high and low level
+        !
+        !     F = F_low + (F_high - F_low) * N 
+        !     F = F_high * N - F_low * (N - 1)
+        !     
+        !     where N is the MTS time-step factor
+        ! 
+        N = mts%timestep_factor
+        do i=1,ions1%nat
+           ia=iatpt(1,i)
+           is=iatpt(2,i)
+           do x=1,3
+              fion(x,ia,is) = fion_high(x,ia,is) * N - fion(x,ia,is) * (N - 1)
+           end do
+        end do
+
+        ! reinitialize inner counter
+        n_inner_steps = 0
+
+     end if
+
+  end subroutine get_mts_forces
+
+
   ! ==================================================================
   SUBROUTINE give_scr_mddiag(lmddiag,tag)
     ! ==--------------------------------------------------------------==
@@ -1665,7 +1863,7 @@ CONTAINS
 END MODULE md_driver
 
 ! ==================================================================
-SUBROUTINE extrapwf(infi,c0,gam,chist,nstate,m,only_save)
+SUBROUTINE extrapwf(infi,c0,gam,cold,nnow,numcold,nstate,m)
   USE dotp_utils, ONLY: dotp
   USE kinds, ONLY: real_4, real_8, int_1, int_2, int_4, int_8
   USE error_handling, ONLY: stopgm
@@ -1676,55 +1874,32 @@ SUBROUTINE extrapwf(infi,c0,gam,chist,nstate,m,only_save)
   USE kpts, ONLY : tkpts
   USE kpnt, ONLY : wk
   USE spin, ONLY : spin_mod
-  USE sfac, ONLY: fnl
-  USE spsi_utils, ONLY: spsi
-  USE rhov_utils, ONLY: rhov
-  USE rnlsm_utils, ONLY: rnlsm
-  USE system, ONLY: parm
   USE elct, ONLY : crge
   USE pslo, ONLY : pslo_com
-  USE mm_extrap, ONLY : scold, cold, numcold, nnow
   USE legendre_p_utils, ONLY : d_binom
   USE ovlap_utils, ONLY : ovlap
-  use rgsvan_utils, only: rgsvan
   USE rotate_utils, ONLY: rotate
   USE zeroing_utils,                   ONLY: zeroing
   IMPLICIT NONE
-  INTEGER                                    :: infi
-  COMPLEX(real_8)                            :: chist(*)
-  INTEGER                                    :: nstate
+  INTEGER                                    :: nstate, infi, nnow, numcold, m
+  COMPLEX(real_8)                            :: cold(nkpt%ngwk,nstate,nkpt%nkpnt,*)
   REAL(real_8)                               :: gam(nstate,*)
   COMPLEX(real_8)                            :: c0(nkpt%ngwk,nstate,*)
-  INTEGER                                    :: m
-  LOGICAL                                    :: only_save
 
-  INTEGER                                    :: i, ik, isub, ma, n1, nm,nnows
-  REAL(real_8)                               :: fa, rsum, scalef,rsumv
+  INTEGER                                    :: i, ik, isub, ma, n1, nm
+  REAL(real_8)                               :: fa, rsum, scalef
   REAL(real_8), EXTERNAL                     :: ddot
-  CHARACTER(*), PARAMETER                    :: procedureN = 'extrapwf'
-  logical, save :: first=.true.
-  CALL tiset(procedureN,isub)
-  IF(first.AND.numcold.eq.0)THEN
-     first=.false.
-     CALL tihalt(procedureN,isub)
-     RETURN
-  END IF
-  IF(only_save)THEN
-     nnows=nnow+1
-     nnows=mod(nnows-1,m)+1
-     CALL dcopy(2*nkpt%ngwk*nstate*nkpt%nkpnt,c0,1,cold(1,1,1,nnows),1)
-     IF(pslo_com%tivan)THEN
-        CALL dcopy(2*nkpt%ngwk*nstate*nkpt%nkpnt,c0,1,scold(1,1,1,nnows),1)
-        CALL spsi(nstate,scold(:,:,1,nnows))
-     END IF
-     CALL tihalt(procedureN,isub)
-     RETURN
-  END IF
 
-  nnow=nnow+1
-  nnow=MOD(nnow-1,m)+1
+  IF (pslo_com%tivan) CALL stopgm('EXTRAPWF','EXTRAPOLATION NOT (YET) ' //&
+       'SUPPORTED FOR VANDERBILT PSEUDOPOTENTIALS',& 
+       __LINE__,__FILE__)
+  CALL tiset('  EXTRAPWF',isub)
+
+  nnow=MOD(nnow,m)+1
+  CALL dcopy(2*nkpt%ngwk*nstate*nkpt%nkpnt,c0,1,cold(1,1,1,nnow),1)
 
   numcold=MIN(numcold+1,m)
+
   ma=numcold
   IF (ma.GT.1) THEN
      CALL zeroing(c0(:,:,1:nkpt%nkpnt))!,nkpt%ngwk*nstate*nkpt%nkpnt)
@@ -1748,15 +1923,10 @@ SUBROUTINE extrapwf(infi,c0,gam,chist,nstate,m,only_save)
                    CMPLX(1._real_8,0._real_8,kind=real_8),c0(1,1,ik),gam,nstate)
            ENDDO
         ELSE
-           IF(pslo_com%tivan)THEN
-              CALL ovlap(nstate,gam,scold(:,:,1,nm),cold(:,:,1,n1))
-           ELSE
-              CALL ovlap(nstate,gam,cold(:,:,1,nm),cold(:,:,1,n1))
-           END IF
+           CALL ovlap(nstate,gam,cold(:,:,1,nm),cold(:,:,1,n1))
            CALL mp_sum(gam,nstate*nstate,parai%allgrp)
            CALL rotate(fa,cold(:,:,1,nm),1._real_8,c0(:,:,1),gam,nstate,2*nkpt%ngwk,&
                 cntl%tlsd,spin_mod%nsup,spin_mod%nsdown)
-
         ENDIF
      ENDDO
      ! ..COUNT NUMBER OF ELECTRONS IN EXTRAPOLATED WFN AND RENORMALIZE
@@ -1772,32 +1942,17 @@ SUBROUTINE extrapwf(infi,c0,gam,chist,nstate,m,only_save)
            ENDDO
         ENDDO
      ELSE
-        !$omp parallel do private(i) reduction(+:rsum)
         DO i=1,nstate
            IF (crge%f(i,1).NE.0._real_8) THEN
               rsum=rsum+crge%f(i,1)*dotp(ncpw%ngw,c0(:,i,1),c0(:,i,1))
            ENDIF
         ENDDO
-        IF(pslo_com%tivan)THEN
-           CALL rnlsm(c0(:,:,1),nstate,1,1,.FALSE.)
-           IF(cntl%tlsd)THEN
-              CALL rhov(nstate,1,spin_mod%nsup,rsumv)
-              rsum=rsum+parm%omega*rsumv
-              CALL rhov(nstate,spin_mod%nsup+1,nstate,rsumv)
-              rsum=rsum+parm%omega*rsumv
-           ELSE
-              CALL rhov(nstate,1,nstate,rsumv)
-              rsum=rsum+parm%omega*rsumv
-           END IF
-        END IF
      ENDIF
      CALL mp_sum(rsum,parai%allgrp)
      scalef=crge%nel/rsum
      CALL dscal(2*nkpt%ngwk*nstate*nkpt%nkpnt,scalef,c0,1)
-     CALL dscal(size(fnl),scalef,fnl,1)     
-    CALL rgsvan(c0(:,:,1),nstate,gam,.FALSE.,.FALSE.,.FALSE.)
   ENDIF
-  CALL tihalt(procedureN,isub)
+  CALL tihalt('  EXTRAPWF',isub)
   ! ==--------------------------------------------------------------==
   RETURN
 END SUBROUTINE extrapwf

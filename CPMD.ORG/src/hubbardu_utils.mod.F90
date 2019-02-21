@@ -39,7 +39,6 @@ USE ortho_utils,                    ONLY: give_scr_ortho,&
 USE ovlap_utils,                    ONLY: ovlap
 USE  parac,                         ONLY: paral,&
                                           parai
-USE part_1d,                        ONLY: part_1d_get_blk_bounds                                          
 USE phfac_utils,                    ONLY: phfac
 USE pslo,                           ONLY: pslo_com
 USE qspl,                           ONLY: ggng,&
@@ -81,8 +80,7 @@ USE zeroing_utils,                  ONLY: zeroing
     !
     !     Optimized for large number of U atoms and transfered to CPMD v4 
     !       by niklas.siemer@theochem.rub.de 
-    !     Reworked parallelization of HUBINTS_USPP and DEUDPSI2 (mathias@lrz.de)
-    !           TODO: distribute UATOMS among cp groups
+    !
     !
     IMPLICIT NONE
    
@@ -146,10 +144,10 @@ USE zeroing_utils,                  ONLY: zeroing
     ! Calculate the occupation matrix OM
           CALL OCCMAT(C0,TAU0,NSTATE,PSI,TFOR,ISPIN0)
     !
-    ! Estimate energy contribution from Hubbard term
+    ! Estimate energy contribution from Habbard term
           CALL HUBBE(TAU0,FION,C0,C2U,PSI,NSTATE,TFOR,ISPIN0)
     !
-!           IF(pslo_com%tivan)CALL rnlsm(c0,nstate,1,1,tfor)
+          IF(pslo_com%tivan)CALL rnlsm(c0,nstate,1,1,tfor)
     !
 !         CALL MEMORY_CHECK
     !
@@ -205,18 +203,10 @@ USE zeroing_utils,                  ONLY: zeroing
           IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
                  __LINE__,__FILE__)
     !
-          hubbu%uat_cp_first=1
-          hubbu%uat_cp_last=hubbu%nuatm
-          IF (parai%cp_nogrp .GT. 1) THEN
-            CALL part_1d_get_blk_bounds(hubbu%nuatm,parai%cp_inter_me,parai%cp_nogrp,hubbu%uat_cp_first,hubbu%uat_cp_last)
-          END IF
-          hubbu%uat_cp_num = hubbu%uat_cp_last - hubbu%uat_cp_first +1
-          
           JAT=0
           IORB_MIN=0
           IORB_MAX=0
           hubbu%nuproj=0
-          hubbu%maxproj=0
           FOUND_LS=.FALSE.
           DO IS=1,ions1%nsp
             IS_U_SP(IS)=.FALSE.
@@ -233,13 +223,14 @@ USE zeroing_utils,                  ONLY: zeroing
                     IF(hubbu%uatm(IUATM).EQ.JAT)THEN
                        IS_U_AT(JAT)=.TRUE.
                        IS_U_SP(IS)=.TRUE.
-                       hubbu%maxproj= max (hubbu%maxproj,nlps_com%ngh(IS))
                        DO IHUBL=1,hubbu%nl(IUATM)
                           IF(ISH.EQ.hubbu%s(IUATM,IHUBL).AND.&
                              L.EQ.hubbu%l(IUATM,IHUBL))THEN
                              FOUND_LS=.TRUE.
-                             hubbu%muatm(1,IUATM)=IORB_MIN
-                             hubbu%muatm(2,IUATM)=IORB_MAX
+                             hubbu%muatm(1,1,IUATM)=IORB_MIN
+                             hubbu%muatm(2,1,IUATM)=IORB_MIN
+                             hubbu%muatm(1,2,IUATM)=IORB_MAX
+                             hubbu%muatm(2,2,IUATM)=IORB_MAX
                              hubbu%nuproj=hubbu%nuproj+IORB_MAX-IORB_MIN+1
                           END IF
                        END DO
@@ -251,6 +242,7 @@ USE zeroing_utils,                  ONLY: zeroing
           IF(.NOT.FOUND_LS) &
             CALL STOPGM(procedureN,'ORBITALS FOR PROJECTION NOT FOUND!', __LINE__,&
              __FILE__)
+    !dbg
     !
     !  Load the corresponding the atomic orbitals (projectors)
           DO IUATM=1,hubbu%nuatm
@@ -260,7 +252,7 @@ USE zeroing_utils,                  ONLY: zeroing
             WRITE(6,*)'== DFT+U PROJECTORS =='
             WRITE(6,'(A,I8)')' TOTAL NUMBER OF PROJECTORS =',hubbu%nuproj
             DO IUATM=1,hubbu%nuatm
-              WRITE(6,'(3I10)')hubbu%uatm(IUATM),hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
+              WRITE(6,'(3I10)')hubbu%uatm(IUATM),hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
             END DO
             WRITE(6,*)'======================'
           ENDIF
@@ -318,17 +310,11 @@ USE zeroing_utils,                  ONLY: zeroing
 !  C0 will be changed in this routine; backing up C0
       CALL DCOPY(2*ncpw%ngw*NSTATE,C0,1,MYC0,1)
 !
-
 !  Projections on beta-functions are stored in FNL
       IF(pslo_com%tivan)THEN
-!        CALL FNL_SET('SAVE')
-!        CALL FNLALLOC(nstate,.FALSE.,.FALSE.)
-!        CALL rnlsm(myc0,nstate,1,1,.FALSE.,.FALSE.)
+        CALL rnlsm(myc0,nstate,1,1,.false.)
 !       |S|psi>
         CALL spsi(nstate,myc0)
-!
-!        CALL FNLDEALLOC(.FALSE.,.FALSE.)
-!        CALL FNL_SET('RECV')
       END IF
 !
 ! Load atomic orbitals and store it for further use
@@ -346,11 +332,11 @@ USE zeroing_utils,                  ONLY: zeroing
       CALL zeroing(om)
       MOFF=0
       DO IUATM=1,hubbu%nuatm
-         M0=hubbu%muatm(1,IUATM)-1
-         DO M1=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM) 
+         M0=hubbu%muatm(1,1,IUATM)-1
+         DO M1=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM) 
             M10=M1-M0
             MM1=MOFF+M10
-            DO M2=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM) 
+            DO M2=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM) 
                M20=M2-M0
                MM2=MOFF+M20
                CALL zeroing(FQQ)
@@ -370,7 +356,7 @@ USE zeroing_utils,                  ONLY: zeroing
                OM(2,IUATM,M10,M20)=FQQ(2)
             END DO
          END DO
-         MOFF=MOFF+hubbu%muatm(2,IUATM)-hubbu%muatm(1,IUATM)+1
+         MOFF=MOFF+hubbu%muatm(1,2,IUATM)-hubbu%muatm(1,1,IUATM)+1
       END DO
       ISPIN_MIN=1
       ISPIN_MAX=1
@@ -381,10 +367,10 @@ USE zeroing_utils,                  ONLY: zeroing
       END IF
       DO ISPIN=ISPIN_MIN,ISPIN_MAX
         DO IUATM=1,hubbu%nuatm
-          M0=hubbu%muatm(1,IUATM)-1
-          DO M1=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM) 
+          M0=hubbu%muatm(1,1,IUATM)-1
+          DO M1=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM) 
              M10=M1-M0
-             DO M2=M1+1,hubbu%muatm(2,IUATM) 
+             DO M2=M1+1,hubbu%muatm(1,2,IUATM) 
                 M20=M2-M0
 !                IF(DABS(OM(ISPIN,IUATM,M20,M10)).LT.1.D-5)
 !     &                  OM(ISPIN,IUATM,M20,M10)=0.D0
@@ -480,7 +466,7 @@ USE zeroing_utils,                  ONLY: zeroing
         cntl%tlsd=.FALSE.
         CALL FNL_SET('SAVE')
         CALL FNLALLOC(hubbu%nuproj,.FALSE.,.FALSE.)
-        CALL rnlsm(myscr,hubbu%nuproj,1,1,.FALSE.,.FALSE.)
+        CALL rnlsm(myscr,hubbu%nuproj,1,1,.false.)
         CALL spsi(hubbu%nuproj,myscr)
         CALL FNLDEALLOC(.FALSE.,.FALSE.)
         CALL FNL_SET('RECV')
@@ -508,7 +494,7 @@ USE zeroing_utils,                  ONLY: zeroing
         IF(pslo_com%tivan)THEN
           CALL FNL_SET('SAVE')
           CALL FNLALLOC(hubbu%nuproj,.FALSE.,.FALSE.)
-          CALL rnlsm(mycatom,hubbu%nuproj,1,1,.FALSE.,.FALSE.)
+          CALL rnlsm(mycatom,hubbu%nuproj,1,1,.false.)
         ENDIF
         allocate(myscr(ncpw%ngw,MAX(nstate,hubbu%nuproj)),STAT=ierr)
         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
@@ -571,14 +557,14 @@ USE zeroing_utils,                  ONLY: zeroing
       END IF
       WRITE(IUNIT,'(/,A,I0)')' OCCUPATION MATRIX (M1 X M2):  STEP: ', iteropt%nfi
       DO IUATM=1,hubbu%nuatm
-        M0=hubbu%muatm(1,IUATM)-1
+        M0=hubbu%muatm(1,1,IUATM)-1
         DO ISPIN=ISPIN_MIN,ISPIN_MAX
 !          WRITE(116,'(/,A,I8)')' ICALL =',ICALL  
           WRITE(IUNIT,'(A,I8,A,I8)')' IUATM=',IUATM,'   ISPIN=',ISPIN
-          DO M2=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
+          DO M2=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
             M20=M2-M0
-            M1_MIN=hubbu%muatm(1,IUATM)-M0
-            M1_MAX=hubbu%muatm(2,IUATM)-M0
+            M1_MIN=hubbu%muatm(1,1,IUATM)-M0
+            M1_MAX=hubbu%muatm(1,2,IUATM)-M0
             MYFMT=' '
             WRITE(MYFMT,'(A1,I2,A6)')'(',M1_MAX-M1_MIN+1,'F12.5)'
             WRITE(IUNIT,MYFMT)&
@@ -637,12 +623,12 @@ USE zeroing_utils,                  ONLY: zeroing
       IF(paral%io_parent)THEN
         DO IUATM=1,hubbu%nuatm
           DO ISPIN=ISPIN_MIN,ISPIN_MAX
-            DO M1=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
-              M10=M1-hubbu%muatm(1,IUATM)+1
+            DO M1=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
+              M10=M1-hubbu%muatm(1,1,IUATM)+1
               hubbu%ehub=hubbu%ehub+0.5D0*hubbu%u(IUATM)*OM(ISPIN,IUATM,M10,M10)+&
                        hubbu%a(IUATM)*OM(ISPIN,IUATM,M10,M10)
-              DO M2=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
-                M20=M2-hubbu%muatm(1,IUATM)+1
+              DO M2=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
+                M20=M2-hubbu%muatm(1,1,IUATM)+1
                 hubbu%ehub=hubbu%ehub-0.5d0*hubbu%u(IUATM)*OM(ISPIN,IUATM,M10,M20)*&
                                       OM(ISPIN,IUATM,M20,M10)
               END DO  
@@ -661,16 +647,16 @@ USE zeroing_utils,                  ONLY: zeroing
             IAT=IAT+1
             IF(IS_U_AT(IAT))THEN
               IUATM=IUATM+1
-              M0=hubbu%muatm(1,IUATM)-1
+              M0=hubbu%muatm(1,1,IUATM)-1
               CALL zeroing(FUI)!,3)
               DO ISPIN=1,N_SPIN
-                DO M1=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
+                DO M1=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
                   M10=M1-M0
                   DO K=1,3
                     FOM1M1(K)=FOMI(ISPIN,IUATM,M10,M10,K)
                   END DO
                   CALL zeroing(FOMSUMM2)!,3)
-                  DO M2=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
+                  DO M2=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
                      M20=M2-M0
                      OM1M2=OM(ISPIN,IUATM,M10,M20)
                      OM2M1=OM(ISPIN,IUATM,M20,M10)
@@ -725,7 +711,6 @@ USE zeroing_utils,                  ONLY: zeroing
 !     == S operator is taken care for vanderbilt PPs.                   == 
 !     == Ouput is in C2U                                                == 
 !     == -------------------------------------------------------------- ==
-      USE machine, ONLY:m_walltime
       IMPLICIT NONE
 !
       COMPLEX(real_8)             ::    C0(:,:),CA(:,:),C2U(:,:)
@@ -734,11 +719,10 @@ USE zeroing_utils,                  ONLY: zeroing
       
       INTEGER                     ::    NSTATE,ISPIN0,ISUB
 !
-      COMPLEX(real_8),ALLOCATABLE ::    SCA(:,:),C0XCAT(:,:)
+      COMPLEX(real_8),ALLOCATABLE ::    SCA(:,:)
       COMPLEX(real_8)             ::    PSI(:)
-      COMPLEX(real_8)             ::    tmp_state(hubbu%nuproj,nstate)
 !
-      REAL(real_8)                ::    KD,PAR,TMP,FFI,MFAC
+      REAL(real_8)                ::    KD,PAR,FAC,TMP,FFI
       COMPLEX(real_8)             ::    UUU,UAA,FC,PAC,IM1M2,IM2M1,IM1M1,IFAC
       INTEGER                     ::    M1,M2,M10,M20,MM1,MM2,MOFF,IG,ISTATE,&
                                         ISPIN,IUATM,ISPIN_MIN,ISPIN_MAX
@@ -748,10 +732,8 @@ USE zeroing_utils,                  ONLY: zeroing
       DATA       FIRSTCALL / 0 /
       SAVE       FIRSTCALL
 !
-      REAL(real_8)                ::     VHUB(7,7,hubbu%nuatm,2)
-#define TMR !
-! TMR     REAL(real_8)     :: tt(0:19)
-! TMR    tt(0)=m_walltime()
+      REAL(real_8)                ::     VHUB(2,hubbu%nuatm,7,7)
+!
       CALL TISET(procedureN,ISUB)
 !
       allocate(SCA(ncpw%ngw,hubbu%nuproj),STAT=ierr)
@@ -767,7 +749,6 @@ USE zeroing_utils,                  ONLY: zeroing
         ISPIN_MIN=ISPIN0
         ISPIN_MAX=ISPIN0
        END IF
-! TMR    tt(1)=m_walltime()
 !
 ! S|phi> --> SCA
       IF(pslo_com%tivan)THEN
@@ -783,59 +764,49 @@ USE zeroing_utils,                  ONLY: zeroing
         cntl%tlsd=TLSD_BAK
       ENDIF      
 !
-! TMR    tt(2)=m_walltime()
       CALL zeroing(C2U)!,2*ncpw%ngw*NSTATE)
       CALL zeroing(VHUB)!,2*hubbu%nuatm*7*7)
       DO IUATM=1,hubbu%nuatm
        DO ISPIN=ISPIN_MIN,ISPIN_MAX
-         DO M1=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
-           M10=M1-hubbu%muatm(1,IUATM)+1
-           VHUB(M10,M10,IUATM,ISPIN)=VHUB(M10,M10,IUATM,ISPIN)+&
+         DO M1=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
+           M10=M1-hubbu%muatm(1,1,IUATM)+1
+           VHUB(ISPIN,IUATM,M10,M10)=VHUB(ISPIN,IUATM,M10,M10)+&
             0.5d0*hubbu%u(IUATM)+hubbu%a(IUATM)
-           DO M2=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
-             M20=M2-hubbu%muatm(1,IUATM)+1
-             VHUB(M20,M10,IUATM,ISPIN)=VHUB(M20,M10,IUATM,ISPIN)-&
+           DO M2=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
+             M20=M2-hubbu%muatm(1,1,IUATM)+1
+             VHUB(ISPIN,IUATM,M10,M20)=VHUB(ISPIN,IUATM,M10,M20)-&
                hubbu%u(IUATM)*OM(ISPIN,IUATM,M20,M10)
            END DO
          END DO
        END DO
       END DO
 !
-! TMR    tt(3)=m_walltime()
-      call zeroing(tmp_state)
-!       allocate(C0XCAT(hubbu%nuproj,NSTATE))
-!       !$OMP parallel do private(istate,m1)
-!       do istate=1,nstate
-!          do m1=1,hubbu%nuproj
-!             C0XCAT(m1,istate)=C0XCA(istate,m1)
-!          enddo
-!       enddo
-!$OMP parallel do private(ISPIN,MOFF,IUATM,M1,M10,MM1,TMP,M2,M20,MM2,IG,MFAC)
+!$OMP parallel do private(ISPIN,MOFF,IUATM,M1,M10,MM1,TMP,M2,M20,MM2,IG)
       DO ISTATE=1,NSTATE
         ISPIN=1
         IF(cntl%tlsd.AND.(ISTATE.GT.spin_mod%nsup))ISPIN=2
         IF(ISPIN0.GT.0)ISPIN=ISPIN0
-        MFAC=1.D0
-        IF((ISPIN0.EQ.0).AND.(crge%f(ISTATE,1).GT.1.D-3)) MFAC=crge%f(ISTATE,1)
         MOFF=0
         DO IUATM=1,hubbu%nuatm
-          DO M10=1,hubbu%muatm(2,IUATM)-hubbu%muatm(1,IUATM)+1
+          DO M1=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
+            M10=M1-hubbu%muatm(1,1,IUATM)+1
+            MM1=MOFF+M10
             TMP=0.D0
-            DO M20=1,hubbu%muatm(2,IUATM)-hubbu%muatm(1,IUATM)+1
-!                TMP=TMP+VHUB(M20,M10,IUATM,ISPIN)*C0XCAT(MOFF+M20,ISTATE)
-               TMP=TMP+VHUB(M20,M10,IUATM,ISPIN)*C0XCA(ISTATE,MOFF+M20)
+            DO M2=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
+               M20=M2-hubbu%muatm(1,1,IUATM)+1
+               MM2=MOFF+M20
+               TMP=TMP+VHUB(ISPIN,IUATM,M10,M20)*C0XCA(ISTATE,MM2)
             END DO
-            tmp_state(MOFF+M10,istate)= DCMPLX(MFAC*TMP,0.D0)
+            IF((ISPIN0.EQ.0).AND.(crge%f(ISTATE,1).GT.1.D-3))TMP=TMP*crge%f(ISTATE,1)
+            DO IG=1,ncpw%ngw
+              C2U(IG,ISTATE)=C2U(IG,ISTATE)+&
+                              DCMPLX(TMP,0.D0)*SCA(IG,MM1)
+            END DO
           END DO
-          MOFF=MOFF+hubbu%muatm(2,IUATM)-hubbu%muatm(1,IUATM)+1
+          MOFF=MOFF+hubbu%muatm(1,2,IUATM)-hubbu%muatm(1,1,IUATM)+1
         END DO
       END DO
-! TMR    tt(4)=m_walltime()
-      call zgemm('N','N',ncpw%ngw,nstate,hubbu%nuproj,1.d0,sca,ncpw%ngw,tmp_state,hubbu%nuproj,1.d0,c2u,ncpw%ngw)
-!       deallocate(c0xcat)
-! TMR    tt(5)=m_walltime()
-! TMR     if (paral%io_parent) print *, 'deudpsi2 tot',tt(5)-tt(0)
-! TMR     if (paral%io_parent) print *, 'deudpsi2 seg',tt(1)-tt(0),tt(2)-tt(1),tt(3)-tt(2),tt(4)-tt(3),tt(5)-tt(4)
+!
 !      IF(GEQ0)CALL ZCLEAN(C2U,NSTATE,ncpw%ngw)
 !
       FIRSTCALL=FIRSTCALL+1
@@ -844,7 +815,7 @@ USE zeroing_utils,                  ONLY: zeroing
              __LINE__,__FILE__)
       CALL TIHALT(procedureN,ISUB)
       END SUBROUTINE DEUDPSI2
-#undef TMR
+!
 !     ==================================================================
       SUBROUTINE LOADUPROJ(IA,READ_PROJ_LOG)
 !     Read U projectors from pseudo potential files; 
@@ -913,9 +884,9 @@ USE zeroing_utils,                  ONLY: zeroing
         END IF
       END IF
 !
-      CALL mp_bcast(ATWFR_U,maxsys%mmaxx*maxsys%nsx*M1SHLX ,parai%io_source,parai%cp_grp)
-      CALL mp_bcast(ATRG_U,maxsys%mmaxx*maxsys%nsx,parai%io_source,parai%cp_grp)
-      CALL mp_bcast(NPOINT,parai%io_source,parai%cp_grp)
+      CALL mp_bcast(ATWFR_U,maxsys%mmaxx*maxsys%nsx*M1SHLX ,parai%source,parai%allgrp)
+      CALL mp_bcast(ATRG_U,maxsys%mmaxx*maxsys%nsx,parai%source,parai%allgrp)
+      CALL mp_bcast(NPOINT,parai%source,parai%allgrp)
 !
       CALL DCOPY(NPOINT,ATRG_U(1,IS),1,RP(1),1)
       RP1=RP(1)
@@ -1202,7 +1173,7 @@ USE zeroing_utils,                  ONLY: zeroing
      INTEGER , INTENT(IN)           ::  nstate
      INTEGER                        ::  istate,IG
      CHARACTER(*), PARAMETER        ::  procedureN = 'add_hubbardu'
-     !$OMP parallel do private (istate,ig)
+!   !$OMP parallel do 
       DO istate=1,nstate
         DO ig=1,ncpw%ngw
           c2l(ig,istate)=c2l(ig,istate)-c2ul(ig,istate)

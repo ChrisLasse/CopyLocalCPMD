@@ -18,7 +18,8 @@ MODULE cp_xc_driver
                                              lxc_lda_exc_vxc
   USE parac,                           ONLY: paral
   USE system,                          ONLY: cntl,&
-                                             cntr
+                                             cntr,&
+                                             dual00
   USE timer,                           ONLY: tiset,&
                                              tihalt
 
@@ -117,7 +118,7 @@ CONTAINS
          ! Preliminaries
          !
          CALL cp_xc%set_scratch( get_scratch, needs_gradients, needs_tau )
-         CALL cp_xc%set_functional( functional )
+         CALL cp_xc%set_functional( functional, dual_is_set=dual00%dual )
 
          ! Get xc energies and potentials
          !
@@ -198,7 +199,7 @@ CONTAINS
          ! Preliminaries
          !
          CALL cp_xc%set_scratch( get_scratch, needs_gradients, needs_tau )
-         CALL cp_xc%set_functional( functional )
+         CALL cp_xc%set_functional( functional, dual_is_set=dual00%dual )
 
          ! Get xc energies and potentials
          !

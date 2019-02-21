@@ -42,8 +42,7 @@ MODULE rv30_utils
   USE mm_dimmod,                       ONLY: clsaabox
   USE mm_extrap,                       ONLY: cold,&
                                              nnow,&
-                                             numcold,&
-                                             scold
+                                             numcold
   USE mp_interface,                    ONLY: mp_bcast,&
                                              mp_sum
   USE mw,                              ONLY: mwi,&
@@ -2168,10 +2167,6 @@ CONTAINS
                 IF (irecord.LT.0) THEN
                    CALL r_wfnio(nr,cold(1,1,1,i),nstate,info,tkpnt0,&
                         n0,nkpts0,'C0',fpos)
-                   IF(ALLOCATED(scold))THEN
-                      CALL r_wfnio(nr,scold(1,1,1,i),nstate,info,tkpnt0,&
-                           n0,nkpts0,'SC0',fpos)
-                   END IF
                 ELSE
                    info=1
                 ENDIF
@@ -2623,7 +2618,7 @@ SUBROUTINE rd30pot(nr,irecord,nr1s0,nr2s0,nr3s0,potr)
         GOTO 20
      ELSE
         DO ipp=1,parai%nproc
-           IF (ir.GE.parap%nrxpl(1,ipp-1).AND.ir.LE.parap%nrxpl(2,ipp-1)) THEN
+           IF (ir.GE.parap%nrxpl(ipp-1,1).AND.ir.LE.parap%nrxpl(ipp-1,2)) THEN
               ipx=ipp
               GOTO 10
            ENDIF
@@ -2647,7 +2642,7 @@ SUBROUTINE rd30pot(nr,irecord,nr1s0,nr2s0,nr3s0,potr)
         CALL mp_sync(parai%allgrp)
      ENDIF
      IF (ip.EQ.parai%me) THEN
-        irr=ir-parap%nrxpl(1,parai%mepos)+1
+        irr=ir-parap%nrxpl(parai%mepos,1)+1
         CALL dcopy(kk,pscr(1),1,potr(irr,1),fpar%kr1)
      ENDIF
 20   CONTINUE

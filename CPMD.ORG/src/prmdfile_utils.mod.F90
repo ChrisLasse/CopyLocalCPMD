@@ -53,7 +53,7 @@ MODULE prmdfile_utils
                                              lr_tddft
   USE machine,                         ONLY: m_walltime
   USE metr,                            ONLY: metr_com
-  USE mm_extrap,                       ONLY: cold
+  USE mm_extrap,                       ONLY: cold, nnow, numcold
   USE moverho_utils,                   ONLY: give_scr_moverho,&
                                              moverho
   USE mp_interface,                    ONLY: mp_bcast,&
@@ -508,7 +508,7 @@ CONTAINS
        ! CALCULATE THE FORCES
        IF (cntl%textrap) THEN
           ! Extrapolate wavefunctions
-          CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra)
+          CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
        ENDIF
        IF (cntl%tlanc) nx=1
        IF (cntl%tdavi) nx=cnti%ndavv*nkpt%nkpnt+1

@@ -1115,7 +1115,7 @@ SUBROUTINE apply_op_rx(inp,beta,outp,alpha,coord)
   aN1   = parm%a1(coord) / REAL(spar%nr1s,kind=real_8)
   aN2   = parm%a2(coord) / REAL(spar%nr2s,kind=real_8)
   aN3   = parm%a3(coord) / REAL(spar%nr3s,kind=real_8)
-  ind_ll1_rel    =  llc_ind(1) - (parap%nrxpl(1,parai%mepos)-1)
+  ind_ll1_rel    =  llc_ind(1) - (parap%nrxpl(parai%mepos,1)-1)
   Rop0  = (llc_val(3) +&
        1 + spar%nr3s-llc_ind(3)) * aN3+&
        (llc_val(2) +&

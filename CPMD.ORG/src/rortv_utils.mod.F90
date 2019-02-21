@@ -1,18 +1,12 @@
-#include "cpmd_global.h"
-
 MODULE rortv_utils
-#ifdef _HAS_LIBELPA
-  USE crotwf_utils,                    ONLY: crotwf_para,&
-#else
   USE crotwf_utils,                    ONLY: crotwf,&
-#endif
                                              give_scr_crotwf
   USE dotp_utils,                      ONLY: dotp
-  USE distribution_utils,              ONLY: dist_size
   USE error_handling,                  ONLY: stopgm
   USE geq0mod,                         ONLY: geq0
   USE harm,                            ONLY: dtan2w,&
                                              xmu
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8
   USE linalg_utils,                    ONLY: symm_da
   USE mp_interface,                    ONLY: mp_sum
@@ -29,8 +23,6 @@ MODULE rortv_utils
                                              paraw
   USE tpar,                            ONLY: dtb2me
 !!use ovlap_utils, only : ovlap2
-  USE timer,                           ONLY: tihalt,&
-                                             tiset
   USE zeroing_utils,                   ONLY: zeroing
 
   IMPLICIT NONE
@@ -55,16 +47,14 @@ CONTAINS
 
     CHARACTER(*), PARAMETER                  :: procedureN = 'rortv'
 
-    INTEGER                                  :: i, ierr, ig, ip, j, nstx, nx, isub
-    REAL(real_8)                             :: ai, bi, pf4, s2, yi(nstate)
+    INTEGER                                  :: i, ierr, ig, ip, j, nstx, nx
+    REAL(real_8)                             :: ai, bi, pf4, s2, yi
     REAL(real_8), ALLOCATABLE                :: a1mat(:,:), a2mat(:,:)
-    
-    CALL tiset(procedureN,isub)
 
     IF (cntl%nonort) THEN
        ! Norm constraints
-       IF (cntl%tharm.OR.cntl%tmass) THEN             
-          DO i=1,nstate
+       DO i=1,nstate
+          IF (cntl%tharm.OR.cntl%tmass) THEN
              s2=0.0_real_8
              IF (cntl%tharm) THEN
                 !$omp parallel do private(IG,PF4,AI,BI) reduction(+:S2)
@@ -91,40 +81,30 @@ CONTAINS
                    pf4=cntr%emass/xmu(1)
                 ENDIF
              ENDIF
-             yi(i)=-dotp(ncpw%ngw,cm(:,i),c0(:,i))/s2
-             CALL mp_sum(yi(i),parai%allgrp)
+             yi=-dotp(ncpw%ngw,cm(:,i),c0(:,i))/s2
+             CALL mp_sum(yi,parai%allgrp)
              IF (cntl%tharm) THEN
                 !$omp parallel do private(IG,PF4)
                 DO ig=1,ncpw%ngw
                    pf4=dtan2w(ig)/dtb2me
-                   cm(ig,i)=cm(ig,i)+pf4*yi(i)*c0(ig,i)
+                   cm(ig,i)=cm(ig,i)+pf4*yi*c0(ig,i)
                 ENDDO
              ELSE
                 !$omp parallel do private(IG,PF4)
                 DO ig=1,ncpw%ngw
                    pf4=cntr%emass/xmu(ig)
-                   cm(ig,i)=cm(ig,i)+pf4*yi(i)*c0(ig,i)
+                   cm(ig,i)=cm(ig,i)+pf4*yi*c0(ig,i)
                 ENDDO
              ENDIF
-          END DO
-       ELSE
-          !$omp parallel do private(i)
-          DO i=1,nstate
-             yi(i)=-dotp(ncpw%ngw,cm(:,i),c0(:,i))
-          end do
-          CALL mp_sum(yi,nstate,parai%allgrp)
-          !$omp parallel do private(i)
-          DO i=1,nstate
-             CALL daxpy(2*ncpw%ngw,yi(i),c0(1,i),1,cm(1,i),1)
-          end do
-       ENDIF
+          ELSE
+             yi=-dotp(ncpw%ngw,cm(:,i),c0(:,i))
+             CALL mp_sum(yi,parai%allgrp)
+             CALL daxpy(2*ncpw%ngw,yi,c0(1,i),1,cm(1,i),1)
+          ENDIF
+       ENDDO
        ! UNITARY ROTATION?
        IF (nort_com%scond.GT.nort_com%slimit) THEN
-#ifdef _HAS_LIBELPA
-          CALL crotwf_para(c0,cm,c2,sc0,nstate,gamy)
-#else
           CALL crotwf(c0,cm,c2,sc0,nstate,gamy)
-#endif
        ENDIF
     ELSE
        ! Overlap constraints
@@ -132,8 +112,7 @@ CONTAINS
           CALL rvharm(c0,cm,gamy,nstate)
        ELSE
           IF (cntl%tdmal) THEN
-             CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,&
-                  fw=1)
+             CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
              ALLOCATE(a1mat(nstate, nstx),STAT=ierr)
              IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
                   __LINE__,__FILE__)! TODO ALIGN FOR BG
@@ -142,10 +121,10 @@ CONTAINS
                   __LINE__,__FILE__)
              CALL zeroing(gamy(:,1:nstx))!,nstate*nstx)
              DO ip=0,parai%nproc-1
-                nx=paraw%nwa12(2,ip)-paraw%nwa12(1,ip)+1
+                nx=paraw%nwa12(ip,2)-paraw%nwa12(ip,1)+1
                 CALL zeroing(a1mat)!,nstate*nstx)
                 IF (nx.GT.0) THEN
-                   CALL ovlap2(ncpw%ngw,nstate,nx,a1mat,cm,c0(1,paraw%nwa12(1,ip)),&
+                   CALL ovlap2(ncpw%ngw,nstate,nx,a1mat,cm,c0(1,paraw%nwa12(ip,1)),&
                         .TRUE.)
                    CALL mp_sum(a1mat,a2mat,&
                         nstate*nstx,parap%pgroup(ip+1),parai%allgrp)
@@ -155,10 +134,10 @@ CONTAINS
                 ENDIF
              ENDDO
              CALL dscal(nstate*nstx,-1.0_real_8,gamy,1)
-             CALL symm_da(gamy,a1mat,a2mat,nstate,paraw%nwa12(1,0),paraw%nwa12(2,0),&
+             CALL symm_da(gamy,a1mat,a2mat,nstate,paraw%nwa12(0,1),paraw%nwa12(0,2),&
                   nstx,parai%mepos,parai%nproc,parai%allgrp)
              CALL rotate_da(1._real_8,c0(1,1),1._real_8,cm(1,1),gamy,2*ncpw%ngw,2*ncpw%ngw,&
-                  nstate,paraw%nwa12(1,0),paraw%nwa12(2,0),nstx,parai%mepos,&
+                  nstate,paraw%nwa12(0,1),paraw%nwa12(0,2),nstx,parai%mepos,&
                   parap%pgroup,parai%nproc,parai%allgrp,cntl%tlsd,spin_mod%nsup,spin_mod%nsdown)
              DEALLOCATE(a1mat,STAT=ierr)
              IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
@@ -183,7 +162,6 @@ CONTAINS
        ENDIF
     ENDIF
     ! ==--------------------------------------------------------------==
-    CALL tihalt(procedureN,isub)
     RETURN
   END SUBROUTINE rortv
   ! ==================================================================
@@ -966,7 +944,7 @@ CONTAINS
        ENDIF
     ELSE
        IF (cntl%tdmal) THEN
-          CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+          CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
           lrortv=3*nstate*nstx
        ELSE
           lrortv=3*nstate*nstate+MAX(nstate*nstate,3*nstate)

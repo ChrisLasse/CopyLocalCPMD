@@ -66,7 +66,7 @@ MODULE mm_mdshop_bo_utils
                                              mm_go_qm,&
                                              mm_revert,&
                                              mmdim
-  USE mm_extrap,                       ONLY: cold
+  USE mm_extrap,                       ONLY: cold, nnow, numcold
   USE mm_forces_diag_utils,            ONLY: mm_forces_diag
   USE mm_input,                        ONLY: cgrest_i,&
                                              clc,&
@@ -854,7 +854,7 @@ CONTAINS
           ropt_mod%calste=cntl%tpres.AND.MOD(infi,cnti%npres).EQ.0
           IF (cntl%textrap) THEN
              ! Extrapolate wavefunctions
-             CALL extrapwf(infi,c0,scr,cold,sh02%nsttot,cnti%mextra)
+             CALL extrapwf(infi,c0,scr,cold,nnow,numcold,sh02%nsttot,cnti%mextra)
           ENDIF
           CALL mm_dim(mm_go_mm,statusdummy)
        ENDIF! (qmnode)

@@ -5,7 +5,6 @@ MODULE loadpa_utils
                                              inyh
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
-  USE distribution_utils,              ONLY: dist_size
   USE geq0mod,                         ONLY: geq0
   USE gvec,                            ONLY: epsg,&
                                              epsgx,&
@@ -21,14 +20,13 @@ MODULE loadpa_utils
                                              mm_revert
   USE mp_interface,                    ONLY: mp_sum,&
                                              mp_sync
-  USE part_1d,                         ONLY: part_1d_get_blk_bounds
   USE parac,                           ONLY: parai,&
                                              paral
   USE prmem_utils,                     ONLY: prmem
   USE sort_utils,                      ONLY: sort2
   USE sphe,                            ONLY: gcutwmax
   USE system,                          ONLY: &
-       fpar, iatpe, iatpe_cp, iatpt, ipept, mapgp, natpe, ipept_cp, natpe_cp, ncpw, nkpt, norbpe, parap, &
+       fpar, iatpe, iatpt, ipept, mapgp, natpe, ncpw, nkpt, norbpe, parap, &
        parm, spar
   USE timer,                           ONLY: tihalt,&
                                              tiset
@@ -53,12 +51,15 @@ CONTAINS
 
     INTEGER :: i, i0, ia, iat, icpu, ierr, ig, ihrays, ii, img, in1, in2, &
       in3, iorb, ip, ipp, ir, is, isub, isub2, isub3, isub4, ixrays, izpl, j, &
-      j1, j2, jmax, jmin, k, kmax, kmin, mspace, nh1, nh2, nh3, nthreads,first,last
+      j1, j2, jmax, jmin, k, kmax, kmin, mspace, nh1, nh2, nh3, nthreads
     INTEGER, ALLOCATABLE                     :: ihray(:,:), ixray(:,:), &
                                                 mgpa(:,:)
     INTEGER, ALLOCATABLE, DIMENSION(:)       :: thread_buff
     LOGICAL                                  :: oldstatus
-    REAL(real_8)                             :: g2, sign, t 
+    REAL(real_8)                             :: g2, sign, t, xpaim, xplanes, &
+                                                xpnow, xsaim, xsnow, xstates, &
+                                                zpaim, zplanes, zpnow
+
 ! ==--------------------------------------------------------------==
 ! ==  DISTRIBUTION OF PARALLEL WORK                               ==
 ! ==--------------------------------------------------------------==
@@ -83,17 +84,24 @@ CONTAINS
     ALLOCATE(iatpe(ions1%nat),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(iatpe_cp(ions1%nat,0:parai%cp_nogrp-1),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-         __LINE__,__FILE__)
-    ALLOCATE(ipept_cp(2,0:parai%nproc-1,0:parai%cp_nogrp-1),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-         __LINE__,__FILE__)
     CALL mp_sync(parai%allgrp)
     ! ==--------------------------------------------------------------==
     ! DISTRIBUTE ATOMS
     ! ==--------------------------------------------------------------==
-    CALL dist_size(ions1%nat,parai%nproc,ipept)
+    xstates=REAL(ions1%nat,kind=real_8)
+    xsnow=0.0_real_8
+    DO i=parai%nproc,1,-1
+       xsaim = xsnow + xstates/parai%nproc
+       ipept(1,i-1)=NINT(xsnow)+1
+       ipept(2,i-1)=NINT(xsaim)
+       IF (NINT(xsaim).GT.ions1%nat) THEN
+          ipept(2,i-1)=ions1%nat
+       ENDIF
+       IF (i.EQ.1) THEN
+          ipept(2,i-1)=ions1%nat
+       ENDIF
+       xsnow = xsaim
+    ENDDO
 
     CALL mm_dim(mm_go_mm,oldstatus)
     ALLOCATE(iatpt(2,ions1%nat),STAT=ierr)
@@ -115,46 +123,59 @@ CONTAINS
        ENDDO
     ENDDO
     natpe=ipept(2,parai%mepos)-ipept(1,parai%mepos)+1
-
-    DO i=0,parai%nproc-1
-       do j=0,parai%cp_nogrp-1
-          CALL part_1d_get_blk_bounds((ipept(2,i)-ipept(1,i)+1),j,parai%cp_nogrp,first,last)
-          ipept_cp(1,i,j)=ipept(1,i)+first-1
-          ipept_cp(2,i,j)=ipept(1,i)+last-1
-       end do
-    ENDDO
-    
-    iatpe_cp=-1 !mepos .ge. 0 
-
-    DO i=0,parai%nproc-1
-       do k=0,parai%cp_nogrp-1       
-          DO j=ipept_cp(1,i,k),ipept_cp(2,i,k)
-             iatpe_cp(j,k)=i
-          end do
-       ENDDO
-    ENDDO
-
-    natpe_cp=&
-         ipept_cp(2,parai%mepos,parai%cp_inter_me)&
-         -ipept_cp(1,parai%mepos,parai%cp_inter_me)+1
-
     ! ==--------------------------------------------------------------==
     ! DISTRIBUTE ORBITALS
     ! ==--------------------------------------------------------------==
-    CALL dist_size(crge%n,parai%nproc,parap%nst12,nblocal=norbpe,iloc=parai%mepos)
-
+    xstates=REAL(crge%n,kind=real_8)
+    xsnow=0.0_real_8
+    DO i=parai%nproc,1,-1
+       xsaim = xsnow + xstates/parai%nproc
+       parap%nst12(i-1,1)=NINT(xsnow)+1
+       parap%nst12(i-1,2)=NINT(xsaim)
+       IF (NINT(xsaim).GT.crge%n) THEN
+          parap%nst12(i-1,2)=crge%n
+       ENDIF
+       IF (i.EQ.1) THEN
+          parap%nst12(i-1,2)=crge%n
+       ENDIF
+       xsnow = xsaim
+    ENDDO
+    norbpe=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
     ! ==--------------------------------------------------------------==
     ! DISTRIBUTE REAL SPACE YZ-PLANES
     ! ==--------------------------------------------------------------==
-    CALL dist_size(spar%nr1s,parai%nproc,parap%nrxpl)
-
+    CALL zeroing(parap%nrxpl)!,2*(maxcpu+1))
+    xplanes=REAL(spar%nr1s,kind=real_8)
+    xpnow=0.0_real_8
+    DO i=parai%nproc,1,-1
+       xpaim = xpnow + xplanes/parai%nproc
+       parap%nrxpl(i-1,1)=NINT(xpnow)+1
+       parap%nrxpl(i-1,2)=NINT(xpaim)
+       IF (NINT(xpaim).GT.spar%nr1s) THEN
+          parap%nrxpl(i-1,2)=spar%nr1s
+       ENDIF
+       IF (i.EQ.1) THEN
+          parap%nrxpl(i-1,2)=spar%nr1s
+       ENDIF
+       xpnow = xpaim
+    ENDDO
     CALL zeroing(parap%nrzpl)!,2*(maxcpu+1))
-
     IF (isos1%tclust.AND.isos3%ps_type.EQ.1) THEN
        ! DISTRIBUTE REAL SPACE XY-PLANES
-       CALL dist_size(2*spar%nr3s,parai%nproc,parap%nrzpl)
-    ELSE
-       parap%nrzpl=0
+       zplanes=REAL(2*spar%nr3s,kind=real_8)
+       zpnow=0.0_real_8
+       DO i=parai%nproc,1,-1
+          zpaim = zpnow + zplanes/parai%nproc
+          parap%nrzpl(i-1,1)=NINT(zpnow)+1
+          parap%nrzpl(i-1,2)=NINT(zpaim)
+          IF (NINT(zpaim).GT.2*spar%nr3s) THEN
+             parap%nrzpl(i-1,2)=2*spar%nr3s
+          ENDIF
+          IF (i.EQ.1) THEN
+             parap%nrzpl(i-1,2)=2*spar%nr3s
+          ENDIF
+          zpnow = zpaim
+       ENDDO
     ENDIF
     ! ==--------------------------------------------------------------==
     ! DISTRIBUTE G-VECTORS
@@ -332,12 +353,11 @@ CONTAINS
     ENDDO
     ncpw%nhgl=spar%nhgls
     ncpw%ngwl=spar%ngwls
-    parm%nr1 =parap%nrxpl(2,parai%mepos)-parap%nrxpl(1,parai%mepos)+1
+    parm%nr1 =parap%nrxpl(parai%mepos,2)-parap%nrxpl(parai%mepos,1)+1
     parm%nr2 =spar%nr2s
     parm%nr3 =spar%nr3s
     parap%sparm(1,parai%mepos)=ncpw%nhg
     parap%sparm(2,parai%mepos)=ncpw%nhgl
-    
     CALL tihalt(procedureN//'_a',isub2)
     ! ==--------------------------------------------------------------==
     ! IF K POINTS, WE NEED TO DOUBLE DIMENSIONS.
@@ -362,8 +382,8 @@ CONTAINS
        WRITE(6,'(A,A)') '  NCPU     NGW',&
             '     NHG  PLANES  GXRAYS  HXRAYS ORBITALS Z-PLANES'
        DO i=0,parai%nproc-1
-          iorb=parap%nst12(2,i)-parap%nst12(1,i)+1
-          izpl=parap%nrzpl(2,i)-parap%nrzpl(1,i)+1
+          iorb=parap%nst12(i,2)-parap%nst12(i,1)+1
+          izpl=parap%nrzpl(i,2)-parap%nrzpl(i,1)+1
           WRITE(6,'(I6,7I8)') i,parap%sparm(3,i),parap%sparm(1,i),parap%sparm(5,i),&
                parap%sparm(9,i),parap%sparm(8,i),iorb,izpL
           ! IF(SPARM(3,I).LE.0) CALL stopgm(procedureN,
@@ -391,17 +411,6 @@ CONTAINS
     ENDDO
     CALL gorder
     ! ==--------------------------------------------------------------==
-    ! ==--------------------------------------------------------------==
-    ! IF CP_GROUPS are used subdivide nhg
-    ! ==--------------------------------------------------------------==
-    ncpw%nhg_start=1
-    ncpw%nhg_last=ncpw%nhg
-    ncpw%nhg_cp = ncpw%nhg_last - ncpw%nhg_start + 1
-    IF (parai%cp_nogrp .GT. 1) THEN
-       CALL part_1d_get_blk_bounds(ncpw%nhg,parai%cp_inter_me,parai%cp_nogrp,ncpw%nhg_start,ncpw%nhg_last)
-       ncpw%nhg_cp = ncpw%nhg_last - ncpw%nhg_start + 1
-    END IF
-
     geq0=.FALSE.
     i0=0
     DO ig=1,ncpw%ngw
@@ -508,9 +517,9 @@ CONTAINS
 ! KR3=NR3+MOD(NR3,2)
 ! instead off that
 
-    kr1=nr1!+MOD(nr1+1,2)
-    kr2=nr2!+MOD(nr2+1,2)
-    kr3=nr3!+MOD(nr3+1,2)
+    kr1=nr1+MOD(nr1+1,2)
+    kr2=nr2+MOD(nr2+1,2)
+    kr3=nr3+MOD(nr3+1,2)
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE leadim

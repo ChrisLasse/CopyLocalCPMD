@@ -1,5 +1,3 @@
-#include "cpmd_global.h"
-
 #ifdef __SR8000
 !option MP(P(0)), LANGLVL(SAVE(0))
 #endif
@@ -12,11 +10,6 @@ MODULE vdwin_utils
                                              dcacp_custom_tag,&
                                              dcacp_init
   USE error_handling,                  ONLY: stopgm
-#ifdef _HAS_LIBGRIMMEVDW  
-  USE func,                            ONLY: mgcx_is_pbex, &
-                                             mgcx_is_revpbex, &
-                                             func1
-#endif                                             
   USE inscan_utils,                    ONLY: inscan
   USE ions,                            ONLY: ions0,&
                                              ions1
@@ -86,14 +79,6 @@ CONTAINS
                                                 nbr_unknown_lines, z
     LOGICAL                                  :: erread, go_on_reading, &
                                                 something_went_wrong
-#ifdef _HAS_LIBGRIMMEVDW
-    CHARACTER(len=3)                         :: typenames(99)
-    CHARACTER(len=8)                         :: functional
-    
-    ! initialize switch
-    vdwl%grimme = .false.
-    
-#endif
 
     !
     ! Set routine tracking for proper call-trees in DCACP-init
@@ -112,7 +97,6 @@ CONTAINS
           CALL stopgm(procedureN,'Conflicting run options.',& 
                __LINE__,__FILE__)
        ENDIF
-       
        IF (paral%io_parent) THEN
           iunit = 5
           !
@@ -149,29 +133,6 @@ CONTAINS
                         keyword_contains(line,'WANNIER',and='CORRECTION') ) THEN
                    ! vdW corrections using Wannier functions
                    CALL wannvdwin(iunit)
-#ifdef _HAS_LIBGRIMMEVDW
-                !
-                ! VDW GRIMME
-                !
-                ELSEIF(vdwl%vdwc.AND. &
-                     keyword_contains(line,'GRIMME',and='CORRECTION') ) THEN
-                  vdwl%grimme=.true.   
-                  DO i = 1, ions1%nsp
-                    typenames(i) = adjustl(elem%el(ions0%iatyp(i)))  
-                  ENDDO
-                  IF(func1%mgcx.EQ.mgcx_is_pbex) THEN                         ! from 'func.inc'
-                    functional='PBE'
-                  ELSE IF(func1%mgcx.EQ.mgcx_is_revpbex) THEN
-                    functional='revPBE'
-                  ELSE
-                    functional='else'
-                  ENDIF
-
-                  CALL vdw_grimme_read_input(iunit, ions1%nsp, typenames, 1.d0, functional, ierr)
-                  IF (ierr /= 0) THEN
-                    CALL stopgm(procedureN,'Error while reading GRIMME CORRECTION', __LINE__,__FILE__)
-                  ENDIF
-#endif
                 !
                 ! DCACP
                 !
@@ -263,26 +224,14 @@ CONTAINS
              WRITE(output_unit,'(1X,64("="),/)')
           ENDIF
           !
-       ENDIF  ! io_parent
+       ENDIF
        IF (vdwl%dcacp) THEN
           CALL dcacp_init()
        ELSEIF (vdwl%vdwc) THEN
-#ifdef _HAS_LIBGRIMMEVDW
-          call mp_bcast(vdwl%grimme,parai%io_source,parai%cp_grp)
-          if(vdwl%grimme) then
-            call vdw_grimme_init_data_mpi(parai%io_source, parai%cp_me, parai%cp_grp,ierr)
-            IF (ierr /= 0) THEN
-              CALL stopgm(procedureN,'Error while broadcasting GRIMME CORRECTION', __LINE__,__FILE__)
-            ENDIF
-          else
-#endif          
-            CALL empvdw_init()
-#ifdef _HAS_LIBGRIMMEVDW
-          endif
-#endif
+          CALL empvdw_init()
        ELSEIF (vdwl%vdwd) THEN
           CALL vdwwf_init()
-       ENDIF       
+       ENDIF
     ENDIF
 
     CALL tihalt(procedureN,isub)

@@ -4,13 +4,13 @@ MODULE mdpt_utils
   USE cl_init_utils,                   ONLY: cl_init
   USE clas,                            ONLY: tclas
   USE ddip,                            ONLY: lenbk
-  USE distribution_utils,              ONLY: dist_size
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
   USE fnlalloc_utils,                  ONLY: fnlalloc,&
                                              fnldealloc
   USE fusion_utils,                    ONLY: fusion,&
                                              separate
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8
   USE kpts,                            ONLY: tkpts
   USE linres,                          ONLY: &
@@ -42,8 +42,7 @@ MODULE mdpt_utils
   USE system,                          ONLY: cnti,&
                                              cntl,&
                                              ncpw,&
-                                             nkpt,&
-                                             paraw
+                                             nkpt
   USE timer,                           ONLY: tihalt,&
                                              tiset
   USE utils,                           ONLY: nxxfun
@@ -301,7 +300,7 @@ CONTAINS
        CALL zeroing(urot)!,nus)
        clrwf => c1
        IF (cntl%tdmal) THEN
-          CALL dist_size(nstate,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=nstx,fw=1)
+          CALL set_orbdist(nstate,cnti%nstblk,parai%nproc,nstx)
           ALLOCATE(gamx(nstate*nstx*bsfac),STAT=ierr)
           IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
                __LINE__,__FILE__)
@@ -327,10 +326,7 @@ CONTAINS
        ENDIF
        CALL mm_dim(mm_revert,statusdummy)
     ELSE
-       nmin = 10             ! TODO what is this??? 
-                             ! TK: Seems to be a dummy dimension to avoid not 
-                             ! allocated fortran runtime errors on nodes that 
-                             ! don't do qm
+       nmin = 10             ! TODO what is this???
        ! 
        ALLOCATE(c0(nmin,1,1),STAT=ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&

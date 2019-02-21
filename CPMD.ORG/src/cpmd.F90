@@ -96,6 +96,8 @@ SUBROUTINE cpmd
        tddft_input
   USE cp_cuda_utils, ONLY: cp_cuda_init, cp_cuda_finalize
   USE ortho_utils, ONLY: ortho_init, ortho_finalize
+  USE mts_utils, ONLY: read_mts_input
+
   IMPLICIT NONE
   CHARACTER(*), PARAMETER                    :: procedureN = 'cpmd'
 
@@ -140,6 +142,9 @@ SUBROUTINE cpmd
 
   ! we need to start the timer after the call to control
   CALL tiset(procedureN, isub)
+
+  ! READ MTS INFORMATION
+  CALL read_mts_input
 
   ! READ INFORMATION ON XC FUNCTIONAL
   CALL dftin

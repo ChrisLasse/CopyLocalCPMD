@@ -138,7 +138,7 @@ CONTAINS
 
     ! ==--------------------------------------------------------------==
     ! FNL,DFNL,DDFNL...
-    ndfnl=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+    ndfnl=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
     ldfnl=imagp*3*ions1%nat*maxsys%nhxs*ndfnl*nkpt%nkpnt
     IF (ldfnl.LE.0) ldfnl=1
     lfnl = imagp*nstate*ions1%nat*maxsys%nhxs*nkpt%nkpnt

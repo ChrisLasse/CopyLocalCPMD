@@ -11,7 +11,7 @@ MODULE nlps
   ! ==       OTHERWISE = 2 (FNL AND DFNL ARE COMPLEX IN THIS CASE)  ==
   ! ==  NLM            TOTAL NUMBER OF NON-LOCAL ANGULAR MOMENTUM   ==
   ! ==  NDFNL          = NSTATE IF NOPARALLEL                       ==
-  ! ==       OTHERWISE = NST12(2,MEPOS)-NST12(1,MEPOS)+1            ==
+  ! ==       OTHERWISE = NST12(MEPOS,2)-NST12(MEPOS,1)+1            ==
   ! ==--------------------------------------------------------------==
   INTEGER :: nlm ,imagp,ndfnl
   ! ==--------------------------------------------------------------==

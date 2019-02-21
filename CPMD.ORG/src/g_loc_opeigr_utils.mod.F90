@@ -50,13 +50,13 @@ SUBROUTINE g_loc_opeigr(c0,c2,sc0,nstate,mapful,mapcol,ddmat,&
      CALL reshape_inplace(sc0, (/2*lenbk, parai%nproc/), sc0s)
 
      DO ip=1,parai%nproc
-        nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-        n1=parap%nst12(1,ip-1)
+        nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+        n1=parap%nst12(ip-1,1)
         CALL dcopy(2*2*ncpw%ngw*nn,c0(1,n1),1,c2s(1,ip),1)
      ENDDO
 
      CALL my_trans(c2s,sc0s,16*2*lenbk,1)
-     nn=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+     nn=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
      DO ip=1,parai%nproc
         nggp = parap%sparm(3,ip-1)
         igii = 0
@@ -77,8 +77,8 @@ SUBROUTINE g_loc_opeigr(c0,c2,sc0,nstate,mapful,mapcol,ddmat,&
   IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
        __LINE__,__FILE__)
   IF (lostate%state_all) THEN
-     DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-        ii=i-parap%nst12(1,parai%mepos)+1
+     DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+        ii=i-parap%nst12(parai%mepos,1)+1
         CALL zeroing(aux)!,SIZE(aux))
 
         DO ig=1,spar%ngws
@@ -93,7 +93,7 @@ SUBROUTINE g_loc_opeigr(c0,c2,sc0,nstate,mapful,mapcol,ddmat,&
         ENDDO
         sc0(1+spar%ngws,ii)  = CMPLX(0.0_real_8,0.0_real_8,kind=real_8)
      ENDDO
-     nn=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+     nn=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
      DO ip=1,parai%nproc
         nggp = parap%sparm(3,ip-1)
         igii = 0
@@ -108,8 +108,8 @@ SUBROUTINE g_loc_opeigr(c0,c2,sc0,nstate,mapful,mapcol,ddmat,&
      ENDDO
      CALL my_trans(c2s,sc0s,16*2*lenbk,1)
      DO ip=1,parai%nproc
-        nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-        n1=parap%nst12(1,ip-1)
+        nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+        n1=parap%nst12(ip-1,1)
         CALL dcopy(2*2*ncpw%ngw*nn,sc0s(1,ip),1,c2(1,n1),1)
      ENDDO
   ELSE

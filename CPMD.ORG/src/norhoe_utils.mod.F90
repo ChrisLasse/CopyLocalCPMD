@@ -87,7 +87,7 @@ CONTAINS
          __LINE__,__FILE__)
     ! 
     ! Compute the overlap matrix
-    CALL csmat(gam,c0,fnl,nstate,1,.FALSE.)
+    CALL csmat(gam,c0,fnl,nstate,1)
     ! 
     ! Compute the S**(-1/2) array for doing orthogonalization of C0
     IF (paral%parent) THEN

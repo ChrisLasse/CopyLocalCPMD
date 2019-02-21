@@ -152,14 +152,14 @@ CONTAINS
     rmax2=rmax**2
     DO ir3=1,parm%nr3
        DO ir2=1,parm%nr2
-          DO ir1=parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)
+          DO ir1=parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)
              x=(ir1-1)*dx-x0+dx/2._real_8
              y=(ir2-1)*dy-y0+dy/2._real_8
              z=(ir3-1)*dz-z0+dz/2._real_8
              ir=(ir3-1)*parm%nr1*parm%nr2   +&
                   (ir2-1)*parm%nr1       +&
                   ir1               -&
-                  parap%nrxpl(1,parai%mepos) + 1
+                  parap%nrxpl(parai%mepos,1) + 1
              r2=x**2+y**2+z**2
              ! if (r2.lt.rmax2) then
              IF (dir.EQ.1) THEN
@@ -788,13 +788,13 @@ CONTAINS
        DO ir2=1,fpar%kr2s
           DO ir1=1,fpar%kr1
 
-             x=(parap%nrxpl(1,parai%mepos)+ir1-2)*dx-x0! +dx/2._real_8
+             x=(parap%nrxpl(parai%mepos,1)+ir1-2)*dx-x0! +dx/2._real_8
              y=(ir2-1)*dy-y0    ! +dy/2._real_8
              z=(ir3-1)*dz-z0    ! +dz/2._real_8
              ir=(ir3-1)*parm%nr1*parm%nr2   +&
                   (ir2-1)*parm%nr1       +&
                   ir1               -&
-                  parap%nrxpl(1,parai%mepos) + 1
+                  parap%nrxpl(parai%mepos,1) + 1
 
              ! kill the boundaries
              ! -------------------------------------------------------------
@@ -878,14 +878,14 @@ CONTAINS
        DO ir2=1,fpar%kr2s
           DO ir1=1,fpar%kr1
 
-             x=(parap%nrxpl(1,parai%mepos)+ir1-2)*dx-x0
+             x=(parap%nrxpl(parai%mepos,1)+ir1-2)*dx-x0
              y=(ir2-1)*dy-y0+dy/2._real_8
              z=(ir3-1)*dz-z0+dz/2._real_8
 
              ir=(ir3-1)*parm%nr1*parm%nr2   +&
                   (ir2-1)*parm%nr1       +&
                   ir1               -&
-                  parap%nrxpl(1,parai%mepos) + 1
+                  parap%nrxpl(parai%mepos,1) + 1
 
              ! ---------------------------------------------------
              nampl=td_prop%ampl*((SIN(2.0*td_prop%ampl*gaugefield%muij*t))**2)*COS(td_prop%tdfreq*t)
@@ -951,13 +951,13 @@ CONTAINS
        DO ir3=1,fpar%kr3s
           DO ir2=1,fpar%kr2s
              DO ir1=1,fpar%kr1
-                x=(parap%nrxpl(1,parai%mepos)+ir1-2)*dx-x0! +dx/2._real_8
+                x=(parap%nrxpl(parai%mepos,1)+ir1-2)*dx-x0! +dx/2._real_8
                 y=(ir2-1)*dy-y0     ! +dy/2._real_8
                 z=(ir3-1)*dz-z0     ! +dz/2._real_8
                 ir=(ir3-1)*parm%nr1*parm%nr2   +&
                      (ir2-1)*parm%nr1       +&
                      ir1               -&
-                     parap%nrxpl(1,parai%mepos) + 1
+                     parap%nrxpl(parai%mepos,1) + 1
                 ! 
                 fx=-1.0+1._real_8/(EXP(-temp*parm%a1(1)*(x-0.15*parm%a1(1)))+1._real_8)+&
                      1._real_8/(EXP(temp*parm%a1(1)*(x-0.85*parm%a1(1)))+1._real_8)
@@ -2367,14 +2367,14 @@ CONTAINS
     rmax2=rmax**2
     DO ir3=1,parm%nr3
        DO ir2=1,parm%nr2
-          DO ir1=parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)
+          DO ir1=parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)
              x=(ir1-1)*dx-x0+dx/2._real_8
              y=(ir2-1)*dy-y0+dy/2._real_8
              z=(ir3-1)*dz-z0+dz/2._real_8
              ir=(ir3-1)*parm%nr1*parm%nr2   + &
                   (ir2-1)*parm%nr1       + &
                   ir1              - &
-                  parap%nrxpl(1,parai%mepos) + 1
+                  parap%nrxpl(parai%mepos,1) + 1
              r2=X**2+Y**2+Z**2
              pos(ir)=1._real_8
              ! eq 7 = mom distr
@@ -2518,15 +2518,15 @@ CONTAINS
        ! find the PE who has the plane i1:
        source_pe = 0
        DO WHILE (.NOT.&
-            (ii1.GE.parap%nrxpl(1,source_pe) .AND.&
-            ii1.LE.parap%nrxpl(2,source_pe)))
+            (ii1.GE.parap%nrxpl(source_pe,1) .AND.&
+            ii1.LE.parap%nrxpl(source_pe,2)))
           source_pe = source_pe + 1
        ENDDO
        source_pe = parap%pgroup(source_pe+1)
 
        IF (parai%mepos .EQ. source_pe) THEN
           CALL dcopy(fpar%kr2s*fpar%kr3s,&
-               array(ii1-parap%nrxpl(1,parai%mepos)+1,1,1),fpar%kr1,&
+               array(ii1-parap%nrxpl(parai%mepos,1)+1,1,1),fpar%kr1,&
                psi,1)
           IF (.NOT. paral%parent) THEN
              msglen = 8*fpar%kr2s*fpar%kr3s! one X-plane.
@@ -2907,11 +2907,11 @@ CONTAINS
          OPEN(125,file=tag)
     ir3=INT(parm%nr3*z0/parm%a1(1))+1
     DO ir2=1,parm%nr2
-       DO ir1=parap%nrxpl(1,parai%mepos),parap%nrxpl(2,parai%mepos)
+       DO ir1=parap%nrxpl(parai%mepos,1),parap%nrxpl(parai%mepos,2)
           x=(ir1-1)*dx-x0
           y=(ir2-1)*dy-y0
           z=(ir3-1)*dz-z0
-          ir=(ir3-1)*fpar%kr1*fpar%kr2+(ir2-1)*fpar%kr1+ir1-parap%nrxpl(1,parai%mepos)+1
+          ir=(ir3-1)*fpar%kr1*fpar%kr2+(ir2-1)*fpar%kr1+ir1-parap%nrxpl(parai%mepos,1)+1
           IF (paral%io_parent)&
                WRITE(125,'(3f24.18)') x,y,rhoe(ir)
        ENDDO

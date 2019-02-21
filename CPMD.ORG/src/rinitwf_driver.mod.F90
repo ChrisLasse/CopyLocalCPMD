@@ -21,6 +21,7 @@ MODULE rinitwf_driver
   USE pslo,                            ONLY: pslo_com
   USE randtowf_utils,                  ONLY: randtowf
   USE reshaper,                        ONLY: reshape_inplace
+  USE rnlsm_utils,                     ONLY: rnlsm
   USE ropt,                            ONLY: bsnfi,&
                                              iteropt,&
                                              ropt_mod
@@ -230,9 +231,8 @@ CONTAINS
           ikk=kpbeg(ikpt)+ik
           CALL randtowf(c0(:,:,ik),nstate,ik,ikk)
           ! Orthogonalization
-          !TK code cleaning, rnlsm moved into rgsvan
-          !IF (pslo_com%tivan) CALL rnlsm(c0(:,:,ik),nstate,&
-          !     ikpt,ik,.FALSE.)
+          IF (pslo_com%tivan) CALL rnlsm(c0(:,:,ik),nstate,&
+               ikpt,ik,.FALSE.)
           CALL ortho(nstate,c0(:,:,ik),c2(:,:,ik))
        ENDDO
        IF (tkpts%tkblock) THEN
@@ -266,9 +266,8 @@ CONTAINS
        ! ==------------------------------------------------------------==
        IF (.NOT.cntl%nonort) THEN
           DO ik=1,nkpoint
-             !TK code cleaning, rnlsm moved into rgsvan
-             !IF (pslo_com%tivan) CALL rnlsm(c0(:,:,ik),nstate,&
-             !     1,ik,.FALSE.)
+             IF (pslo_com%tivan) CALL rnlsm(c0(:,:,ik),nstate,&
+                  1,ik,.FALSE.)
              CALL ortho(nstate,c0(:,:,ik),c2(:,:,ik))
           ENDDO
        ENDIF

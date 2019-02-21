@@ -307,13 +307,17 @@ CONTAINS
           ALLOCATE(eigv(nstate,nkpt%nkpts),STAT=ierr)
           IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
                __LINE__,__FILE__)
-          ALLOCATE(taup(3,maxsys%nax,maxsys%nsx),STAT=ierr)
-          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-               __LINE__,__FILE__)
+          IF (.NOT.cntl%tmdfile) THEN
+             ALLOCATE(taup(3,maxsys%nax,maxsys%nsx),STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+                  __LINE__,__FILE__)
+          ENDIF
           CALL zhwwf(49,irec,c0,cs,nstate,eigv,tau0,velp,taup,iteropt%nfi)
-          DEALLOCATE(taup,STAT=ierr)
-          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-               __LINE__,__FILE__)
+          IF (.NOT.cntl%tmdfile) THEN
+             DEALLOCATE(taup,STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+                  __LINE__,__FILE__)
+          ENDIF
           DEALLOCATE(eigv,STAT=ierr)
           IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
                __LINE__,__FILE__)

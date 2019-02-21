@@ -1,1352 +1,1247 @@
-subroutine mp_send_char_r0(data, dest,tag,comm)
+SUBROUTINE mp_send_char_r0(DATA, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) ::  dest,tag,comm
-  character(*), intent(in)  :: data
+  INTEGER, INTENT(in) ::  dest,tag,comm
+  CHARACTER(*), INTENT(in)  :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_char_r0'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_char_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+len(data)*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_CHARACTER,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+len(data)*size
-  tim1=m_walltime()
-  call mpi_send(data,len(data),MPI_CHARACTER,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,LEN(DATA),MPI_CHARACTER,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_char_r0
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_char_r0
 
-subroutine mp_recv_char_r0(data, src,tag,comm)
+SUBROUTINE mp_recv_char_r0(DATA, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) ::  src,tag,comm
-  character(*), intent(out)  :: data
+  INTEGER, INTENT(in) ::  src,tag,comm
+  CHARACTER(*), INTENT(out)  :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_char_r0'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_char_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+len(data)*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_CHARACTER,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+len(data)*size
-  tim1=m_walltime()
-  call mpi_recv(data,len(data),MPI_CHARACTER,src,tag,comm,&
+  CALL mpi_recv(DATA,LEN(DATA),MPI_CHARACTER,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_char_r0
-subroutine mp_send_char_r1(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_char_r0
+SUBROUTINE mp_send_char_r1(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  character(*), intent(in) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  CHARACTER(*), INTENT(in) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_char_r1'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_char_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+len(data)*n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_CHARACTER,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+len(data)*n*size
-  tim1=m_walltime()
-  call mpi_send(data,len(data)*n,MPI_CHARACTER,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,LEN(DATA)*n,MPI_CHARACTER,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_char_r1
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_char_r1
 
-subroutine mp_recv_char_r1(data,n, src,tag,comm)
+SUBROUTINE mp_recv_char_r1(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  character(*), intent(out) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  CHARACTER(*), INTENT(out) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_char_r1'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_char_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+len(data)*n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_CHARACTER,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+len(data)*n*size
-  tim1=m_walltime()
-  call mpi_recv(data,len(data)*n,MPI_CHARACTER,src,tag,comm,&
+  CALL mpi_recv(DATA,LEN(DATA)*n,MPI_CHARACTER,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_char_r1
-subroutine mp_send_int4_r0(data, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_char_r1
+SUBROUTINE mp_send_int4_r0(DATA, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) ::  dest,tag,comm
-  integer(int_4), intent(in)  :: data
+  INTEGER, INTENT(in) ::  dest,tag,comm
+  INTEGER(int_4), INTENT(in)  :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_int4_r0'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_int4_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_INTEGER,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_send(data,1,MPI_INTEGER,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,1,MPI_INTEGER,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_int4_r0
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_int4_r0
 
-subroutine mp_recv_int4_r0(data, src,tag,comm)
+SUBROUTINE mp_recv_int4_r0(DATA, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) ::  src,tag,comm
-  integer(int_4), intent(out)  :: data
+  INTEGER, INTENT(in) ::  src,tag,comm
+  INTEGER(int_4), INTENT(out)  :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_int4_r0'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_int4_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_INTEGER,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_recv(data,1,MPI_INTEGER,src,tag,comm,&
+  CALL mpi_recv(DATA,1,MPI_INTEGER,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_int4_r0
-subroutine mp_send_int4_r1(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_int4_r0
+SUBROUTINE mp_send_int4_r1(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  integer(int_4), intent(in) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  INTEGER(int_4), INTENT(in) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_int4_r1'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_int4_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_INTEGER,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_INTEGER,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_INTEGER,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_int4_r1
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_int4_r1
 
-subroutine mp_recv_int4_r1(data,n, src,tag,comm)
+SUBROUTINE mp_recv_int4_r1(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  integer(int_4), intent(out) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  INTEGER(int_4), INTENT(out) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_int4_r1'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_int4_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_INTEGER,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_INTEGER,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_INTEGER,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_int4_r1
-subroutine mp_send_int4_r2(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_int4_r1
+SUBROUTINE mp_send_int4_r2(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  integer(int_4), intent(in) , dimension(1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  INTEGER(int_4), INTENT(in) , DIMENSION(1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_int4_r2'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_int4_r2'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_INTEGER,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_INTEGER,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_INTEGER,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_int4_r2
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_int4_r2
 
-subroutine mp_recv_int4_r2(data,n, src,tag,comm)
+SUBROUTINE mp_recv_int4_r2(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  integer(int_4), intent(out) , dimension(1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  INTEGER(int_4), INTENT(out) , DIMENSION(1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_int4_r2'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_int4_r2'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_INTEGER,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_INTEGER,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_INTEGER,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_int4_r2
-subroutine mp_send_int8_r0(data, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_int4_r2
+SUBROUTINE mp_send_int8_r0(DATA, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) ::  dest,tag,comm
-  integer(int_8), intent(in)  :: data
+  INTEGER, INTENT(in) ::  dest,tag,comm
+  INTEGER(int_8), INTENT(in)  :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_int8_r0'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_int8_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_INTEGER8,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_send(data,1,MPI_INTEGER8,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,1,MPI_INTEGER8,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_int8_r0
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_int8_r0
 
-subroutine mp_recv_int8_r0(data, src,tag,comm)
+SUBROUTINE mp_recv_int8_r0(DATA, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) ::  src,tag,comm
-  integer(int_8), intent(out)  :: data
+  INTEGER, INTENT(in) ::  src,tag,comm
+  INTEGER(int_8), INTENT(out)  :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_int8_r0'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_int8_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_INTEGER8,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_recv(data,1,MPI_INTEGER8,src,tag,comm,&
+  CALL mpi_recv(DATA,1,MPI_INTEGER8,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_int8_r0
-subroutine mp_send_int8_r1(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_int8_r0
+SUBROUTINE mp_send_int8_r1(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  integer(int_8), intent(in) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  INTEGER(int_8), INTENT(in) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_int8_r1'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_int8_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_INTEGER8,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_INTEGER8,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_INTEGER8,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_int8_r1
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_int8_r1
 
-subroutine mp_recv_int8_r1(data,n, src,tag,comm)
+SUBROUTINE mp_recv_int8_r1(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  integer(int_8), intent(out) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  INTEGER(int_8), INTENT(out) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_int8_r1'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_int8_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_INTEGER8,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_INTEGER8,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_INTEGER8,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_int8_r1
-subroutine mp_send_real8_r0(data, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_int8_r1
+SUBROUTINE mp_send_real8_r0(DATA, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) ::  dest,tag,comm
-  real(real_8), intent(in)  :: data
+  INTEGER, INTENT(in) ::  dest,tag,comm
+  REAL(real_8), INTENT(in)  :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_real8_r0'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_real8_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_send(data,1,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,1,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_real8_r0
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_real8_r0
 
-subroutine mp_recv_real8_r0(data, src,tag,comm)
+SUBROUTINE mp_recv_real8_r0(DATA, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) ::  src,tag,comm
-  real(real_8), intent(out)  :: data
+  INTEGER, INTENT(in) ::  src,tag,comm
+  REAL(real_8), INTENT(out)  :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_real8_r0'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_real8_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_recv(data,1,MPI_DOUBLE_PRECISION,src,tag,comm,&
+  CALL mpi_recv(DATA,1,MPI_DOUBLE_PRECISION,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_real8_r0
-subroutine mp_send_real8_r1(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_real8_r0
+SUBROUTINE mp_send_real8_r1(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  real(real_8), intent(in) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  REAL(real_8), INTENT(in) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_real8_r1'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_real8_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_real8_r1
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_real8_r1
 
-subroutine mp_recv_real8_r1(data,n, src,tag,comm)
+SUBROUTINE mp_recv_real8_r1(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  real(real_8), intent(out) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  REAL(real_8), INTENT(out) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_real8_r1'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_real8_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_DOUBLE_PRECISION,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_DOUBLE_PRECISION,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_real8_r1
-subroutine mp_send_real8_r2(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_real8_r1
+SUBROUTINE mp_send_real8_r2(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  real(real_8), intent(in) , dimension(1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  REAL(real_8), INTENT(in) , DIMENSION(1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_real8_r2'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_real8_r2'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_real8_r2
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_real8_r2
 
-subroutine mp_recv_real8_r2(data,n, src,tag,comm)
+SUBROUTINE mp_recv_real8_r2(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  real(real_8), intent(out) , dimension(1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  REAL(real_8), INTENT(out) , DIMENSION(1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_real8_r2'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_real8_r2'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_DOUBLE_PRECISION,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_DOUBLE_PRECISION,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_real8_r2
-subroutine mp_send_real8_r3(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_real8_r2
+SUBROUTINE mp_send_real8_r3(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  real(real_8), intent(in) , dimension(1,1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  REAL(real_8), INTENT(in) , DIMENSION(1,1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_real8_r3'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_real8_r3'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_real8_r3
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_real8_r3
 
-subroutine mp_recv_real8_r3(data,n, src,tag,comm)
+SUBROUTINE mp_recv_real8_r3(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  real(real_8), intent(out) , dimension(1,1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  REAL(real_8), INTENT(out) , DIMENSION(1,1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_real8_r3'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_real8_r3'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_DOUBLE_PRECISION,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_DOUBLE_PRECISION,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_real8_r3
-subroutine mp_send_real8_r4(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_real8_r3
+SUBROUTINE mp_send_real8_r4(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  real(real_8), intent(in) , dimension(1,1,1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  REAL(real_8), INTENT(in) , DIMENSION(1,1,1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_real8_r4'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_real8_r4'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_real8_r4
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_real8_r4
 
-subroutine mp_recv_real8_r4(data,n, src,tag,comm)
+SUBROUTINE mp_recv_real8_r4(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  real(real_8), intent(out) , dimension(1,1,1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  REAL(real_8), INTENT(out) , DIMENSION(1,1,1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_real8_r4'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_real8_r4'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_DOUBLE_PRECISION,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_DOUBLE_PRECISION,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_real8_r4
-subroutine mp_send_real8_r5(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_real8_r4
+SUBROUTINE mp_send_real8_r5(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  real(real_8), intent(in) , dimension(1,1,1,1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  REAL(real_8), INTENT(in) , DIMENSION(1,1,1,1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_real8_r5'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_real8_r5'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_DOUBLE_PRECISION,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_real8_r5
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_real8_r5
 
-subroutine mp_recv_real8_r5(data,n, src,tag,comm)
+SUBROUTINE mp_recv_real8_r5(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  real(real_8), intent(out) , dimension(1,1,1,1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  REAL(real_8), INTENT(out) , DIMENSION(1,1,1,1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_real8_r5'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_real8_r5'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_PRECISION,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_DOUBLE_PRECISION,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_DOUBLE_PRECISION,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_real8_r5
-subroutine mp_send_complex4_r0(data, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_real8_r5
+SUBROUTINE mp_send_complex4_r0(DATA, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) ::  dest,tag,comm
-  complex(real_4), intent(in)  :: data
+  INTEGER, INTENT(in) ::  dest,tag,comm
+  COMPLEX(real_4), INTENT(in)  :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_complex4_r0'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_complex4_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_COMPLEX,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_send(data,1,MPI_COMPLEX,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,1,MPI_COMPLEX,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_complex4_r0
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_complex4_r0
 
-subroutine mp_recv_complex4_r0(data, src,tag,comm)
+SUBROUTINE mp_recv_complex4_r0(DATA, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) ::  src,tag,comm
-  complex(real_4), intent(out)  :: data
+  INTEGER, INTENT(in) ::  src,tag,comm
+  COMPLEX(real_4), INTENT(out)  :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_complex4_r0'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_complex4_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_COMPLEX,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_recv(data,1,MPI_COMPLEX,src,tag,comm,&
+  CALL mpi_recv(DATA,1,MPI_COMPLEX,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_complex4_r0
-subroutine mp_send_complex4_r1(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_complex4_r0
+SUBROUTINE mp_send_complex4_r1(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  complex(real_4), intent(in) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  COMPLEX(real_4), INTENT(in) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_complex4_r1'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_complex4_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_COMPLEX,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_COMPLEX,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_COMPLEX,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_complex4_r1
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_complex4_r1
 
-subroutine mp_recv_complex4_r1(data,n, src,tag,comm)
+SUBROUTINE mp_recv_complex4_r1(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  complex(real_4), intent(out) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  COMPLEX(real_4), INTENT(out) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_complex4_r1'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_complex4_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_COMPLEX,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_COMPLEX,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_COMPLEX,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_complex4_r1
-subroutine mp_send_complex4_r2(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_complex4_r1
+SUBROUTINE mp_send_complex4_r2(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  complex(real_4), intent(in) , dimension(1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  COMPLEX(real_4), INTENT(in) , DIMENSION(1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_complex4_r2'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_complex4_r2'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_COMPLEX,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_COMPLEX,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_COMPLEX,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_complex4_r2
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_complex4_r2
 
-subroutine mp_recv_complex4_r2(data,n, src,tag,comm)
+SUBROUTINE mp_recv_complex4_r2(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  complex(real_4), intent(out) , dimension(1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  COMPLEX(real_4), INTENT(out) , DIMENSION(1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_complex4_r2'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_complex4_r2'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_COMPLEX,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_COMPLEX,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_COMPLEX,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_complex4_r2
-subroutine mp_send_complex4_r3(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_complex4_r2
+SUBROUTINE mp_send_complex4_r3(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  complex(real_4), intent(in) , dimension(1,1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  COMPLEX(real_4), INTENT(in) , DIMENSION(1,1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_complex4_r3'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_complex4_r3'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_COMPLEX,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_COMPLEX,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_COMPLEX,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_complex4_r3
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_complex4_r3
 
-subroutine mp_recv_complex4_r3(data,n, src,tag,comm)
+SUBROUTINE mp_recv_complex4_r3(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  complex(real_4), intent(out) , dimension(1,1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  COMPLEX(real_4), INTENT(out) , DIMENSION(1,1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_complex4_r3'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_complex4_r3'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_COMPLEX,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_COMPLEX,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_COMPLEX,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_complex4_r3
-subroutine mp_send_complex4_r4(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_complex4_r3
+SUBROUTINE mp_send_complex4_r4(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  complex(real_4), intent(in) , dimension(1,1,1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  COMPLEX(real_4), INTENT(in) , DIMENSION(1,1,1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_complex4_r4'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_complex4_r4'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_COMPLEX,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_COMPLEX,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_COMPLEX,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_complex4_r4
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_complex4_r4
 
-subroutine mp_recv_complex4_r4(data,n, src,tag,comm)
+SUBROUTINE mp_recv_complex4_r4(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  complex(real_4), intent(out) , dimension(1,1,1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  COMPLEX(real_4), INTENT(out) , DIMENSION(1,1,1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_complex4_r4'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_complex4_r4'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_COMPLEX,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_COMPLEX,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_COMPLEX,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_complex4_r4
-subroutine mp_send_complex8_r0(data, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_complex4_r4
+SUBROUTINE mp_send_complex8_r0(DATA, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) ::  dest,tag,comm
-  complex(real_8), intent(in)  :: data
+  INTEGER, INTENT(in) ::  dest,tag,comm
+  COMPLEX(real_8), INTENT(in)  :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_complex8_r0'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_complex8_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_send(data,1,MPI_DOUBLE_COMPLEX,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,1,MPI_DOUBLE_COMPLEX,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_complex8_r0
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_complex8_r0
 
-subroutine mp_recv_complex8_r0(data, src,tag,comm)
+SUBROUTINE mp_recv_complex8_r0(DATA, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) ::  src,tag,comm
-  complex(real_8), intent(out)  :: data
+  INTEGER, INTENT(in) ::  src,tag,comm
+  COMPLEX(real_8), INTENT(out)  :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_complex8_r0'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_complex8_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_recv(data,1,MPI_DOUBLE_COMPLEX,src,tag,comm,&
+  CALL mpi_recv(DATA,1,MPI_DOUBLE_COMPLEX,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_complex8_r0
-subroutine mp_send_complex8_r1(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_complex8_r0
+SUBROUTINE mp_send_complex8_r1(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  complex(real_8), intent(in) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  COMPLEX(real_8), INTENT(in) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_complex8_r1'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_complex8_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_DOUBLE_COMPLEX,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_DOUBLE_COMPLEX,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_complex8_r1
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_complex8_r1
 
-subroutine mp_recv_complex8_r1(data,n, src,tag,comm)
+SUBROUTINE mp_recv_complex8_r1(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  complex(real_8), intent(out) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  COMPLEX(real_8), INTENT(out) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_complex8_r1'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_complex8_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_DOUBLE_COMPLEX,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_DOUBLE_COMPLEX,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_complex8_r1
-subroutine mp_send_complex8_r2(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_complex8_r1
+SUBROUTINE mp_send_complex8_r2(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  complex(real_8), intent(in) , dimension(1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  COMPLEX(real_8), INTENT(in) , DIMENSION(1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_complex8_r2'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_complex8_r2'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_DOUBLE_COMPLEX,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_DOUBLE_COMPLEX,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_complex8_r2
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_complex8_r2
 
-subroutine mp_recv_complex8_r2(data,n, src,tag,comm)
+SUBROUTINE mp_recv_complex8_r2(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  complex(real_8), intent(out) , dimension(1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  COMPLEX(real_8), INTENT(out) , DIMENSION(1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_complex8_r2'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_complex8_r2'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_DOUBLE_COMPLEX,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_DOUBLE_COMPLEX,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_complex8_r2
-subroutine mp_send_complex8_r3(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_complex8_r2
+SUBROUTINE mp_send_complex8_r3(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  complex(real_8), intent(in) , dimension(1,1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  COMPLEX(real_8), INTENT(in) , DIMENSION(1,1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_complex8_r3'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_complex8_r3'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_DOUBLE_COMPLEX,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_DOUBLE_COMPLEX,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_complex8_r3
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_complex8_r3
 
-subroutine mp_recv_complex8_r3(data,n, src,tag,comm)
+SUBROUTINE mp_recv_complex8_r3(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  complex(real_8), intent(out) , dimension(1,1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  COMPLEX(real_8), INTENT(out) , DIMENSION(1,1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_complex8_r3'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_complex8_r3'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_DOUBLE_COMPLEX,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_DOUBLE_COMPLEX,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_complex8_r3
-subroutine mp_send_complex8_r4(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_complex8_r3
+SUBROUTINE mp_send_complex8_r4(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  complex(real_8), intent(in) , dimension(1,1,1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  COMPLEX(real_8), INTENT(in) , DIMENSION(1,1,1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_complex8_r4'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_complex8_r4'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_DOUBLE_COMPLEX,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_DOUBLE_COMPLEX,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_complex8_r4
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_complex8_r4
 
-subroutine mp_recv_complex8_r4(data,n, src,tag,comm)
+SUBROUTINE mp_recv_complex8_r4(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  complex(real_8), intent(out) , dimension(1,1,1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  COMPLEX(real_8), INTENT(out) , DIMENSION(1,1,1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_complex8_r4'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_complex8_r4'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_DOUBLE_COMPLEX,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_DOUBLE_COMPLEX,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_DOUBLE_COMPLEX,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_complex8_r4
-subroutine mp_send_logical_r0(data, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_complex8_r4
+SUBROUTINE mp_send_logical_r0(DATA, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) ::  dest,tag,comm
-  logical, intent(in)  :: data
+  INTEGER, INTENT(in) ::  dest,tag,comm
+  LOGICAL, INTENT(in)  :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_logical_r0'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_logical_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_LOGICAL,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_send(data,1,MPI_LOGICAL,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,1,MPI_LOGICAL,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_logical_r0
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_logical_r0
 
-subroutine mp_recv_logical_r0(data, src,tag,comm)
+SUBROUTINE mp_recv_logical_r0(DATA, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) ::  src,tag,comm
-  logical, intent(out)  :: data
+  INTEGER, INTENT(in) ::  src,tag,comm
+  LOGICAL, INTENT(out)  :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_logical_r0'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_logical_r0'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+1*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_LOGICAL,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+1*size
-  tim1=m_walltime()
-  call mpi_recv(data,1,MPI_LOGICAL,src,tag,comm,&
+  CALL mpi_recv(DATA,1,MPI_LOGICAL,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_logical_r0
-subroutine mp_send_logical_r1(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_logical_r0
+SUBROUTINE mp_send_logical_r1(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  logical, intent(in) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  LOGICAL, INTENT(in) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_logical_r1'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_logical_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_LOGICAL,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_LOGICAL,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_LOGICAL,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_logical_r1
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_logical_r1
 
-subroutine mp_recv_logical_r1(data,n, src,tag,comm)
+SUBROUTINE mp_recv_logical_r1(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  logical, intent(out) , dimension(*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  LOGICAL, INTENT(out) , DIMENSION(*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_logical_r1'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_logical_r1'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_LOGICAL,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_LOGICAL,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_LOGICAL,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_logical_r1
-subroutine mp_send_logical_r2(data,n, dest,tag,comm)
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_logical_r1
+SUBROUTINE mp_send_logical_r2(DATA,n, dest,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
+  USE pstat
   ! Arguments 
-  integer, intent(in) :: n, dest,tag,comm
-  logical, intent(in) , dimension(1,*) :: data
+  INTEGER, INTENT(in) :: n, dest,tag,comm
+  LOGICAL, INTENT(in) , DIMENSION(1,*) :: DATA
   ! Variables
-  integer :: ierr
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_isend_logical_r2'
-  integer,save :: size
-  logical :: first=.true.
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_isend_logical_r2'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  if (first) then
-    cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-    first=.false.
-  endif
-  call mpi_type_size(MPI_LOGICAL,size,ierr)
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_send(data,n,MPI_LOGICAL,dest,tag,comm,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mpi_send(DATA,n,MPI_LOGICAL,dest,tag,comm,ierr)
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_send_logical_r2
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_send_logical_r2
 
-subroutine mp_recv_logical_r2(data,n, src,tag,comm)
+SUBROUTINE mp_recv_logical_r2(DATA,n, src,tag,comm)
 #ifdef __PARALLEL
-  use mpi
+  USE mpi
 #endif
-  use pstat
+  USE pstat
   ! Arguments
-  integer, intent(in) :: n, src,tag,comm
-  logical, intent(out) , dimension(1,*) :: data
+  INTEGER, INTENT(in) :: n, src,tag,comm
+  LOGICAL, INTENT(out) , DIMENSION(1,*) :: DATA
   ! Variables
-  integer :: ierr,size
-  real(real_8) :: tim1,tim2
-  character(*),parameter::procedureN='mp_recv_logical_r2'
+  INTEGER :: ierr
+  REAL(real_8) :: tim1,tim2
+  REAL(real_8), EXTERNAL :: timef
+  CHARACTER(*),PARAMETER::procedureN='mp_recv_logical_r2'
+  !cmcal(ipar_send)=cmcal(ipar_send)+1.0_real_8
+  !cmlen(ipar_send)=cmlen(ipar_send)+n*{TYPE_SIZE_IN_BYTES}
+  !tim1=timef()
 #ifdef __PARALLEL
-  call mpi_type_size(MPI_LOGICAL,size,ierr)
-  cmcal(ipar_send)=cmcal(ipar_send)+1.0d0
-  cmlen(ipar_send)=cmlen(ipar_send)+n*size
-  tim1=m_walltime()
-  call mpi_recv(data,n,MPI_LOGICAL,src,tag,comm,&
+  CALL mpi_recv(DATA,n,MPI_LOGICAL,src,tag,comm,&
         MPI_STATUS_IGNORE,ierr)
-  call mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
-  tim2=m_walltime()
-  cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+  CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 #endif
-end subroutine mp_recv_logical_r2
+  !tim2=timef()
+  !cmtim(ipar_send)=cmtim(ipar_send)+tim2-tim1
+END SUBROUTINE mp_recv_logical_r2

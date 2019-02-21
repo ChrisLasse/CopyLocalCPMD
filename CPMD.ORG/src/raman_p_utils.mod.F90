@@ -212,7 +212,7 @@ CONTAINS
              DO i=1,nstate
                 fnl00(1,isa,iv,i,1)=fnl(1,isa,iv,i,1)
              ENDDO
-             DO i=1,parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+             DO i=1,parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
                 DO k=1,3
                    dfnl00(1,isa,iv,k,i,1)=dfnl(1,isa,iv,k,i,1)
                 ENDDO

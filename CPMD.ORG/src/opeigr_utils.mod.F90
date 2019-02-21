@@ -177,7 +177,7 @@ CONTAINS
     INTEGER                                  :: i, ig, igii, ii, ip, n1, &
                                                 nggp, nn, nnst
 
-      nnst=parap%nst12(2,parai%mepos)-parap%nst12(1,parai%mepos)+1
+      nnst=parap%nst12(parai%mepos,2)-parap%nst12(parai%mepos,1)+1
       ALLOCATE(c2s(lenbk,parai%nproc),c2f(spar%ngws,nnst),STAT=ierr)
       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
            __LINE__,__FILE__)
@@ -186,8 +186,8 @@ CONTAINS
            __LINE__,__FILE__)
       ! 
       DO ip=1,parai%nproc
-         nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-         n1=parap%nst12(1,ip-1)
+         nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+         n1=parap%nst12(ip-1,1)
          CALL dcopy(2*ncpw%ngw*nn,c0(1,n1),1,c2s(1,ip),1)
       ENDDO
       CALL my_trans(c2s,sc0,16*lenbk,1)
@@ -213,8 +213,8 @@ CONTAINS
       ALLOCATE(aux(ngg1*ngg2*ngg3),STAT=ierr)
       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
            __LINE__,__FILE__)
-      DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-         ii=i-parap%nst12(1,parai%mepos)+1
+      DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+         ii=i-parap%nst12(parai%mepos,1)+1
          CALL zeroing(aux)!,ngg1*ngg2*ngg3)
 #ifdef __NEC 
          !CDIR NODEP
@@ -257,8 +257,8 @@ CONTAINS
       ENDDO
       CALL my_trans(c2s,sc0,16*lenbk,1)
       DO ip=1,parai%nproc
-         nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-         n1=parap%nst12(1,ip-1)
+         nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+         n1=parap%nst12(ip-1,1)
          CALL dcopy(2*ncpw%ngw*nn,sc0(1,ip),1,c2(1,n1),1)
       ENDDO
       IF (cntl%tlsd) THEN
@@ -301,8 +301,8 @@ CONTAINS
            __LINE__,__FILE__)
 
       DO ip=1,parai%nproc
-         nn=parap%nst12(2,ip-1)-parap%nst12(1,ip-1)+1
-         n1=parap%nst12(1,ip-1)
+         nn=parap%nst12(ip-1,2)-parap%nst12(ip-1,1)+1
+         n1=parap%nst12(ip-1,1)
          CALL dcopy(2*ncpw%ngw*nn,sc0(1,ip),1,c2(1,n1),1)
       ENDDO
       IF (cntl%tlsd) THEN

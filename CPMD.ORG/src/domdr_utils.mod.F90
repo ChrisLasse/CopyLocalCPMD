@@ -98,19 +98,19 @@ CONTAINS
       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
              __LINE__,__FILE__) 
       IF(pslo_com%tivan)THEN
-        allocate(c0xb(hubbu%maxproj,hubbu%nuatm,nstate),STAT=ierr)
+        allocate(c0xb(maxsys%nhxs,nstate,hubbu%nuatm),STAT=ierr)
         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
              __LINE__,__FILE__) 
-        allocate(caxb(hubbu%maxproj,hubbu%nuatm,hubbu%nuproj),STAT=ierr)
+        allocate(caxb(maxsys%nhxs,hubbu%nuproj,hubbu%nuatm),STAT=ierr)
         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
              __LINE__,__FILE__) 
-        allocate(c0xdb(hubbu%maxproj,3,hubbu%nuatm,nstate),STAT=ierr)
+        allocate(c0xdb(maxsys%nhxs,nstate,3,hubbu%nuatm),STAT=ierr)
         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
              __LINE__,__FILE__) 
-        allocate(caxdb(hubbu%maxproj,3,hubbu%nuatm,hubbu%nuproj),STAT=ierr)
+        allocate(caxdb(maxsys%nhxs,hubbu%nuproj,3,hubbu%nuatm),STAT=ierr)
         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
              __LINE__,__FILE__) 
-        allocate(dcaxb(hubbu%maxproj,hubbu%nuatm,hubbu%nuproj,3),STAT=ierr)
+        allocate(dcaxb(maxsys%nhxs,hubbu%nuproj,3,hubbu%nuatm),STAT=ierr)
       END IF
 !
 !  Need to consider the overlap operator of USPP: S = 1 + SUM_a,b,I q_a,b |beta> <beta| 
@@ -121,7 +121,7 @@ CONTAINS
 !     tt1=TIMEF()
       OFFSET(1)=0
       DO IUATM=1,hubbu%nuatm-1
-        OFFSET(IUATM+1)=OFFSET(IUATM)+hubbu%muatm(2,IUATM)-hubbu%muatm(1,IUATM)+1
+        OFFSET(IUATM+1)=OFFSET(IUATM)+hubbu%muatm(1,2,IUATM)-hubbu%muatm(1,1,IUATM)+1
       ENDDO
       IF(pslo_com%tivan)THEN
         IF(hubbu%portho) THEN
@@ -170,8 +170,8 @@ CONTAINS
           IS=IATPT(2,IAT)
           IA=IATPT(1,IAT)
           DO K=1,3
-            DO M1=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
-              M10=M1-hubbu%muatm(1,IUATM)+1
+            DO M1=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
+              M10=M1-hubbu%muatm(1,1,IUATM)+1
 !              MM1=MOFF+M10
               MM1=OFFSET(IUATM)+M10
               DO ISTATE=1,NSTATE
@@ -180,15 +180,15 @@ CONTAINS
                   IV=IVJV(1,I,IS)
                   JV=IVJV(2,I,IS)
                   DUM=DUM+QQ(IV,JV,IS)*&
-                      (C0XDB(IV,K,IUATM,ISTATE)*CAXB(JV,IUATM,MM1)   +&
-                       C0XB(IV,IUATM,ISTATE)   *CAXDB(JV,K,IUATM,MM1)+&
-                       C0XB(IV,IUATM,ISTATE)   *DCAXB(JV,IUATM,MM1,K) )
+                      (C0XDB(IV,ISTATE,K,IUATM)*CAXB(JV,MM1,IUATM)   +&
+                       C0XB(IV,ISTATE,IUATM)   *CAXDB(JV,MM1,K,IUATM)+&
+                       C0XB(IV,ISTATE,IUATM)   *DCAXB(JV,MM1,K,IUATM) )
                 END DO 
                 DC0XCA(ISTATE,M10,IUATM,K)=C0XDCA(ISTATE,MM1,K)+DUM
               END DO
             END DO
           END DO
-!          MOFF=MOFF+hubbu%muatm(2,IUATM)-hubbu%muatm(1,IUATM)+1
+!          MOFF=MOFF+hubbu%muatm(1,2,IUATM)-hubbu%muatm(1,1,IUATM)+1
          END DO
 !$OMP end parallel do
       ELSE
@@ -196,13 +196,13 @@ CONTAINS
          DO K=1,3
            MOFF=0
            DO IUATM=1,hubbu%nuatm
-             DO M1=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM) 
-               M10=M1-hubbu%muatm(1,IUATM)+1
+             DO M1=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM) 
+               M10=M1-hubbu%muatm(1,1,IUATM)+1
                MM1=MOFF+M10
                CALL DCOPY(NSTATE,C0XDCA(1,MM1,K),1,&
                                  DC0XCA(1,M10,IUATM,K),1)
              END DO
-             MOFF=MOFF+hubbu%muatm(2,IUATM)-hubbu%muatm(1,IUATM)+1
+             MOFF=MOFF+hubbu%muatm(1,2,IUATM)-hubbu%muatm(1,1,IUATM)+1
            END DO
          END DO
       ENDIF
@@ -217,11 +217,11 @@ CONTAINS
 !$OMP parallel do private(K,M1,M10,MM1,M2,M20,MM2,ISTATE,ISPIN)
       DO IUATM=1,hubbu%nuatm
         DO K=1,3
-          DO M1=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
-             M10=M1-hubbu%muatm(1,IUATM)+1
+          DO M1=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
+             M10=M1-hubbu%muatm(1,1,IUATM)+1
              MM1=OFFSET(IUATM)+M10
-             DO M2=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
-                M20=M2-hubbu%muatm(1,IUATM)+1
+             DO M2=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
+                M20=M2-hubbu%muatm(1,1,IUATM)+1
                 MM2=OFFSET(IUATM)+M20
                 DO ISTATE=1,NSTATE
                    ISPIN=1
@@ -234,7 +234,7 @@ CONTAINS
                 END DO 
              END DO
           END DO
-!          MOFF=MOFF+hubbu%muatm(2,IUATM)-hubbu%muatm(1,IUATM)+1
+!          MOFF=MOFF+hubbu%muatm(1,2,IUATM)-hubbu%muatm(1,1,IUATM)+1
         END DO
       END DO
 !     tt3e=TIMEF()
@@ -243,10 +243,10 @@ CONTAINS
       DO K=1,3
         DO ISPIN=1,2
           DO IUATM=1,hubbu%nuatm
-            M0=hubbu%muatm(1,IUATM)-1
-            DO M1=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM) 
+            M0=hubbu%muatm(1,1,IUATM)-1
+            DO M1=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM) 
                M10=M1-M0
-               DO M2=M1+1,hubbu%muatm(2,IUATM) 
+               DO M2=M1+1,hubbu%muatm(1,2,IUATM) 
                  M20=M2-M0
                  FOMI(ISPIN,IUATM,M10,M20,K)=FOMI(ISPIN,IUATM,M20,M10,K)
                END DO
@@ -268,15 +268,27 @@ CONTAINS
       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
              __LINE__,__FILE__) 
       IF(pslo_com%tivan)THEN
-        deallocate(C0XB,CAXB,C0XDB,CAXDB,DCAXB,STAT=ierr)
+        deallocate(C0XB,STAT=ierr)
+        IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+             __LINE__,__FILE__) 
+        deallocate(CAXB,STAT=ierr)
+        IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+             __LINE__,__FILE__) 
+        deallocate(C0XDB,STAT=ierr)
+        IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+             __LINE__,__FILE__) 
+        deallocate(CAXDB,STAT=ierr)
+        IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+             __LINE__,__FILE__) 
+        deallocate(DCAXB,STAT=ierr)
         IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
              __LINE__,__FILE__) 
       END IF
 !
 !      tte=TIMEF()
-!      if (paral%io_parent) print *, 'nsiemer Time DOMDR =',tte-tt
-!      if (paral%io_parent) print *, 'nsiemer: HUBINTS Call:', tt1e-tt1
-!      if (paral%io_parent) print *, 'nsiemer: loops:', tt2e-tt2, tt3e-tt3,tt4e-tt4
+!      if (parent) print *, 'nsiemer Time DOMDR =',tte-tt
+!      if (parent) print *, 'nsiemer: HUBINTS Call:', tt1e-tt1
+!      if (parent) print *, 'nsiemer: loops:', tt2e-tt2, tt3e-tt3,tt4e-tt4
       CALL TIHALT(procedureN,ISUB)
       END SUBROUTINE DOMDR
 !
@@ -286,7 +298,6 @@ CONTAINS
 !     ====================================================================
 !     == Integrals needed for gradients of occupation matrix; USPP      ==
 !     ====================================================================
-      USE machine, ONLY:m_walltime
       IMPLICIT NONE
 !
       INTEGER                     :: NSTATE
@@ -295,11 +306,11 @@ CONTAINS
                                      DCA(:,:,:),CA(:,:)
 !
       REAL(real_8)                :: C0XDCA(NSTATE,hubbu%nuproj,3),&
-                                   C0XB(hubbu%maxproj,hubbu%nuatm,NSTATE),&
-                                   C0XDB(hubbu%maxproj,3,hubbu%nuatm,NSTATE),& 
-                                   CAXB(hubbu%maxproj,hubbu%nuatm,hubbu%nuproj),&
-                                   CAXDB(hubbu%maxproj,3,hubbu%nuatm,hubbu%nuproj),& 
-                                   DCAXB(hubbu%maxproj,hubbu%nuatm,hubbu%nuproj,3)
+                                   C0XB(maxsys%nhxs,NSTATE,hubbu%nuatm),&
+                                   C0XDB(maxsys%nhxs,NSTATE,3,hubbu%nuatm),& 
+                                   CAXB(maxsys%nhxs,hubbu%nuproj,hubbu%nuatm),&
+                                   CAXDB(maxsys%nhxs,hubbu%nuproj,3,hubbu%nuatm),& 
+                                   DCAXB(maxsys%nhxs,hubbu%nuproj,3,hubbu%nuatm)
       CHARACTER(*), PARAMETER     :: procedureN = 'HUBINTS_USPP'
 !
       COMPLEX(real_8)             :: CIL,IBE,IIGBE,IGV
@@ -313,17 +324,17 @@ CONTAINS
       REAL(real_8)                :: BF,GV,DDOT
       REAL(real_8)                :: GEQFAC
       INTEGER                     :: ierr
-! TMR     REAL(real_8)     :: tt, tte, tt1,tt1e, tt2, tt2e, tt3, tt3e
-! TMR     REAL(real_8)     :: tt4, tt4e, tt5,tt5e, tt6, tt6e, tt7, tt7e
-
+!     REAL(real_8)      tt, tte, tt1,tt1e, tt2, tt2e, tt3, tt3e
+!     REAL(real_8)      tt4, tt4e, tt5,tt5e, tt6, tt6e, tt7, tt7e
+!     REAL(real_8)     TIMEF
  
       CALL TISET(procedureN,ISUB)
-! TMR    tt=m_walltime()
+!    tt=TIMEF()
       GEQFAC=1.D0
       IF(GEQ0)GEQFAC=0.5D0
  
-      allocate(MYBETA(ncpw%ngw,hubbu%maxproj,hubbu%nuatm),&
-            MYDBETA(ncpw%ngw,hubbu%maxproj,3,hubbu%nuatm),STAT=ierr)
+      allocate(MYBETA(ncpw%ngw,maxsys%nhxs,hubbu%nuatm),&
+            MYDBETA(ncpw%ngw,maxsys%nhxs,3,hubbu%nuatm),STAT=ierr)
       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
              __LINE__,__FILE__) 
 !
@@ -331,7 +342,7 @@ CONTAINS
              __LINE__,__FILE__)
 !
       CALL zeroing(C0XDCA)!,NSTATE*hubbu%nuproj*3)
-! TMR    tt1=m_walltime()
+!    tt1=TIMEF()
 !$OMP parallel do private(K,IATTOT,IGV,IG) collapse(3) schedule(static)
       DO K=1,3
         DO IATTOT=1,hubbu%nuproj
@@ -341,20 +352,21 @@ CONTAINS
            END DO
         END DO
       END DO
-! TMR     tt1e=m_walltime()
+!     tt1e=TIMEF()
 !
-! TMR     tt2=m_walltime()
+!     tt2=TIMEF()
       DO K=1,3
         CALL OVLAP2(ncpw%ngw,NSTATE,hubbu%nuproj,C0XDCA(1,1,K),C0,DCA(1,1,K),.True.)
       END DO
-!     tt2e=m_walltime()
+!     tt2e=TIMEF()
 !
+!      CALL GLOSUM(NSTATE*hubbu%nuproj*3,C0XDCA)
       CALL mp_sum(c0xdca,nstate*hubbu%nuproj*3,parai%allgrp)
 !
       
-! TMR     tt3=m_walltime()
+!     tt3=TIMEF()
 !$OMP parallel do &
-!$OMP& private(iuatm,iat,is,ia,iv,cil,ig,bf,ibe,gv,iigbe)
+!$OMP& private(IUATM,IAT,IS,IA,IV,BF,IBE,GV,IIGBE)
       DO IUATM=1,hubbu%nuatm
         IAT=hubbu%uatm(IUATM)
         IS=IATPT(2,IAT)
@@ -378,69 +390,45 @@ CONTAINS
             MYDBETA(1,IV,K,IUATM)=MYDBETA(1,IV,K,IUATM)*GEQFAC
           END DO
         ENDDO
-! ! <psi|beta>
-!         CALL DGEMM('t','n',nlps_com%ngh(IS),NSTATE,2*ncpw%ngw,2.0d0,&
-!                 MYBETA(1,1,IUATM),2*ncpw%ngw,C0(1,1),2*ncpw%ngw,0.0d0,&
-!                 C0XB(1,1,IUATM),hubbu%maxproj)
-! ! <psi|d_beta>
-!         DO K=1,3
-!             CALL DGEMM('t','n',nlps_com%ngh(IS),NSTATE,2*ncpw%ngw,2.0d0,&
-!                 MYDBETA(1,1,K,IUATM),2*ncpw%ngw,C0(1,1),2*ncpw%ngw,0.0d0,&
-!                 C0XDB(1,1,K,IUATM),hubbu%maxproj)
-!         ENDDO
-! ! <phi|beta>
-!         CALL DGEMM('t','n',nlps_com%ngh(IS),hubbu%nuproj,2*ncpw%ngw,2.0d0,&
-!                 MYBETA(1,1,IUATM),2*ncpw%ngw,CA(1,1),2*ncpw%ngw,0.0d0,&
-!                 CAXB(1,1,IUATM),hubbu%maxproj)
-! !  <phi|d_beta>
-!          DO K=1,3
-!           CALL DGEMM('t','n',nlps_com%ngh(IS),hubbu%nuproj,2*ncpw%ngw,2.0d0,&
-!                MYDBETA(1,1,K,IUATM),2*ncpw%ngw,CA(1,1),2*ncpw%ngw,0.0d0,&
-!                 CAXDB(1,1,K,IUATM),hubbu%maxproj)
-!           CALL DGEMM('t','n',nlps_com%ngh(IS),hubbu%nuproj,2*ncpw%ngw,2.0d0,&
-!                 MYBETA(1,1,IUATM),2*ncpw%ngw,DCA(1,1,K),2*ncpw%ngw,0.0d0,&
-!                  DCAXB(1,1,K,IUATM),hubbu%maxproj)
-!         ENDDO 
+! <psi|beta>
+        CALL DGEMM('t','n',nlps_com%ngh(IS),NSTATE,2*ncpw%ngw,2.0d0,&
+                MYBETA(1,1,IUATM),2*ncpw%ngw,C0(1,1),2*ncpw%ngw,0.0d0,&
+                C0XB(1,1,IUATM),maxsys%nhxs)
+! <psi|d_beta>
+        DO K=1,3
+            CALL DGEMM('t','n',nlps_com%ngh(IS),NSTATE,2*ncpw%ngw,2.0d0,&
+                MYDBETA(1,1,K,IUATM),2*ncpw%ngw,C0(1,1),2*ncpw%ngw,0.0d0,&
+                C0XDB(1,1,K,IUATM),maxsys%nhxs)
+        ENDDO
+! <phi|beta>
+        CALL DGEMM('t','n',nlps_com%ngh(IS),hubbu%nuproj,2*ncpw%ngw,2.0d0,&
+                MYBETA(1,1,IUATM),2*ncpw%ngw,CA(1,1),2*ncpw%ngw,0.0d0,&
+                CAXB(1,1,IUATM),maxsys%nhxs)
+!  <phi|d_beta>
+        DO K=1,3
+          CALL DGEMM('t','n',nlps_com%ngh(IS),hubbu%nuproj,2*ncpw%ngw,2.0d0,&
+               MYDBETA(1,1,K,IUATM),2*ncpw%ngw,CA(1,1),2*ncpw%ngw,0.0d0,&
+                CAXDB(1,1,K,IUATM),maxsys%nhxs)
+          CALL DGEMM('t','n',nlps_com%ngh(IS),hubbu%nuproj,2*ncpw%ngw,2.0d0,&
+                MYBETA(1,1,IUATM),2*ncpw%ngw,DCA(1,1,K),2*ncpw%ngw,0.0d0,&
+                DCAXB(1,1,K,IUATM),maxsys%nhxs)
+        ENDDO 
       END DO
 !$OMP end parallel do
-! <psi|beta>
-        CALL DGEMM('t','n',hubbu%maxproj*hubbu%nuatm,NSTATE,2*ncpw%ngw,2.0d0,&
-                MYBETA(1,1,1),2*ncpw%ngw,C0(1,1),2*ncpw%ngw,0.0d0,&
-                C0XB(1,1,1),hubbu%maxproj*hubbu%nuatm)
-                
-! <psi|d_beta>
-!         DO K=1,3
-            CALL DGEMM('t','n',hubbu%maxproj*3*hubbu%nuatm,NSTATE,2*ncpw%ngw,2.0d0,&
-                MYDBETA(1,1,1,1),2*ncpw%ngw,C0(1,1),2*ncpw%ngw,0.0d0,&
-                C0XDB(1,1,1,1),hubbu%maxproj*3*hubbu%nuatm)
-!         ENDDO 
-! <phi|beta>
-        CALL DGEMM('t','n',hubbu%maxproj*hubbu%nuatm,hubbu%nuproj,2*ncpw%ngw,2.0d0,&
-                MYBETA(1,1,1),2*ncpw%ngw,CA(1,1),2*ncpw%ngw,0.0d0,&
-                CAXB(1,1,1),hubbu%maxproj*hubbu%nuatm)
-!  <phi|d_beta>
-!         DO K=1,3
-          CALL DGEMM('t','n',hubbu%maxproj*3*hubbu%nuatm,hubbu%nuproj,2*ncpw%ngw,2.0d0,&
-               MYDBETA(1,1,1,1),2*ncpw%ngw,CA(1,1),2*ncpw%ngw,0.0d0,&
-                CAXDB(1,1,1,1),hubbu%maxproj*3*hubbu%nuatm)
-          CALL DGEMM('t','n',hubbu%maxproj*hubbu%nuatm,hubbu%nuproj*3,2*ncpw%ngw,2.0d0,&
-                MYBETA(1,1,1),2*ncpw%ngw,DCA(1,1,1),2*ncpw%ngw,0.0d0,&
-                DCAXB(1,1,1,1),hubbu%maxproj*hubbu%nuatm)
-!         ENDDO 
       deallocate(MYBETA,MYDBETA,STAT=ierr)
       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
              __LINE__,__FILE__) 
-! TMR     tt3e=m_walltime()
-      CALL mp_sum(C0XB ,hubbu%nuatm*hubbu%maxproj*NSTATE  ,parai%allgrp)
-      CALL mp_sum(C0XDB,hubbu%nuatm*hubbu%maxproj*NSTATE*3,parai%allgrp)
-      CALL mp_sum(CAXB ,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj  ,parai%allgrp)
-      CALL mp_sum(CAXDB,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj*3,parai%allgrp)
-      CALL mp_sum(DCAXB,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj*3,parai%allgrp)
+!     tt3e=TIMEF()
+      CALL mp_sum(C0XB ,hubbu%nuatm*maxsys%nhxs*NSTATE  ,parai%allgrp)
+      CALL mp_sum(C0XDB,hubbu%nuatm*maxsys%nhxs*NSTATE*3,parai%allgrp)
+      CALL mp_sum(CAXB ,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj  ,parai%allgrp)
+      CALL mp_sum(CAXDB,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj*3,parai%allgrp)
+      CALL mp_sum(DCAXB,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj*3,parai%allgrp)
 !
-! TMR     tte=m_walltime()
-! TMR     if (paral%io_parent) print *, 'nsiemer Time HUBINTS_USPP =',tte-tt
-! TMR     if (paral%io_parent) print *, ' loops:', tt1e-tt1, tt2e-tt2, tt3e-tt3 
-! TMR     if (paral%io_parent) print *, ' glosum', tte -tt3e
+!     tte=TIMEF()
+!     if (parent) print *, 'nsiemer Time HUBINTS_USPP =',tte-tt
+!     if (parent) print *, ' loops:', tt1e-tt1, tt2e-tt2, tt3e-tt3 
+!     if (parent) print *, ' glosum', tte -tt3e
       CALL TIHALT(procedureN,ISUB)
       END SUBROUTINE HUBINTS_USPP
 !     ====================================================================
@@ -452,9 +440,8 @@ CONTAINS
 !     ====================================================================
 !     == Integrals needed for gradients of occupation matrix; USPP      ==
 !     ====================================================================
-      USE machine, ONLY:m_walltime
       IMPLICIT NONE
-
+!
       INTEGER                   :: NSTATE
 !
       COMPLEX(real_8)           :: C0(:,:),&
@@ -462,11 +449,11 @@ CONTAINS
                                    CA(:,:),PSI(:)
 !
       REAL(real_8)              :: C0XDCA(NSTATE,hubbu%nuproj,3),&
-                                 C0XB(hubbu%maxproj,hubbu%nuatm,NSTATE),&
-                                 C0XDB(hubbu%maxproj,3,hubbu%nuatm,NSTATE),&
-                                 CAXB(hubbu%maxproj,hubbu%nuatm,hubbu%nuproj),&
-                                 CAXDB(hubbu%maxproj,3,hubbu%nuatm,hubbu%nuproj),& 
-                                 DCAXB(hubbu%maxproj,hubbu%nuatm,hubbu%nuproj,3)
+                                 C0XB(maxsys%nhxs,NSTATE,hubbu%nuatm),&
+                                 C0XDB(maxsys%nhxs,NSTATE,3,hubbu%nuatm),&
+                                 CAXB(maxsys%nhxs,hubbu%nuproj,hubbu%nuatm),&
+                                 CAXDB(maxsys%nhxs,hubbu%nuproj,3,hubbu%nuatm),& 
+                                 DCAXB(maxsys%nhxs,hubbu%nuproj,3,hubbu%nuatm)
       CHARACTER(*),PARAMETER    :: procedureN = 'HUBINTS_USPP2'
 !
       COMPLEX(real_8)           :: CIL,IBE,IIGBE,IGV
@@ -513,13 +500,13 @@ CONTAINS
       allocate(DCA0XCA0(hubbu%nuproj,3),STAT=ierr)
       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
              __LINE__,__FILE__) 
-      allocate(CA0B(ions1%nat,hubbu%maxproj,hubbu%nuproj),STAT=ierr)
+      allocate(CA0B(ions1%nat,maxsys%nhxs,hubbu%nuproj),STAT=ierr)
       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
              __LINE__,__FILE__) 
-      allocate(DCA0B(ions1%nat,hubbu%maxproj,hubbu%nuproj,3),STAT=ierr)
+      allocate(DCA0B(ions1%nat,maxsys%nhxs,hubbu%nuproj,3),STAT=ierr)
       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
              __LINE__,__FILE__) 
-      allocate(CA0DB(ions1%nat,hubbu%maxproj,hubbu%nuproj,3),STAT=ierr)
+      allocate(CA0DB(ions1%nat,maxsys%nhxs,hubbu%nuproj,3),STAT=ierr)
       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
              __LINE__,__FILE__) 
 !
@@ -546,7 +533,7 @@ CONTAINS
       cntl%tlsd=.FALSE.
       CALL FNL_SET('SAVE')
       CALL FNLALLOC(hubbu%nuproj,.FALSE.,.FALSE.)
-      CALL rnlsm(sca,hubbu%nuproj,1,1,.FALSE.,.FALSE.)
+      CALL rnlsm(sca,hubbu%nuproj,1,1,.false.)
 !
 ! S|phi>
       CALL spsi(hubbu%nuproj,sca) 
@@ -570,9 +557,9 @@ CONTAINS
       !CALL GLOSUM(hubbu%nuproj*3,DCA0SCA0)
       CALL mp_sum(DCA0SCA0,hubbu%nuproj*3,parai%allgrp)
 !
-      CALL zeroing(CA0B)!,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj)
-      CALL zeroing(DCA0B)!,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj*3)
-      CALL zeroing(CA0DB)!,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj*3)
+      CALL zeroing(CA0B)!,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj)
+      CALL zeroing(DCA0B)!,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj*3)
+      CALL zeroing(CA0DB)!,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj*3)
 ! <dphi|beta> & <phi|beta> 
 !     tt2=TIMEF()
       DO IUATM=1,hubbu%nuatm
@@ -612,9 +599,9 @@ CONTAINS
         END DO
       END DO
 !     tt2e=TIMEF()
-      CALL mp_sum(CA0B ,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj  ,parai%allgrp)
-      CALL mp_sum(DCA0B,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj*3,parai%allgrp)
-      CALL mp_sum(CA0DB,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj*3,parai%allgrp)
+      CALL mp_sum(CA0B ,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj  ,parai%allgrp)
+      CALL mp_sum(DCA0B,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj*3,parai%allgrp)
+      CALL mp_sum(CA0DB,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj*3,parai%allgrp)
 !
 !     tt3=TIMEF()
       DO K=1,3
@@ -622,7 +609,7 @@ CONTAINS
          IAT=hubbu%uatm(IUATM)
          IS=IATPT(2,IAT)
          IA=IATPT(1,IAT)
-         DO IATTOT=hubbu%muatm(1,IUATM),hubbu%muatm(2,IUATM)
+         DO IATTOT=hubbu%muatm(1,1,IUATM),hubbu%muatm(1,2,IUATM)
            DUM=0.D0
            DO IV=1,nlps_com%ngh(IS)
              DO JV=1,nlps_com%ngh(IS)
@@ -664,11 +651,11 @@ CONTAINS
 !
       CALL mp_sum(C0XDCA,NSTATE*hubbu%nuproj*3,parai%allgrp)
 !
-      CALL zeroing(C0XB)!,hubbu%nuatm*hubbu%maxproj*NSTATE)
-      CALL zeroing(CAXB)!,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj)
-      CALL zeroing(C0XDB)!,hubbu%nuatm*hubbu%maxproj*NSTATE*3)
-      CALL zeroing(CAXDB)!,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj*3)
-      CALL zeroing(DCAXB)!,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj*3)
+      CALL zeroing(C0XB)!,hubbu%nuatm*maxsys%nhxs*NSTATE)
+      CALL zeroing(CAXB)!,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj)
+      CALL zeroing(C0XDB)!,hubbu%nuatm*maxsys%nhxs*NSTATE*3)
+      CALL zeroing(CAXDB)!,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj*3)
+      CALL zeroing(DCAXB)!,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj*3)
 
 !     tt6=TIMEF()
       DO IUATM=1,hubbu%nuatm
@@ -697,21 +684,21 @@ CONTAINS
           END IF
 !
           DO ISTATE=1,NSTATE
-            C0XB(IV,IUATM,ISTATE)=C0XB(IV,IUATM,ISTATE)+&
+            C0XB(IV,ISTATE,IUATM)=C0XB(IV,ISTATE,IUATM)+&
                   2.D0*DDOT(2*ncpw%ngw,MYBETA,1,C0(1,ISTATE),1)
             DO K=1,3
-               C0XDB(IV,K,IUATM,ISTATE)=C0XDB(IV,K,IUATM,ISTATE)+&
+               C0XDB(IV,ISTATE,K,IUATM)=C0XDB(IV,ISTATE,K,IUATM)+&
                   2.D0*DDOT(2*ncpw%ngw,MYDBETA(1,K),1,C0(1,ISTATE),1)
             END DO
           END DO
 !
           DO IATTOT=1,hubbu%nuproj 
-            CAXB(IV,IUATM,IATTOT)=CAXB(IV,IUATM,IATTOT)+&
+            CAXB(IV,IATTOT,IUATM)=CAXB(IV,IATTOT,IUATM)+&
                 2.D0*DDOT(2*ncpw%ngw,MYBETA,1,CA(1,IATTOT),1)
             DO K=1,3
-              CAXDB(IV,K,IUATM,IATTOT)=CAXDB(IV,K,IUATM,IATTOT)+&
+              CAXDB(IV,IATTOT,K,IUATM)=CAXDB(IV,IATTOT,K,IUATM)+&
                 2.D0*DDOT(2*ncpw%ngw,MYDBETA(1,K),1,CA(1,IATTOT),1)
-              DCAXB(IV,IUATM,IATTOT,K)=DCAXB(IV,IUATM,IATTOT,K)+&
+              DCAXB(IV,IATTOT,K,IUATM)=DCAXB(IV,IATTOT,K,IUATM)+&
                 2.D0*DDOT(2*ncpw%ngw,MYBETA,1,DCA(1,IATTOT,K),1)
             END DO
           END DO
@@ -720,11 +707,11 @@ CONTAINS
       END DO 
 !     tt6e=TIMEF()
 !
-      CALL mp_sum(C0XB ,hubbu%nuatm*hubbu%maxproj*NSTATE  ,parai%allgrp)
-      CALL mp_sum(C0XDB,hubbu%nuatm*hubbu%maxproj*NSTATE*3,parai%allgrp)
-      CALL mp_sum(CAXB ,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj  ,parai%allgrp)
-      CALL mp_sum(CAXDB,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj*3,parai%allgrp)
-      CALL mp_sum(DCAXB,hubbu%nuatm*hubbu%maxproj*hubbu%nuproj*3,parai%allgrp)
+      CALL mp_sum(C0XB ,hubbu%nuatm*maxsys%nhxs*NSTATE  ,parai%allgrp)
+      CALL mp_sum(C0XDB,hubbu%nuatm*maxsys%nhxs*NSTATE*3,parai%allgrp)
+      CALL mp_sum(CAXB ,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj  ,parai%allgrp)
+      CALL mp_sum(CAXDB,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj*3,parai%allgrp)
+      CALL mp_sum(DCAXB,hubbu%nuatm*maxsys%nhxs*hubbu%nuproj*3,parai%allgrp)
 
      deallocate(SCA,STAT=ierr)
       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
@@ -755,8 +742,8 @@ CONTAINS
       FIRSTCALL=FIRSTCALL+1
 !
       CALL TIHALT(procedureN,ISUB)
-!     if (paral%io_parent) print *, 'nsiemer Time HUBINTS_USPP2 =',tte-tt
-!     if (paral%io_parent) print *, ' loops:', tt1e-tt1, tt2e-tt2, tt3e-tt3, &
+!     if (parent) print *, 'nsiemer Time HUBINTS_USPP2 =',tte-tt
+!     if (parent) print *, ' loops:', tt1e-tt1, tt2e-tt2, tt3e-tt3, &
 !                tt4e-tt4 , tt5e-tt5, tt6e,tt6
       END SUBROUTINE HUBINTS_USPP2
 !

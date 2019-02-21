@@ -2,7 +2,6 @@ MODULE cl_init_utils
   USE clas,                            ONLY: &
        clab, clas3, clas4, clas7, defy, imovc, myclat1, myclat2, ndefo, &
        ntrac, pote1, pr12, rcr12
-  USE distribution_utils,              ONLY: dist_size
   USE error_handling,                  ONLY: stopgm
   USE inscan_utils,                    ONLY: inscan
   USE kinds,                           ONLY: real_8
@@ -51,8 +50,8 @@ CONTAINS
     CHARACTER(*), PARAMETER                  :: procedureN = 'cl_init'
 
     CHARACTER(len=80)                        :: line
-    INTEGER                                  :: i, ierr, is, j, n1, n2, &
-                                                dummy(2,0:parai%nproc-1)
+    INTEGER                                  :: i, ierr, is, j, n1, n2
+    REAL(real_8)                             :: xat, xsaim, xsnow
 
 ! ==--------------------------------------------------------------==
 ! ==  DEFAULTS                                                    ==
@@ -208,9 +207,20 @@ CONTAINS
     ENDIF
     ! ==--------------------------------------------------------------==
     ! ..distribute work for parallel jobs
-    CALL dist_size(clas3%nclatom,parai%nproc,dummy)
-    myclat1=dummy(1,parai%mepos)
-    myclat2=dummy(2,parai%mepos)
+    xat=REAL(clas3%nclatom,kind=real_8)
+    xsnow=0.0_real_8
+    DO i=parai%nproc,1,-1
+       xsaim = xsnow + xat/parai%nproc
+       n1=NINT(xsnow)+1
+       n2=NINT(xsaim)
+       IF (NINT(xsaim).GT.clas3%nclatom) n2=clas3%nclatom
+       IF (i.EQ.1) n2=clas3%nclatom
+       xsnow = xsaim
+       IF (i-1.EQ.parai%mepos) THEN
+          myclat1=n1
+          myclat2=n2
+       ENDIF
+    ENDDO
     ! ==--------------------------------------------------------------==
     ! ..update mass information
     DO i=1,clas3%ncltyp

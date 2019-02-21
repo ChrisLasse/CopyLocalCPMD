@@ -27,10 +27,7 @@ MODULE vofrhoa_utils
                                              tiset
   USE vlocst_utils,                    ONLY: vlocst
   USE zeroing_utils,                   ONLY: zeroing
-#ifdef _USE_SCRATCHLIBRARY
-  USE scratch_interface,               ONLY: request_scratch,&
-                                             free_scratch
-#endif
+
   IMPLICIT NONE
 
   PRIVATE
@@ -61,12 +58,8 @@ CONTAINS
     CHARACTER(*), PARAMETER                  :: procedureN = 'vofrhoa'
 
     COMPLEX(real_8)                          :: ee, eh, ei, eps
-#ifdef _USE_SCRATCHLIBRARY
-    COMPLEX(real_8), POINTER __CONTIGUOUS    :: eirop(:), eivps(:)
-#else
     COMPLEX(real_8), ALLOCATABLE             :: eirop(:), eivps(:)
-#endif
-    INTEGER                                  :: ierr, isub, nnrs ,il_eirop(1), il_eivps(1)
+    INTEGER                                  :: ierr, isub, nnrs
     REAL(real_8)                             :: ehs
 
 ! Variables
@@ -75,20 +68,14 @@ CONTAINS
 
     CALL tiset(procedureN,isub)
     __NVTX_TIMER_START ( procedureN )
-    il_eirop(1)=ncpw%nhg
-    il_eivps(1)=ncpw%nhg
 
-#ifdef _USE_SCRATCHLIBRARY
-    CALL request_scratch(il_eivps,eivps,procedureN//'_eivps')
-    CALL request_scratch(il_eirop,eirop,procedureN//'_eirop')
-#else    
-    ALLOCATE(eivps(il_eivps(1)),STAT=ierr)
+    ALLOCATE(eivps(ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
-    ALLOCATE(eirop(il_eirop(1)),STAT=ierr)
+    ALLOCATE(eirop(ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
-#endif
+
     nnrs  = spar%nr1s*spar%nr2s*spar%nr3s
     CALL eicalc(eivps,eirop)
     ! ..External Field or forces of external potential
@@ -144,17 +131,13 @@ CONTAINS
        CALL vlocst(ener_com%epseu,v,eivps)
     ENDIF
 
-#ifdef _USE_SCRATCHLIBRARY
-    CALL free_scratch(il_eirop,eirop,procedureN//'_eirop')
-    CALL free_scratch(il_eivps,eivps,procedureN//'_eivps')
-#else
     DEALLOCATE(eivps,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
          __LINE__,__FILE__)
     DEALLOCATE(eirop,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
          __LINE__,__FILE__)
-#endif
+
     __NVTX_TIMER_STOP
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==

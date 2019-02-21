@@ -70,8 +70,8 @@ CONTAINS
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
     CALL zeroing(   dloc)!,nstate*maxsys%nhxs)
-    DO istate=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-       istate_rel = istate - parap%nst12(1,parai%mepos)+1
+    DO istate=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+       istate_rel = istate - parap%nst12(parai%mepos,1)+1
        DO iv=1,nlps_com%ngh(isp_)
           dloc(iv,istate)=dfnl00(1,isa_,iv,k_,istate_rel,ikind)
        ENDDO

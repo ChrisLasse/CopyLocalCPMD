@@ -100,9 +100,9 @@ CONTAINS
     ENDDO
     ! stop
 
-    DO i= 1,nstate ! NST12(1,MEPOS),NST12(2,MEPOS)
+    DO i= 1,nstate ! NST12(MEPOS,1),NST12(MEPOS,2)
 
-       ii=i! -NST12(1,MEPOS)+1
+       ii=i! -NST12(MEPOS,1)+1
 
        CALL dcopy(4*ncpw%ngw,c0(1,ii),1,sc0,1)
 

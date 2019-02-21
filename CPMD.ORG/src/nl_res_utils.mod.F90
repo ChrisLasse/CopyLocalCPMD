@@ -74,8 +74,8 @@ CONTAINS
     CALL zeroing(ft)!,maxsys%nhxs*nstate)
     CALL zeroing(dft)!,maxsys%nhxs*nstate)
     IF (cntl%tfdist) THEN
-       DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-          ii=i-parap%nst12(1,parai%mepos)+1
+       DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+          ii=i-parap%nst12(parai%mepos,1)+1
           DO iv=1,nlps_com%ngh(is)
              ft(iv,i)=fnl2(1,isa,iv,ii,1)
           ENDDO
@@ -88,8 +88,8 @@ CONTAINS
           ENDDO
        ENDDO
     ENDIF
-    DO i=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-       ii=i-parap%nst12(1,parai%mepos)+1
+    DO i=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+       ii=i-parap%nst12(parai%mepos,1)+1
        DO iv=1,nlps_com%ngh(is)
           dft(iv,i)=dfnl(1,isa,iv,k,ii,1)
        ENDDO

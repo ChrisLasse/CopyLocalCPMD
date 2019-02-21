@@ -134,8 +134,8 @@ CONTAINS
     DO i=0,2*mr(1)
        ix=iorgx+i
        IF (ix.GT.spar%nr1s) ix=ix-spar%nr1s
-       IF (ix.GE.parap%nrxpl(1,parai%mepos).AND.ix.LE.parap%nrxpl(2,parai%mepos)) THEN
-          ii=ix-parap%nrxpl(1,parai%mepos)+1
+       IF (ix.GE.parap%nrxpl(parai%mepos,1).AND.ix.LE.parap%nrxpl(parai%mepos,2)) THEN
+          ii=ix-parap%nrxpl(parai%mepos,1)+1
           i1=mr(1)-i
           DO j=0,2*mr(2)
              jj=iorgy+j

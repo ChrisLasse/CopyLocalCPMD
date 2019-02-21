@@ -55,7 +55,7 @@ CONTAINS
          __LINE__,__FILE__)
     CALL reshape_inplace(z, (/nstate*nstate/), z2)
     ! ==--------------------------------------------------------------==
-    CALL csmat(z,cp,fnl,nstate,1,.FALSE.)
+    CALL csmat(z,cp,fnl,nstate,1)
     IF (.NOT.cntl%tlsd) THEN
        k=0
        DO j=1,nstate

@@ -354,7 +354,7 @@ CONTAINS
     REAL(real_8)                             :: den, ded, de, dfdw, dwdt, dtdr, dtdtau
     REAL(real_8)                             :: dggadr, dfdr, dfdtau, dggadg
 
-    CALL cp_mgga_x_vs98( scratch, functional )
+    IF (cp_mgga_x_param%M05_M06%add_vs98) CALL cp_mgga_x_vs98( scratch, functional )
 
     sx     = functional%sx_sigma
     dsx_dn = functional%dsx_dn
@@ -363,7 +363,7 @@ CONTAINS
 
     tau = 2.0_real_8*scratch%tau
 
-    if ( scratch%n > small .and. tau > small ) then 
+    if ( scratch%n > small ) then 
        n_5_3  = scratch%n_1_3*scratch%n_4_3
        taueg  = ctaueg*n_5_3
        tsig   = taueg/tau
@@ -963,7 +963,7 @@ CONTAINS
 
     tau = 2.0_real_8 * scratch%tau 
 
-    if ( scratch%n > small .and. tau > small) then 
+    if ( scratch%n > small ) then 
        n_5_3 = scratch%n_1_3 * scratch%n_4_3
        n_8_3 = scratch%n_4_3 * scratch%n_4_3
 

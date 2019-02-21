@@ -10,127 +10,128 @@ MODULE summat_utils
   USE nlps,                            ONLY: imagp
   USE parac,                           ONLY: parai,&
                                              paral
-  USE spin,                            ONLY: spin_mod
-  USE system,                          ONLY: cntl
   USE timer,                           ONLY: tihalt,&
                                              tiset
-  USE utils,                           ONLY: symmat_pack,&
-                                             symmat_unpack
 
-#ifdef _USE_SCRATCHLIBRARY
-  USE scratch_interface,               ONLY: request_scratch,&
-                                             free_scratch
-#endif
   IMPLICIT NONE
 
   PRIVATE
 
   PUBLIC :: summat
+  PUBLIC :: summat_parent
   !!public :: sumhmat
   PUBLIC :: give_scr_summat
 
 CONTAINS
 
   ! ==================================================================
-  SUBROUTINE summat(a,nstate,symmetrization,lsd,gid,parent)
+  SUBROUTINE summat(a,nstate)
     ! ==--------------------------------------------------------------==
     INTEGER                                  :: nstate
     REAL(real_8), TARGET                     :: a(nstate,nstate)
 
     CHARACTER(*), PARAMETER                  :: procedureN = 'summat'
 
-    INTEGER                                  :: ierr, isub, ntr(1) 
-    LOGICAL                                  :: full,lsd_active,is_parent,only_parent
-    INTEGER,INTENT(IN),OPTIONAL              :: gid
-    INTEGER                                  :: mpi_com,parent_rank
-    LOGICAL,INTENT(IN),OPTIONAL              :: symmetrization,lsd,parent
-#ifdef _USE_SCRATCHLIBRARY
-    REAL(real_8), POINTER __CONTIGUOUS       :: aux(:)
-#else
-    REAL(real_8), ALLOCATABLE                :: aux(:)
-#endif
+    INTEGER                                  :: i, ierr, isub, j, k, n2, ntr
+    REAL(real_8), ALLOCATABLE                :: aux(:,:)
+
 ! Variables
 ! ==--------------------------------------------------------------==
 ! == GLOBAL SUMMATION OF A SYMMETRIC MATRIX                       ==
 ! ==--------------------------------------------------------------==
-    CALL tiset(procedureN,isub)
-    !check input parameters
-    IF(PRESENT(gid))THEN
-       mpi_com=gid
-    ELSE
-       mpi_com=parai%allgrp
-    END IF
-    IF(PRESENT(symmetrization))THEN
-       full=symmetrization
-    ELSE
-       full=.TRUE.
-    END IF
-    IF(PRESENT(lsd))THEN
-       lsd_active=lsd
-    ELSE
-       lsd_active=.FALSE.
-    END IF
-    IF(PRESENT(parent))THEN
-       only_parent=parent
-    ELSE
-       only_parent=.FALSE.
-    END IF
-    !end check
 
-    IF (mpi_com .eq. parai%cp_grp) then
-       IF (parai%cp_nproc.LE.1) RETURN
-       is_parent=paral%io_parent
-       parent_rank=parai%io_source
-    ELSEIF (mpi_com .eq. parai%allgrp) then
-       IF (parai%nproc.LE.1) RETURN
-       is_parent=paral%parent
-       parent_rank=parai%source
-    ELSE
-       CALL stopgm(procedureN,'unsupported communicator', &
-         __LINE__,__FILE__)
-    END IF
-    IF(lsd_active.AND.cntl%tlsd)THEN
-       ntr=spin_mod%nsup*(spin_mod%nsup+1)/2+&
-         spin_mod%nsdown*(spin_mod%nsdown+1)/2
-    ELSE
-       ntr=nstate*(nstate+1)/2
-    END IF
-#ifdef _USE_SCRATCHLIBRARY
-    CALL request_scratch(ntr,aux,procedureN//'_aux')
-#else
-    ALLOCATE(aux(ntr(1)),STAT=ierr)
-#endif
+    IF (parai%nproc.LE.1) RETURN
+    CALL tiset('    SUMMAT',isub)
+    n2 = nstate*nstate
+    ntr = (nstate*(nstate+1))/2
+    ALLOCATE(aux(ntr,1),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
-    IF(lsd_active.AND.cntl%tlsd)THEN
-       CALL symmat_pack(a,aux,nstate,spin_mod%nsup,spin_mod%nsdown)
-    ELSE
-       CALL symmat_pack(a,aux,nstate,nstate,0)
-    END IF
-    IF(only_parent)THEN
-       CALL mp_sum(aux,ntr(1),parent_rank,mpi_com)
-    ELSE
-       CALL mp_sum(aux,ntr(1),mpi_com)
-    END IF
-    IF(.NOT.(only_parent.AND..NOT.is_parent))THEN
-       IF(lsd_active.AND.cntl%tlsd)THEN
-          CALL symmat_unpack(a,aux,nstate,spin_mod%nsup,spin_mod%nsdown,full)
-       ELSE
-          CALL symmat_unpack(a,aux,nstate,nstate,0,full)
-       END IF
-    END IF
-#ifdef _USE_SCRATCHLIBRARY
-    CALL free_scratch(ntr,aux,procedureN//'_aux')
-#else
+    !$omp parallel do private(I,J,K) schedule(static,1)
+#ifdef __SR8000
+    !poption parallel, tlocal(I,J,K), cyclic 
+#endif
+    DO i=1,nstate
+       DO j=i,nstate
+          k=i+(j*(j-1))/2
+          aux(k,1)=a(i,j)
+       ENDDO
+    ENDDO
+    CALL mp_sum(aux,a,ntr,parai%allgrp)
+    CALL dcopy(ntr,a(1,1),1,aux,1)
+    !$omp parallel do private(I,J,K) schedule(static,1)
+#ifdef __SR8000
+    !poption parallel, cyclic 
+#endif 
+    DO i=1,nstate
+       DO j=i,nstate
+          k=i+(j*(j-1))/2
+          a(i,j)=aux(k,1)
+          a(j,i)=aux(k,1)
+       ENDDO
+    ENDDO
     DEALLOCATE(aux,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
          __LINE__,__FILE__)
-#endif
-
-    CALL tihalt(procedureN,isub)
+    CALL tihalt('    SUMMAT',isub)
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE summat
+  ! ==================================================================
+  SUBROUTINE summat_parent(a,nstate)
+    ! ==--------------------------------------------------------------==
+    INTEGER                                  :: nstate
+    REAL(real_8)                             :: a(nstate,nstate)
+
+    CHARACTER(*), PARAMETER                  :: procedureN = 'summat_parent'
+
+    INTEGER                                  :: i, ierr, isub, j, k, n2, ntr
+    REAL(real_8), ALLOCATABLE                :: aux(:,:)
+
+! Variables
+! ==--------------------------------------------------------------==
+! == GLOBAL SUMMATION OF A SYMMETRIC MATRIX                       ==
+! ==--------------------------------------------------------------==
+
+    IF (parai%nproc.LE.1) RETURN
+    CALL tiset('    SUMMAT',isub)
+    n2 = nstate*nstate
+    ntr = (nstate*(nstate+1))/2
+    ALLOCATE(aux(ntr,1),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    !$omp parallel do private(I,J,K) schedule(static,1)
+#ifdef __SR8000
+    !poption parallel, tlocal(I,J,K), cyclic 
+#endif 
+    DO i=1,nstate
+       DO j=i,nstate
+          k=i+(j*(j-1))/2
+          aux(k,1)=a(i,j)
+       ENDDO
+    ENDDO
+    CALL mp_sum(aux,a,ntr,parai%source,parai%allgrp)
+    IF (paral%parent) THEN
+       CALL dcopy(ntr,a,1,aux,1)
+       !$omp parallel do private(I,J,K) schedule(static,1)
+#ifdef __SR8000
+       !poption parallel, cyclic 
+#endif 
+       DO i=1,nstate
+          DO j=i,nstate
+             k=i+(j*(j-1))/2
+             a(i,j)=aux(k,1)
+             a(j,i)=aux(k,1)
+          ENDDO
+       ENDDO
+    ENDIF
+    DEALLOCATE(aux,STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+         __LINE__,__FILE__)
+    CALL tihalt('    SUMMAT',isub)
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END SUBROUTINE summat_parent
   ! ==================================================================
   SUBROUTINE give_scr_summat(lsummat,tag,nstate)
     ! ==--------------------------------------------------------------==

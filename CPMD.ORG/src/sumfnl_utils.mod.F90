@@ -304,13 +304,13 @@ CONTAINS
        ENDDO
     ENDDO
     IF (tfnl2) THEN
-       nmin=MAX(i,parap%nst12(1,parai%mepos))
-       nmax=MIN(i+ns-1,parap%nst12(2,parai%mepos))
+       nmin=MAX(i,parap%nst12(parai%mepos,1))
+       nmax=MIN(i+ns-1,parap%nst12(parai%mepos,2))
 #ifdef IS_THREADED
        !$omp parallel do private(ist,ii,jj,ia,isa)
 #endif
        DO ist=nmin,nmax
-          ii=ist-parap%nst12(1,parai%mepos)+1
+          ii=ist-parap%nst12(parai%mepos,1)+1
           jj=ist-i+1
           DO ia=1,nai
              isa=isa0+ia

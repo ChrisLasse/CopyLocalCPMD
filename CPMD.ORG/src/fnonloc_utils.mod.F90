@@ -311,8 +311,8 @@ CONTAINS
              IF (cntl%tfdist) THEN
                 CALL zeroing(ddia)!,imagp*maxsys%nax*nstate)
                 DO i=1,nstate
-                   IF (i.GE.parap%nst12(1,parai%mepos).AND.i.LE.parap%nst12(2,parai%mepos)) THEN
-                      iaa=i-parap%nst12(1,parai%mepos)+1
+                   IF (i.GE.parap%nst12(parai%mepos,1).AND.i.LE.parap%nst12(parai%mepos,2)) THEN
+                      iaa=i-parap%nst12(parai%mepos,1)+1
                       CALL dcopy(imagp*ions0%na(is),fnl2(1,isa0+1,iv,iaa,ikind),1,&
                            ddia(1,i),1)
                    ENDIF
@@ -539,15 +539,15 @@ CONTAINS
              ! STATE=ALPHA
              IF (cntl%tfdist) THEN
                 CALL zeroing(ddia(1:ions0%na(is)))!,ions0%na(is))
-                IF (clsd%ibeta.GE.parap%nst12(1,parai%mepos).AND.&
-                     clsd%ibeta.LE.parap%nst12(2,parai%mepos)) THEN
-                   iaa=clsd%ibeta-parap%nst12(1,parai%mepos)+1
+                IF (clsd%ibeta.GE.parap%nst12(parai%mepos,1).AND.&
+                     clsd%ibeta.LE.parap%nst12(parai%mepos,2)) THEN
+                   iaa=clsd%ibeta-parap%nst12(parai%mepos,1)+1
                    CALL dcopy(ions0%na(is),fnl2(1,isa0+1,iv,iaa,1),1,ddia,1)
                    CALL dscal(ions0%na(is),-0.5_real_8*ca*sa,ddia,1)
                 ENDIF
-                IF (clsd%ialpha.GE.parap%nst12(1,parai%mepos).AND.&
-                     clsd%ialpha.LE.parap%nst12(2,parai%mepos)) THEN
-                   iaa=clsd%ialpha-parap%nst12(1,parai%mepos)+1
+                IF (clsd%ialpha.GE.parap%nst12(parai%mepos,1).AND.&
+                     clsd%ialpha.LE.parap%nst12(parai%mepos,2)) THEN
+                   iaa=clsd%ialpha-parap%nst12(parai%mepos,1)+1
                    CALL daxpy(ions0%na(is),sa*sa,fnl2(1,isa0+1,iv,iaa,1),&
                         1,ddia,1)
                 ENDIF
@@ -588,15 +588,15 @@ CONTAINS
              ! STATE=BETA
              IF (cntl%tfdist) THEN
                 CALL zeroing(ddia(1:ions0%na(is)))!,ions0%na(is))
-                IF (clsd%ialpha.GE.parap%nst12(1,parai%mepos).AND.&
-                     clsd%ialpha.LE.parap%nst12(2,parai%mepos)) THEN
-                   iaa=clsd%ialpha-parap%nst12(1,parai%mepos)+1
+                IF (clsd%ialpha.GE.parap%nst12(parai%mepos,1).AND.&
+                     clsd%ialpha.LE.parap%nst12(parai%mepos,2)) THEN
+                   iaa=clsd%ialpha-parap%nst12(parai%mepos,1)+1
                    CALL dcopy(ions0%na(is),fnl2(1,isa0+1,iv,iaa,1),1,ddia,1)
                    CALL dscal(ions0%na(is),-0.5_real_8*ca*sa,ddia,1)
                 ENDIF
-                IF (clsd%ibeta.GE.parap%nst12(1,parai%mepos).AND.&
-                     clsd%ibeta.LE.parap%nst12(2,parai%mepos)) THEN
-                   iaa=clsd%ibeta-parap%nst12(1,parai%mepos)+1
+                IF (clsd%ibeta.GE.parap%nst12(parai%mepos,1).AND.&
+                     clsd%ibeta.LE.parap%nst12(parai%mepos,2)) THEN
+                   iaa=clsd%ibeta-parap%nst12(parai%mepos,1)+1
                    CALL daxpy(ions0%na(is),-sa*sa,&
                         fnl2(1,isa0+1,iv,iaa,1),1,ddia,1)
                 ENDIF

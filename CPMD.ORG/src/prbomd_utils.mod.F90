@@ -67,7 +67,7 @@ MODULE prbomd_utils
   USE meta_exlagr_utils,               ONLY: ekincv_global,&
                                              meta_stress
   USE metr,                            ONLY: metr_com
-  USE mm_extrap,                       ONLY: cold
+  USE mm_extrap,                       ONLY: cold, nnow, numcold 
   USE moverho_utils,                   ONLY: give_scr_moverho,&
                                              moverho
   USE mp_interface,                    ONLY: mp_bcast
@@ -495,7 +495,7 @@ CONTAINS
        ENDIF
        IF (cntl%textrap) THEN
           ! Extrapolate wavefunctions
-          CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra)
+          CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
        ENDIF
        ! CALCULATE THE FORCES
        CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&

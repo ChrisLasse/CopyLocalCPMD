@@ -15,7 +15,7 @@ MODULE fft
 
   INTEGER :: naux1,naux2
 
-#if defined(_HAS_CUDA)||defined(_USE_SCRATCHLIBRARY)
+#if defined(_HAS_CUDA)
   COMPLEX(real_8), POINTER __CONTIGUOUS :: xf(:,:)
   COMPLEX(real_8), POINTER __CONTIGUOUS :: yf(:,:)
 #else
@@ -52,16 +52,6 @@ MODULE fft
   INTEGER, POINTER :: inzs(:)
   INTEGER, POINTER :: inzh(:,:)
 
-  ! ==================================================================
-  ! NEW GENERAL BLOCKING PARALLEL FFT CODE
-  ! ==================================================================
-  INTEGER :: a2a_msgsize,fft_blocksize,fft_numblocks,fft_residual,fft_total
-  LOGICAL :: blocking_fft
-#ifdef _USE_SCRATCHLIBRARY
-  COMPLEX(real_8), POINTER __CONTIGUOUS    :: wfn_r(:,:),wfn_g(:,:)
-#else
-  COMPLEX(real_8), ALLOCATABLE, SAVE       :: wfn_r(:,:),wfn_g(:,:)
-#endif
   ! ==================================================================
   ! POOL
   ! ==================================================================

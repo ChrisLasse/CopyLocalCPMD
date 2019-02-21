@@ -279,8 +279,8 @@ CONTAINS
     DO i=0,2*mr(1)
        ix=iorgx+i
        IF (ix.GT.spar%nr1s) ix=ix-spar%nr1s
-       IF (ix.GE.parap%nrxpl(1,parai%mepos).AND.ix.LE.parap%nrxpl(2,parai%mepos)) THEN
-          ii=ix-parap%nrxpl(1,parai%mepos)+1
+       IF (ix.GE.parap%nrxpl(parai%mepos,1).AND.ix.LE.parap%nrxpl(parai%mepos,2)) THEN
+          ii=ix-parap%nrxpl(parai%mepos,1)+1
           i1=mr(1)-i
           DO j=0,2*mr(2)
              jj=iorgy+j
@@ -952,7 +952,7 @@ CONTAINS
           DO i=1,fpar%kr1
              DO j=1,fpar%kr2
                 DO k=1,fpar%kr3
-                   wfull(parap%nrxpl(1,parai%me)+i-1,j,k)=weight(i,j,k)
+                   wfull(parap%nrxpl(parai%me,1)+i-1,j,k)=weight(i,j,k)
                 ENDDO
              ENDDO
           ENDDO
@@ -970,7 +970,7 @@ CONTAINS
                    DO i=1,parap%sparm(5,ip)
                       DO j=1,fpar%kr2s
                          DO k=1,fpar%kr3s
-                            wfull(parap%nrxpl(1,ip)+i,j,k)&
+                            wfull(parap%nrxpl(ip,1)+i,j,k)&
                                  =wbuff(i+(j-1)*ml+(k-1)*ml*fpar%kr2)
                          ENDDO
                       ENDDO
@@ -1537,8 +1537,8 @@ CONTAINS
     DO i=0,2*mr(1)
        ix=iorgx+i
        IF (ix.GT.spar%nr1s) ix=ix-spar%nr1s
-       IF (ix.GE.parap%nrxpl(1,parai%mepos).AND.ix.LE.parap%nrxpl(2,parai%mepos)) THEN
-          ii=ix-parap%nrxpl(1,parai%mepos)+1
+       IF (ix.GE.parap%nrxpl(parai%mepos,1).AND.ix.LE.parap%nrxpl(parai%mepos,2)) THEN
+          ii=ix-parap%nrxpl(parai%mepos,1)+1
           i1=mr(1)-i
           DO j=0,2*mr(2)
              jj=iorgy+j

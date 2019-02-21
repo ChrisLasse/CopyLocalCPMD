@@ -87,8 +87,8 @@ CONTAINS
                      .AND. (sgpp2%lpval(iv,isp) .EQ. sgpp2%lpval(jv,isp))
                 IF (nonzero_overlap) THEN
                    sum = 0._real_8
-                   DO istate = parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                      is12 = istate - parap%nst12(1,parai%mepos)+1
+                   DO istate = parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                      is12 = istate - parap%nst12(parai%mepos,1)+1
 
                       sum  = sum + 2._real_8*f(istate,ik) *&
                            ( ddfnl00 (1,iat,iv,k,k2,is12,ik)&
@@ -108,9 +108,9 @@ CONTAINS
     ELSE                      ! BHS and related.
        DO ik=1,nkpoint
           DO iv=1,nlps_com%ngh(isp)
-             DO istate=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
+             DO istate=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
                 weight=wk(ik)*f(istate,ik)*2._real_8*wsg(isp,iv)
-                is12=istate-parap%nst12(1,parai%mepos)+1
+                is12=istate-parap%nst12(parai%mepos,1)+1
                 sder=sder + weight*&
                      (ddfnl00   (1,iat,iv,k,k2,is12,ik)&
                      *   fnl00  (1,iat,iv,istate,ik)&
@@ -158,8 +158,8 @@ CONTAINS
                      .AND. (sgpp2%lpval(iv,isp) .EQ. sgpp2%lpval(jv,isp))
                 IF (nonzero_overlap) THEN
                    sum = 0._real_8
-                   DO istate = parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
-                      is12 = istate - parap%nst12(1,parai%mepos)+1
+                   DO istate = parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
+                      is12 = istate - parap%nst12(parai%mepos,1)+1
 
                       sum  = sum + 2._real_8*f(istate,ik) *&
                            ( dfnl00  (1,iat,iv,k2,is12,ik)&
@@ -178,9 +178,9 @@ CONTAINS
     ELSE                      ! BHS and related.
        DO ik=1,nkpoint
           DO iv=1,nlps_com%ngh(isp)
-             DO istate=parap%nst12(1,parai%mepos),parap%nst12(2,parai%mepos)
+             DO istate=parap%nst12(parai%mepos,1),parap%nst12(parai%mepos,2)
                 weight=wk(ik)*f(istate,ik)*2._real_8*wsg(isp,iv)
-                is12=istate-parap%nst12(1,parai%mepos)+1
+                is12=istate-parap%nst12(parai%mepos,1)+1
                 sder = sder + weight*&
                      (dfnl00    (1,iat,iv,k2,is12,ik)&
                      *   fnl    (1,iat,iv,istate,ik)&

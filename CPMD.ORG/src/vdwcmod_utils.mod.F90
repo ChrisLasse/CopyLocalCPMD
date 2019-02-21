@@ -18,7 +18,7 @@ CONTAINS
 
     INTEGER                                  :: ierr
 
-    ALLOCATE( npt12(2,0:max_nproc-1), &
+    ALLOCATE( npt12(0:max_nproc,2), &
          &    STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)

@@ -3,7 +3,6 @@ MODULE ksmat_dist_utils
                                              atwp,&
                                              catom,&
                                              zxmat
-  USE distribution_utils,              ONLY: dist_size
   USE error_handling,                  ONLY: stopgm
   USE fnlalloc_utils,                  ONLY: fnl_set,&
                                              fnlalloc,&
@@ -13,6 +12,7 @@ MODULE ksmat_dist_utils
   USE gsortho_utils,                   ONLY: gs_ortho
   USE ions,                            ONLY: ions0,&
                                              ions1
+  USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8
   USE kpts,                            ONLY: tkpts
   USE ksmatmod,                        ONLY: eig_vec,&
@@ -62,7 +62,6 @@ CONTAINS
     INTEGER                                  :: nstate, ikind
     COMPLEX(real_8)                          :: c0(:,:,:)
     INTEGER                                  :: nn
-    INTEGER,ALLOCATABLE                      :: temp(:,:)
     LOGICAL                                  :: tlsd2, ainitwfflag
 
     CHARACTER(*), PARAMETER                  :: procedureN = 'dist_ksmat'
@@ -103,10 +102,10 @@ CONTAINS
     ! DETERMINE DISTRIBUTION OF ATOMIC STATES AND COLUMNS OF
     ! RESTRICTED HAMILTONIAN
     ! =================================================================
-    CALL dist_size(atwp%nattot,parai%nproc,paraw%nwa12,nblock=cnti%nstblk,nbmax=norbx,fw=1)
+    CALL set_orbdist(atwp%nattot,cnti%nstblk,parai%nproc,norbx)
     norb = 0
     DO index1=0, sz-1
-       IF ((paraw%nwa12(2,index1)-paraw%nwa12(1,index1)+1 ).GT.0) norb=norb+1
+       IF ((paraw%nwa12(index1,2)-paraw%nwa12(index1,1)+1 ).GT.0) norb=norb+1
     ENDDO
     chunk_new = INT(REAL(atwp%nattot,kind=real_8)/REAL(norb,kind=real_8))
     IF (rank.LT.norb-1) THEN
@@ -122,18 +121,8 @@ CONTAINS
     ENDIF
     chunk_new = chunk_end - chunk_begin + 1
     msglen=8/2
-    ALLOCATE(temp(0:sz-1,2),STAT=ierr)
-    IF (ierr.NE.0) CALL stopgm( procedureN, 'Allocation problem' ,& 
-         __LINE__,__FILE__)
-    CALL my_concat(chunk_begin, temp(0,1), msglen, parai%allgrp)
-    CALL my_concat(chunk_end, temp(0,2), msglen, parai%allgrp)
-    DO index1=0,sz-1
-       paraw%nwa12(1,index1)=temp(index1,1)
-       paraw%nwa12(2,index1)=temp(index1,2)
-    END DO
-    DEALLOCATE(temp,STAT=ierr)
-    IF (ierr.NE.0) CALL stopgm( procedureN, 'Deallocation problem 1' ,& 
-         __LINE__,__FILE__)
+    CALL my_concat(chunk_begin, paraw%nwa12(0,1), msglen, parai%allgrp)
+    CALL my_concat(chunk_end, paraw%nwa12(0,2), msglen, parai%allgrp)
     ! ================================================================= 
     ! CREATE LANCZOS GROUP
     ! ================================================================= 
@@ -143,7 +132,7 @@ CONTAINS
        ENDDO
        nolan = 0
        DO index4=1, sz
-          IF ((paraw%nwa12(2,index4-1)-paraw%nwa12(1,index4-1)+1).NE.0) THEN
+          IF ((paraw%nwa12(index4-1,2)-paraw%nwa12(index4-1,1)+1).NE.0) THEN
              lanlist(index4) = index4-1
              nolan = nolan + 1
           ENDIF
@@ -394,10 +383,10 @@ CONTAINS
        ! ==================================================================
        ! DETERMINE THE EIGENVECTORS THAT EACH PROCESSOR IS GOING TO COMPUTE
        ! ==================================================================
-       norb=paraw%nwa12(2,parai%mepos)-paraw%nwa12(1,parai%mepos)+1
+       norb=paraw%nwa12(parai%mepos,2)-paraw%nwa12(parai%mepos,1)+1
        norb=MAX(0,norb)
-       chunk_begin_e = paraw%nwa12(1,parai%mepos)
-       chunk_end_e   = paraw%nwa12(2,parai%mepos)
+       chunk_begin_e = paraw%nwa12(parai%mepos,1)
+       chunk_end_e   = paraw%nwa12(parai%mepos,2)
        chunk_new_e   = chunk_end_e - chunk_begin_e +1
        ! ==================================================================
        ! DETERMINE SEND  BUFFERS
