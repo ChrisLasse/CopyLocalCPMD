@@ -1,0 +1,71 @@
+#CPQA DEPENDS ../Nb_1/Nb_1.inp
+#CPQA PRERUN "cp ../Nb_1/RESTART.1 RESTART.1"
+#CPQA PRERUN "cp ../Nb_1/LATEST LATEST"
+
+***********BAND STRUCTURE CALC***********
+&CPMD
+  USE_CUFFT 
+  FFT_N_STREAMS_PER_DEVICE
+  2
+  FFT_N_DEVICES_PER_TASK
+  1
+  USE_CUBLAS
+  BLAS_N_STREAMS_PER_DEVICE
+  2
+  BLAS_N_DEVICES_PER_TASK
+  1
+ OPTIMIZE WAVEFUNCTION
+ FREE ENERGY FUNCTIONAL
+ RESTART DENSITY LATEST
+ LANCZOS DIAGONALIZATION
+ LANCZOS PARAMETERS N=1 ALL
+  50      8   0    1.D-18
+ TROTTER FACTOR
+  0.001
+ BOGOLIUBOV CORRECTION
+ CONVERGENCE
+  5.D-2   5.D-1
+ ELECTRON TEMPERATURE
+  300.D0
+ MAXSTEP
+  1
+ ENERGYBANDS
+&END
+
+&DFT
+ NEWCODE 
+ FUNCTIONAL LDA
+&END
+
+&SYSTEM
+ SYMMETRY
+  BCC
+ POINT GROUP
+  AUTO
+ SCALE
+ TESR
+  2
+ ANGSTROM
+ CELL
+  3.30  1.0  1.0    0.0  0.0  0.0
+ SPHERICAL CUTOFF
+  10.0
+ KPOINTS BANDS
+  51   0   0   0      1   0   1             Gamma to H
+  51   0   0   1      0  .5  .5             H to N
+  51   0  .5  .5     .5  .5  .5             N to P
+  51  .5  .5  .5      0   0   0             P to Gamma
+  51   0   0   0     .5  .5   0             Gamma to N
+  51   0   0   1     .5  .5  .5             H to P
+  0    0   0   0      0   0   0
+ STATES
+  9
+&END
+
+&ATOMS
+*Nb-q5 KLEINMAN-BYLANDER RAGGIO=1.2
+   LMAX=D LOC=P
+   1
+   0.00D0       0.00D0          0.00D0
+ &END
+***********BAND STRUCTURE CALC***********

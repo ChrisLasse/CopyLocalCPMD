@@ -1,0 +1,39 @@
+#INFO#
+#INFO# Configuration for Haswell Linux Supercluster
+#INFO# Haswell is the codename for the Intel processor 
+#INFO# successor to the Ivy Bridge microarchitecture. 
+#INFO# See http://ark.intel.com/products/codename/42174/Haswell
+#INFO# Intel Composer v.15 or later - BullMPI/OpenMPI + OMP 3.0 (or later)
+#INFO# Processor Intel Haswell 12-Core E5-2690 (e.g. Occigen@CINES)
+#INFO# Cluster IB 4x FDR Fat Tree / 9 blades socket
+#INFO# (University of Strasbourg-University of Tokyo, January 2018). 
+#INFO#
+     IRAT=2
+     FC='mpif90'
+     CC='mpicc'
+     LD='mpif90'
+     CPP='/lib/cpp -P -C -traditional'
+     CPPFLAGS='-D__HAS_FFT_DEFAULT -D__ALPHALINUX -D__HPC -D__HASNT_OMP_45 \
+         -D__PARALLEL -D__HAS_SIZEOF -D__HAS_BF_STREAM_IO -D__HASNT_F08_ISO_FORTRAN_ENV'
+     CPPFLAGS_GROMOS='-DEWALD -DEWATCUT -DHAT_SHAPE -DUNPACKED_GRID \
+             -D__HAS_FFT_DEFAULT -D__ALPHALINUX -D__HPC -D__HASNT_OMP_45 \
+             -D__PARALLEL -D__HAS_SIZEOF -D__HAS_BF_STREAM_IO -D__HASNT_F08_ISO_FORTRAN_ENV'
+     FFLAGS_GROMOS='-fixed $(FFLAGS)'
+     FFLAGS_GROMOS_MODULES='$(FFLAGS)'
+     AR='/usr/bin/ar -r'
+     RANLIB='/usr/bin/ranlib'
+     if [ $debug ]; then
+       FFLAGS='-g'
+       CFLAGS='-g -Wall -m64'
+     else
+       FFLAGS='-O3 -xHost -pc64 -funroll-loops -fpp -heap-arrays 64 -no-prec-div'
+       CFLAGS='-O2 -Wall  '
+     fi
+     if [ $omp ]; then
+       FFLAGS=${FFLAGS}' -qopenmp'
+       OMP3_DISABLED='false'
+       LIBS='-mkl=parallel -lm'
+     else
+       LIBS='-static-intel -mkl=serial -lm -lpthread -liomp5'
+     fi
+     LFLAGS=${LIBS}

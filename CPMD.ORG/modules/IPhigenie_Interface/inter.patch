@@ -1,0 +1,236 @@
+--- /lrz/sys/applications/cpmd/4.1/CPMD/modules/IPhigenie_Interface/iffi_inter.mod.F90	2015-11-24 11:06:02.553088000 +0100
++++ ../../../4.1/CPMD/modules/IPhigenie_Interface//iffi_inter.mod.F90	2016-02-24 17:25:58.184617000 +0100
+@@ -1,4 +1,3 @@
+-#if 1
+ MODULE iffi_inter
+ 
+  USE kinds, ONLY: real_4, real_8, int_1, int_2, int_4, int_8
+@@ -129,9 +128,6 @@
+ !.....omp check
+       NTHREADS=1
+ !$    NTHREADS=OMP_GET_MAX_THREADS()
+-      if (NTHREADS.GT.mxno_threads) then
+-        CALL stopgm(procedureN,'mxno_threads TOO SMALL',0,"")
+-      endif
+ 
+ !.....set interface type to IPHIGENIE
+       cnti%iftype=3
+@@ -142,10 +138,6 @@
+  !IPHIGENIEIPHIGENIEIPHIGENIEIPHIGENIEIPHIGENIEIPHIGENIE end
+  
+ 
+-
+-
+-
+-
+   CALL tistart(time1,wclk1)
+   CALL startpa
+       
+@@ -281,6 +273,7 @@
+         ENDDO
+       ENDDO  
+       IF (runinfo%nrqmatoms.GT.maxind) THEN
++        write(6,'(A,I,A,I)') ' #QM: ',runinfo%nrqmatoms,' > #maxind: ',maxind
+         CALL stopgm(procedureN,"Too many QM atoms! INCREASE maxind iiffi.inc",0,"")
+       ENDIF
+ 
+@@ -300,8 +293,6 @@
+ END SUBROUTINE
+ !==================================================================
+ 
+-
+-
+ ! this is copy/pasted from routine INTERPT until INTERFACE is called
+ !==================================================================
+ SUBROUTINE IFFI_INTERPT_INIT
+@@ -415,7 +406,7 @@
+     ! ==--------------------------------------------------------------==
+     IF (cntl%diis.AND.cntl%tpcgfi) THEN
+        IF (paral%io_parent)&
+-            WRITE(6,*) 'INTERPT| SWITCHING TO PCG MINIMIZE'
++            WRITE(6,'(A)') 'INTERPT| SWITCHING TO PCG MINIMIZE'
+        wasdiis=.TRUE.
+        cntl%diis=.FALSE.
+        cntl%pcg=.TRUE.
+@@ -427,7 +418,7 @@
+     CALL rwfopt(c0,c2,sc0,pme,gde,vpp,eigv)
+     IF (wasdiis) THEN
+        IF (paral%io_parent)&
+-            WRITE(6,*) 'INTERPT| SWITCHING BACK TO DIIS'
++            WRITE(6,'(A)') 'INTERPT| SWITCHING BACK TO DIIS'
+        cntl%diis=.TRUE.
+        cntl%pcg=.FALSE.
+        cntl%pcgmin=.FALSE.
+@@ -439,8 +430,6 @@
+ END SUBROUTINE
+ !==================================================================
+ 
+-
+-
+ !this is copy/pasted from routine INTERFACE until the md loop starts
+ !==================================================================
+ SUBROUTINE IFFI_INTERFACE_INIT
+@@ -511,10 +500,7 @@
+     ALLOCATE(fion(3,maxsys%nax,maxsys%nsx),STAT=ierr)
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+          __LINE__,__FILE__)
+-!!print *,"velp",3,maxsys%nax,maxsys%nsx
+-    !!ALLOCATE(velp(3,maxsys%nax,maxsys%nsx),STAT=ierr) (doesnt work either in egointer)
+-    !!IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+-    !!     __LINE__,__FILE__)
++
+     CALL zeroing(taup)!,SIZE(taup))
+     CALL zeroing(fion)!,SIZE(fion))
+ 
+@@ -527,9 +513,7 @@
+     ALLOCATE(scr(lscr),STAT=ierr)
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+          __LINE__,__FILE__)
+-
+-         
+-         
++       
+     CALL zeroing(extf)!,kr1*kr2s*kr3s)
+     ! ..addition ends
+     CALL zeroing(taup)!,3*maxsys%nax*maxsys%nsx)
+@@ -543,12 +527,6 @@
+     CALL zeroing(epot1_list%idnear)!,maxnear)
+     CALL zeroing(epot1_list%lincl)!,maxind*maxnear)   
+     
+-    !DO i=1,100
+-    !   epot2%myrag(i)=1.2_real_8
+-    !ENDDO
+-    !epot2%myrag(1)=0.85_real_8
+-    !epot2%myrag(8)=1.23_real_8
+-
+     epot1_list%nnear = 0
+     epot1_list%nloc  = 0
+     
+@@ -573,14 +551,12 @@
+       
+     CALL dynit(ekincp,ekin1,ekin2,temp1,temp2,ekinh1,ekinh2)
+ 
+-    IF (paral%io_parent) WRITE(6,'(A)') ' INTERFACE| ENTERING IPHIGENIE-INTERFACE'
++    IF (paral%io_parent) WRITE(6,'(A)') 'INTERFACE| ENTERING IPHIGENIE-INTERFACE'
+     
+  END SUBROUTINE
+ !==================================================================
+  
+  
+-
+-
+ !==================================================================
+ SUBROUTINE IFFI_INIT
+ !==--------------------------------------------------------------==
+@@ -593,7 +569,12 @@
+       IMPLICIT NONE      
+       CHARACTER(len=*), PARAMETER              :: procedureN = "IFFI_INIT"
+       INTEGER ::  ierr
+-      
++      INTEGER :: NTHREADS
++!$    INTEGER   OMP_GET_MAX_THREADS
++!$    EXTERNAL  OMP_GET_MAX_THREADS
++!.....omp check
++      NTHREADS=1
++!$    NTHREADS=OMP_GET_MAX_THREADS()      
+                
+       ALLOCATE(EXTFMM(fpar%KR1*fpar%KR2S*fpar%KR3S),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+@@ -633,27 +614,27 @@
+ !!      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+ !!           __LINE__,__FILE__)
+       
+-      ALLOCATE(MMPOTEXP(dimpotexp,maxnear,mxno_threads),STAT=ierr)
++      ALLOCATE(MMPOTEXP(dimpotexp,maxnear,nthreads),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+       
+-      ALLOCATE(MMPOTEXP_VAR(DIMPOTEXP_VAR,maxnear,mxno_threads),STAT=ierr)
++      ALLOCATE(MMPOTEXP_VAR(DIMPOTEXP_VAR,maxnear,nthreads),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+ 
+-      ALLOCATE(VOMULTEXP(dimmultexp,MYNVOX,mxno_threads),STAT=ierr)
++      ALLOCATE(VOMULTEXP(dimmultexp,MYNVOX,nthreads),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+ 
+-      ALLOCATE(ATMULTEXP(dimmultexp,maxind,mxno_threads),STAT=ierr)
++      ALLOCATE(ATMULTEXP(dimmultexp,maxind,nthreads),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+ 
+-      ALLOCATE(VOXRGYREXP(dimrgyrexp,MYNVOX,mxno_threads),STAT=ierr)
++      ALLOCATE(VOXRGYREXP(dimrgyrexp,MYNVOX,nthreads),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+ 
+-      ALLOCATE(ATRGYREXP(dimrgyrexp,maxind,mxno_threads),STAT=ierr)
++      ALLOCATE(ATRGYREXP(dimrgyrexp,maxind,nthreads),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+       
+@@ -815,9 +796,6 @@
+ END SUBROUTINE   
+ ! ==================================================================
+ 
+-
+-
+-
+ !this is copy/pasted from INTERFACE from where the md loop ends 
+ !=================================================================
+ SUBROUTINE IFFI_INTERFACE_FINALIZE
+@@ -829,14 +807,7 @@
+                                                tau0,&
+                                                taup,&
+                                                velp
+-    USE efld,                            ONLY: extf!,&
+-                                               !textfld
+-    !USE system,                          ONLY: &
+-     !   cnti, cntl, cntr, kr1, kr2s, kr3s, maxsys, ngw, nhg, nkpt, nnr1!, &
+-        !parm, spar, parap
+-    !USE store_types,                     ONLY: restart1
+-    !USE ropt,                            ONLY: iteropt
+-    !USE ener,                            ONLY: ener_com   
++    USE efld,                            ONLY: extf 
+     USE forcep_utils,                    ONLY: rhoe_psi_size
+     USE machine,                         ONLY: m_walltime
+     USE iffi_types
+@@ -875,8 +846,6 @@
+ END SUBROUTINE
+ ! ==================================================================
+ 
+-
+-
+ !==================================================================
+ !this is copy/pasted from INTERPT from the line on where INTERFACE was called
+ !==================================================================
+@@ -895,10 +864,7 @@
+         IMPLICIT NONE
+         
+     CHARACTER(*), PARAMETER                  :: procedureN = 'interpt'
+-
+-    INTEGER                                  :: ierr!, nc, nc2, nkpntsc0, &
+-                                                !nsc0, nxx
+-    !LOGICAL                                  :: wasdiis
++    INTEGER                                  :: ierr
+         
+     DEALLOCATE(c0,STAT=ierr)
+     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+@@ -1000,8 +966,6 @@
+ END SUBROUTINE
+ !==================================================================
+ 
+-
+-
+ ! called by IPHIGENIE
+ !==================================================================
+ SUBROUTINE IFFI_CPMD_SCF
+@@ -1036,6 +1000,5 @@
+ END SUBROUTINE
+ !     ==================================================================
+ 
+-
+ END MODULE iffi_inter
+-#endif
++

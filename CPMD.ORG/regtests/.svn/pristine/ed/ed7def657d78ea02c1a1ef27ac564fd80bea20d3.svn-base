@@ -1,0 +1,37 @@
+# fix Davidson from numerical noise
+test.inp
+test.inp
+test.inp
+test.inp
+test.inp
+test.inp
+test.inp
+w.inp
+w.inp
+w.inp
+w.inp
+w.inp
+inp-1.inp
+w.inp
+w.inp
+w.inp
+w.inp
+w.inp
+w.inp
+w.inp
+w.inp
+w.inp
+w.inp
+w.inp
+inp-2.inp
+mdqt.inp
+# reset numerics
+test.inp
+test.inp
+test.inp
+ho.inp
+test.inp
+test.inp
+test.inp
+test.inp
+test.inp

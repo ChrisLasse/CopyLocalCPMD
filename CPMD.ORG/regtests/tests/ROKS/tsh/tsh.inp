@@ -1,0 +1,59 @@
+#CPQA DEPENDS ../S0/s0.inp
+#CPQA DEPENDS ../S1/s1.inp
+#CPQA DEPENDS ../fusion/fusion.inp
+#CPQA PRERUN "cp ../fusion/RESTART.1 ."
+#CPQA PRERUN "cp ../fusion/LATEST ."
+
+&INFO
+ molecule: formaldimine
+ test of FILE FUSION to merge S1 and S0 
+ restart files into a RESTART.1 
+ needed by TSH+ROKS
+&END
+
+&CPMD
+ MIRROR
+ MOLECULAR DYNAMICS CP
+ ROKS SINGLET GOEDECKER
+ SURFACE HOPPING NEW 
+ RESTART WAVEFUNCTION COORDINATES  LATEST
+ CONVERGENCE ORBITALS
+  1.0d-6
+ MAXSTEP
+   5 
+ TRAJECTORY XYZ 
+&END
+
+&DFT
+  FUNCTIONAL PBE 
+  GC-CUTOFF
+   1.0d-06
+&END
+
+&SYSTEM
+  POISSON SOLVER HOCKNEY
+  SYMMETRY
+   0   
+  ANGSTROM
+  CELL
+   8. 1.0 1.0  0.0  0.0  0.0 
+  CUTOFF
+   30.0
+&END
+
+&ATOMS
+*C_MT_PBE
+   LMAX=P
+   1   
+   7.5 7.5 8.16748
+*H_MT_PBE
+   LMAX=S
+   3   
+   7.5 8.522832 8.837695
+   7.5 6.67168 8.837695
+   7.5 7.1 6.5 
+*N_MT_PBE
+   LMAX=P
+   1   
+   7.5 7.5 7.0 
+&END

@@ -1,0 +1,39 @@
+#INFO#  
+#INFO#  IBM-PWR8-GFORTRAN-CUDA
+#INFO#  
+#INFO#  V. Weber
+#INFO#
+#INFO#  a) added -Uvector to bypass a bug in cpp for power8
+#INFO#
+     CUDA_PATH='/usr/local/cuda-7.5'
+     CC='gcc'
+     #FC='mpfort -compiler gfortran -use_fmod /dataL2/vwe/libs/mpi/gcc/5.2'
+     #FC='mpif90 -compiler gfortran -use_fmod /dataL2/vwe/libs/mpi/gcc/4.9'
+     #LD='mpif90 -compiler gfortran'
+     FC=mpif90
+     LD=mpif90
+     NVCC=${CUDA_PATH}'nvcc -ccbin=gcc --default-stream per-thread'
+     NVCCFLAGS='-O3 -arch=sm_35'
+     CPP='/usr/bin/cpp -P -traditional -Uvector'
+     CPPFLAGS='-D__Linux -D__GNU -D__PARALLEL -D__HAS_BF_STREAM_IO -D__HAS_SIZEOF -D__HAS_DFREPOSITORY -D__HAS_CUBLAS -D__HAS_FFT_CUDA -D__HAS_FFT_DEFAULT'
+     FFLAGS_GROMOS='-ffixed-form  $(FFLAGS)'
+     FFLAGS_GROMOS_MODULES=' $(FFLAGS)'
+     AR='/usr/bin/ar ruv'
+     RANLIB='/usr/bin/ranlib'
+     if [ $debug ]; then
+       FFLAGS='-g -O0 -fcheck=all -Wuninitialized -Wall'
+       CFLAGS='-g -O0 -Wall'
+     else
+       FFLAGS='-O2 -Wall'
+       CFLAGS='-O2 -Wall'
+     fi
+     if [ $omp ]; then
+       FFLAGS=${FFLAGS}' -fopenmp'	
+       LIBS='-llapack -lblas '
+       OMP3_DISABLED='false'
+     else
+       LIBS='-llapack -lblas '
+     fi
+     CFLAGS=${CFLAGS}' -I'${CUDA_PATH}'/include'
+     LIBS=${LIBS}' -L'${CUDA_PATH}'/lib64 -lcudart -lcufft -lcusolver -lcublas'
+     LFLAGS=' '${LIBS}

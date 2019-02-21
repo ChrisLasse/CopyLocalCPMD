@@ -1,0 +1,74 @@
+#INFO#
+#INFO# Configuration to build a  parrallel cpmd executable for SUPERMUC
+#INFO# using the INTEL compilers (version 15, intel MPI 5.1)
+#INFO# use the followin modules
+#INFO# module load intel mkl mpi.intel fftw
+#INFO# M. Schwoerer and G. Mathias
+#INFO#
+
+
+     IRAT=2
+
+
+     FC='mpif90'
+     CC='mpicc'
+     LD='mpif90'
+     #CPP='/lib/cpp -P -C -traditional'
+     CPP=''
+     CPPFLAGS='-D__HASNT_OMP_45 -D__HAS_BF_STREAM_IO -D__Linux  -D__PARALLEL -DLINUX_IFC -D__NO_MEMSIZE -D__HASNT_F08_ISO_FORTRAN_ENV'
+
+     FFLAGS_GROMOS='$(FFLAGS) -ffixed-form' 
+     FFLAGS_GROMOS_MODULES='$(FFLAGS) ' 
+     if [ $debug ]; then
+       FFLAGS='-g -O0 -fcheck=bounds,pointer,mem -Wuninitialized -Wall -Wextra'
+       CFLAGS='-g -O0'
+     else
+       # use host optimization
+       FFLAGS='-O2 -g -xHost -traceback'
+       CFLAGS='-O2 -g -Wall -xHost'
+     fi
+     # check for libxc
+     if [ "${LIBXC_LIB}x" != "x" ] ; then
+        LFLAGS=${LFLAGS}" ${LIBXC_LIBF03}"
+        CPPFLAGS="${CPPFLAGS} -D__HAS_LIBXC"
+        FFLAGS="${FFLAGS} ${LIBXC_INC}"
+     fi 
+     # check for elpa
+     if [ "${LIBELPA_LIBDIR}x" != "x" ] ; then
+        if [ $omp ]; then
+          LFLAGS=${LFLAGS}" ${LIBELPA_LIB_OMP}"
+          FFLAGS="${FFLAGS} ${LIBELPA_FINC_OMP}"
+        else
+          LFLAGS=${LFLAGS}" ${LIBELPA_LIB_SER}"
+          FFLAGS="${FFLAGS} ${LIBELPA_FINC_SER}"
+        fi
+        CPPFLAGS="${CPPFLAGS} -D__HAS_LIBELPA"
+     fi 
+     # check for grimme lib
+     if [ "${LIBGRIMMEVDW_LIB}x" != "x" ] ; then
+        LFLAGS=${LFLAGS}" ${LIBGRIMMEVDW_LIB}"
+        CPPFLAGS="${CPPFLAGS} -D__HAS_LIBGRIMMEVDW"
+     fi 
+     
+     #select FFT library
+     if [ "${FFTW_LIB}x" != "x" ] ; then
+        LFLAGS=${LFLAGS}" ${FFTW_LIB}"
+        CPPFLAGS="${CPPFLAGS} -D__HAS_FFT_FFTW3"
+     else
+        CPPFLAGS="${CPPFLAGS} -D__HAS_FFT_DEFAULT"
+     fi
+     #check for OpenMP and select proper mkl
+     if [ $omp ]; then
+       FFLAGS=${FFLAGS}' -fopenmp -mkl=parallel '
+       if [ "${FFTW_MPI_LIB}x" != "x" ] ; then
+          LDFLAGS="${LDFLAGS} ${FFTW_OPENMP_LIB}"
+       fi
+       OMP3_DISABLED=false
+     else
+       FFLAGS=${FFLAGS}' -fopenmp -mkl=sequential '
+     fi
+
+     if [ $coverage ]; then
+       FFLAGS=${FFLAGS}' --coverage'
+       LFLAGS='--coverage '${LFLAGS}
+     fi

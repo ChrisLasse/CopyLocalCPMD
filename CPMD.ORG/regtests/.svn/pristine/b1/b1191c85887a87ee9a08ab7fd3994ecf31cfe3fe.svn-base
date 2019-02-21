@@ -1,0 +1,102 @@
+&CPMD
+  USE_CUFFT 
+  FFT_N_STREAMS_PER_DEVICE
+  2
+  FFT_N_DEVICES_PER_TASK
+  1
+  USE_CUBLAS
+  BLAS_N_STREAMS_PER_DEVICE
+  2
+  BLAS_N_DEVICES_PER_TASK
+  1
+  optimize wavefunctions geometry
+  MOLECULAR DYNAMICS
+  PARRINELLO-RAHMAN
+  INITIALIZE WAVEFUNCTIONS ATOM
+  restart wavefunctions coordinates cell latest
+  restart velocities accumulators latest
+  restart nosee nosep nosec latest
+  oRTHOGONALIZATION lOWDIN
+  HESSIAN UNIT
+  QUENCH ELECTRONS BO
+  NOSE IONS
+   300.  150.
+  TIMESTEP
+   4.
+  EMASS
+   500.
+  CMASS
+   40000.
+  TEMPERATURE
+   300
+  PCG mINIMIZE
+  GDIIS
+   5
+  MAXITER
+  10
+  CONVERGENCE ORBITALS
+   0.00002
+  CONVERGENCE GEOMETRY
+   0.0001
+  STRESS TENSOR
+   1
+  HAMILTONIAN CUTOFF
+   1.25 
+  MAXSTEP
+   2 
+  STRUCTURE BONDS 
+  PRINT COORDINATES FORCES ENERGIES
+   10
+  TRAJECTORY SAMPLE
+   10
+  MOVIE SAMPLE
+   10000
+  STRESS TENSOR SAMPLE
+   1
+  STORE
+   10 
+  RESTFILES
+   2
+  SPLINE RANGE
+   5 
+  wANNIER cOMPUTATION lOGARITMIC
+  dIPOLE dYNAMICS wANNIER restwann
+   0.1  1.e-06  0.01  9000
+   0.0000  0.0000  0.0000 
+  wannier computation partial densitiy
+   6
+   1 2 3 4 5 6
+&END
+
+&SYSTEM
+  SYMMETRY
+   1
+  CUTOFF
+   15.
+  CELL
+   10.4 1.0 1.0 0.0 0.0 0.0
+  PRESSURE
+   200.0
+  MESH
+   32 32 32
+&END
+
+&ATOMS
+*As_SGS_LDA.psp KLEINMAN-BYLANDER RAGGIO=1.0
+LMAX=D
+4
+            2.610400    2.600000    2.600000
+            7.810400    7.800000    2.600000
+            7.800000    2.600000    7.800000
+            2.600000    7.800000    7.800000
+
+*Ga_SGS_LDA.psp KLEINMAN-BYLANDER RAGGIO=1.0 
+LMAX=D
+4
+             .000000     .000000     .000000
+            5.210400    5.200000     .000000
+            5.200000     .000000    5.200000
+             .000000    5.200000    5.200000
+&END
+
+
