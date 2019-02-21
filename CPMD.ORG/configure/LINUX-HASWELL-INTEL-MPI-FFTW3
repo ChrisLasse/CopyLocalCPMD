@@ -34,14 +34,14 @@
        FFLAGS='-g -O0 -I${MKLROOT}/include/fftw -traceback -O0 -no-prec-div -pc64 -fpp -heap-arrays 64'
        CFLAGS='-g -O0 -Wall -m64'
      else
-       FFLAGS='-ipo -O3 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64 -I${MKLROOT}/include/fftw -axAVX'
-       CFLAGS='-O2 -Wall  '
+       FFLAGS='-ipo -O2 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64 -I${MKLROOT}/include/fftw -xHost'
+       CFLAGS='-O2 -Wall -xHost'
      fi
      if [ $omp ]; then
        FFLAGS=${FFLAGS}' -qopenmp -fpp'
        OMP3_DISABLED='false'
-       LIBS='-mkl=parallel -axAVX'
+       LIBS='-mkl=parallel'
      else
-       LIBS='-static-intel -mkl=serial -lm -lpthread -liomp5'
+       LIBS='-static-intel -mkl=cluster -lm -lpthread -liomp5'
      fi
      LFLAGS=${LIBS}

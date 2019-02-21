@@ -2,6 +2,7 @@
 #INFO# Configuration to build a serial cpmd executable for a linux pc using 
 #INFO# the GNU Fortran compiler.
 #INFO# contributed by FX Coudert <fxcoudert@gmail.com>
+#INFO# updated on 20 Spet. 2018 - M. Boero
 #INFO#
 
      IRAT=2
@@ -13,10 +14,10 @@
      FFLAGS_GROMOS='$(FFLAGS) -ffixed-form' 
      FFLAGS_GROMOS_MODULES='$(FFLAGS)'
      if [ $debug ]; then
-       FFLAGS='-g -fdefault-real-8 -O0  '
+       FFLAGS='-g -O0 -Wall -ffree-line-length-none -falign-commons'
        CFLAGS='-g -O0 -Wall'
      else
-       FFLAGS=' -fdefault-real-8 -O2  '
+       FFLAGS=' -O2 -Wall -ffree-line-length-none -falign-commons  '
        CFLAGS=' -O2 -Wall'
      fi
      if [ $omp ]; then

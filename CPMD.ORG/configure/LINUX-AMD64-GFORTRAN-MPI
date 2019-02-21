@@ -5,7 +5,7 @@
 #INFO# Note:The options "-ffast-math"i and "-fstrength-reduce" might allow the code
 #INFO#      to run faster, or die trying (especially the last one !).
 #INFO# More information at https://gcc.gnu.org/onlinedocs/gcc-3.4.6/g77/Optimize-Options.html
-#INFO# Strasbourg/Tokyo - January 2018
+#INFO# Strasbourg/Tokyo - Spetember 2018
 #INFO#
 
      IRAT=2
@@ -21,8 +21,8 @@
        FFLAGS='-g -O0 -fcheck=all -Wuninitialized -Wall'
        CFLAGS='-g -O0 -Wall'
      else
-       FFLAGS='-O2 -Wall -falign-commons -funroll-loops'
-       CFLAGS='-O2 -Wall -falign-commons -funroll-loops'
+       FFLAGS='-O2 -Wall -ffree-line-length-none -falign-commons -funroll-loops'
+       CFLAGS='-O2 -Wall -ffree-line-length-none -falign-commons -funroll-loops'
      fi
      if [ $omp ]; then
        FFLAGS=${FFLAGS}' -fopenmp'

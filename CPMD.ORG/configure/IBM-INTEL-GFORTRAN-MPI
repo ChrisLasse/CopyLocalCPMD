@@ -22,10 +22,10 @@
      FFLAGS_GROMOS='-ffixed-form  $(FFLAGS) -std=gnu' 
      FFLAGS_GROMOS_MODULES=' $(FFLAGS)' 
      if [ $debug ]; then
-       FFLAGS=' -fmax-errors=0 -g -O0 -fcheck=all -Wuninitialized -std=f2008ts -fall-intrinsics'
+       FFLAGS=' -fmax-errors=0 -g -O0 -fcheck=all -Wuninitialized -std=f2008ts -fall-intrinsics -ffree-line-length-none'
        CFLAGS='-g -O0'
      else
-       FFLAGS='-Wall -O2 -std=f2008ts -fall-intrinsics'
+       FFLAGS='-Wall -O2 -std=f2008ts -fall-intrinsics -ffree-line-length-none'
        CFLAGS='-O2 -Wall'
      fi
      if [ $omp ]; then

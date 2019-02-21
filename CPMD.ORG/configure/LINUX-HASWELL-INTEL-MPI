@@ -29,17 +29,17 @@
      AR='/usr/bin/ar -r'
      RANLIB='/usr/bin/ranlib'
      if [ $debug ]; then
-       FFLAGS='-g -traceback -O0 -no-prec-div -pc64 -fpp -heap-arrays 64'
+       FFLAGS='-g -traceback -O0 -no-prec-div -pc64 -fpp -heap-arrays 64 -xHost'
        CFLAGS='-g -Wall -m64'
      else
-       FFLAGS='-ipo -O3 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64'
-       CFLAGS='-O2 -Wall  '
+       FFLAGS='-ipo -O2 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64'
+       CFLAGS='-O2 -Wall -xhost'
      fi
      if [ $omp ]; then
        FFLAGS=${FFLAGS}' -qopenmp'
        OMP3_DISABLED='false'
        LIBS='-mkl=parallel -lm'
      else
-       LIBS='-static-intel -mkl=serial -lm -lpthread -liomp5'
+       LIBS='-static-intel -mkl=cluster -lm -lpthread -liomp5'
      fi
      LFLAGS=${LIBS}
