@@ -852,8 +852,6 @@ do
                SkipInclude["mpi"] = 0;
                SkipInclude["rhjsx.inc"] = 0;
                SkipInclude["uhjsx.inc"] = 0;
-               SkipInclude["elpa"] = 0;
-               SkipInclude["scratch_interface"] = 0;
                if (qmmm != 1) {
                   SkipInclude["coordsz"] = 0;
                }
