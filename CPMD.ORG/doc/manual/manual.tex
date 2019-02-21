@@ -6,7 +6,7 @@
 \usepackage{multicol}
 \sloppy%\nonstopmode
 %Version CPMD
-\newcommand{\cpmdversion}{4.1.0}
+\newcommand{\cpmdversion}{4.3.0}
 \newcommand{\cpmd}{CPMD \cpmdversion}
 \newcommand{\sgn}{\mathrm{sgn}}
 
@@ -226,7 +226,7 @@ use by an appropriate citation of the following kind:
 
 \noindent
 \textit{CPMD, http://www.cpmd.org/,\\
- Copyright IBM Corp 1990-2015,\\
+ Copyright IBM Corp 1990-2019,\\
  Copyright MPI f\"ur Festk\"orperforschung Stuttgart 1997-2001}.
 %
 
@@ -599,6 +599,7 @@ Please, check carefully your OS and your compiler berfore compiling blindly and
 refer to the discussion in
 http://openmp.org/forum/viewtopic.php?f=3\&t=1023\&start=10.
 
+\subsection{CPMD Version 4}
 
 \subsubsection{Version 4.0}
 %
@@ -635,6 +636,19 @@ polarizable schemes and a wider usage of CP\_GROUPS to improve scalability of
 different other functionalities.  The new version includes also porting,
 optimisation and different updates for various architectures. The work
 initiated with version 4.0 will continue tirelessly on the forthcoming version.
+
+\subsubsection{Version 4.3} 
+%
+With the version 4.3, we have ported some of the core-procedures to gpu. The XC procedures
+have been refactored and it was added the possibility to link to libxc.
+Coulomb-attenuated functionals (CAM) and the Minnesota functionals (M05, M06, M08 and
+M11 families) are now available as internal xc procedures.
+A new development for Eherenfest dynamics with ionized states is deployed.
+Few novel implementations are available: a multiple time step scheme for MD,
+accelerated exact exchange for isolated systems, 
+the stress tensor, LSD and UltraSoft Vanderbilt pseudopotentials and NPT.
+Also a new bicanonical ensemble method is made available with version 4.3.
+Extensive cleanup and bug fixes and strenghtening of the regression test suite.
 
 
 % XXX tutorial added.
@@ -972,8 +986,9 @@ create good CPMD input files, but as a reference manual.
     \texttt{ratom\_utils.mod.F90},    \texttt{recpnew\_utils.mod.F90},  \texttt{detsp\_utils.mod.F90},
     \texttt{proppt\_utils.mod.F90},   \texttt{setbasis\_utils.mod.F90}, \texttt{vdwin\_utils.mod.F90},
     \texttt{respin\_p\_utils.mod.F90}, \texttt{lr\_in\_utils.mod.F90},  \texttt{orbhard\_utils.mod.F90},
-    \texttt{egointer\_utils.mod.F90}, \texttt{pi\_cntl\_utils.mod.F90}
-    \texttt{cl\_init\_utils.mod.F90}, \texttt{cplngs\_utils.mod.F90}
+    \texttt{egointer\_utils.mod.F90}, \texttt{pi\_cntl\_utils.mod.F90}, \texttt{cl\_init\_utils.mod.F90}, 
+    \texttt{cplngs\_utils.mod.F90},  \texttt{mts\_utils.mod.F90}
+
 
   \item The input is free format except when especially stated
 
@@ -1092,6 +1107,9 @@ sections is ignored.
 \> This section is only evaluated if either the keyword \refkeyword{DCACP}, \refkeyword{VDW CORRECTION}, \\
 \> or \refkeyword{VDW WANNIER} is given in
    the \&CPMD section.\\
+\\
+\> \&MTS ...  \> \&END  \>  $\leftrightarrow$ \>
+   Parameters for the Multiple Time-Step MD scheme. \\
 \end{tabbing}
 
   A detailed discussion of the different keywords will be given in the
@@ -1257,6 +1275,7 @@ following section.
 \refspekeyword{USE\_IN\_STREAM}{USE IN STREAM}\options{}{}{}
 \refspekeyword{USE\_OUT\_STREAM}{USE OUT STREAM}\options{}{}{}
 \refspekeyword{USE\_MPI\_IO}{USE MPI IO}\options{}{}{}
+\refspekeyword{USE\_MTS}{USE MTS}\options{}{}{}
 \refkeyword{QMMM}\options{}{[QMMMEASY]}{}{}{}
 %_FM[
 \refkeyword{FORCEMATCH}\options{}{}{}
@@ -1432,6 +1451,8 @@ section \ref{S_Pseudopotentials} for more details on this.
 \refspekeyword{HFX\_BLOCK\_SIZE}{HFX BLOCK SIZE}\options{}{}{}
 \refspekeyword{HFX\_DISTRIBUTION}{HFX DISTRIBUTION}\options{}{[BLOCK\_CYCLIC,DYNAMIC]}{}
 \refkeyword{HFX SCREENING}\options{\{WFC,DIAG,EPS\_INT,RECOMPUTE\_TWO\_INT\_LIST\_EVERY\}}{}{}
+\refkeyword{SCEX}\options{}{}{}
+\refkeyword{SCALED EXCHANGE}\options{}{}{}
 \refkeyword{GC-CUTOFF}\options{}{}{}
 \refkeyword{GRADIENT CORRECTION}\options{}{}{functionals}
 \refkeyword{LIBRARY}\options{}{}{library\_for\_functional\_1, library\_for\_functional\_2, \dots}
@@ -1458,6 +1479,8 @@ section \ref{S_Pseudopotentials} for more details on this.
 \refkeyword{REFUNCT}\options{}{}{functionals}
 \refspekeyword{XC\_DRIVER}{XC DRIVER}\options{}{}{}\options{}{}{}
 \refspekeyword{XC\_KERNEL}{XC KERNEL}\options{}{}{functionals}
+\refspekeyword{MTS\_LOW\_FUNC}{MTS LOW FUNC}\options{}{}{functionals}
+\refspekeyword{MTS\_HIGH\_FUNC}{MTS HIGH FUNC}\options{}{}{functionals}
 
 
 %
@@ -1621,6 +1644,14 @@ the input-file if this section shall be evaluated.
 \refkeyword{UPDATE LIST}\options{}{}{}
 \refkeyword{VERBOSE}\options{}{}{}
 \refkeyword{WRITE LOCALTEMP}\options{[STEP \{nfi\_lt\}]}{}{}
+%
+\subsubsection[\&MTS ... \&END]{\&MTS $\ldots$ \&END}
+%
+\options{}{}{}
+\refspekeyword{TIMESTEP\_FACTOR}{TIMESTEP FACTOR}\options{}{}{}
+\refspekeyword{PRINT\_FORCES}{PRINT FORCES}\options{}{}{}
+\refspekeyword{LOW\_LEVEL\_FORCES}{LOW LEVEL FORCES}\options{\{DFT, EXTERNAL\}}{}{}
+\refspekeyword{HIGH\_LEVEL\_FORCES}{HIGH LEVEL FORCES}\options{\{DFT, EXTERNAL\}}{}{}
 %
 \clearpage
 %
@@ -2985,6 +3016,13 @@ with {\bf{PERT\_AMPLI}} (in \&PTDDFT).}
       \\
       \textbf{HYB\_MGGA\_XC} \_M05, \_M05\_2X, \_M06, \_M06\_2X, \_M06\_HF, \_M08\_SO, \_M08\_HX, \_M11, \_MN12\_SX
       \\~\\
+      \textbf{Important note on Minnesota functionals:}
+      \\
+      At the usual plane wave cutoff values, the Minnesota functionals require unusually dense integration grids.
+      In order to avoid introducing noise, this should be achieved by increasing the value of the \refkeyword{DUAL}.
+      For usage recommendations and more details: Bircher, Lopez-Tarifa and Rothlisberger\cite{bircher_rothlisberger19},
+      DOI: 10.1021/acs.jctc.8b00897.
+      \\~\\
       % MPB: No space for this on one page
       % Please note that, for your convenience, some of these combinations have been hard-coded in the internal library only,
       % they may not be available directly in libxc.
@@ -3193,6 +3231,28 @@ with {\bf{PERT\_AMPLI}} (in \&PTDDFT).}
         centers {\sl WFC}, the value of the integrals {\sl EPS\_INT}, or only the diagonal terms
         are included ({\sl DIAG}). {\sl RECOMPUTE\_TWO\_INT\_LIST\_EVERY} 
         allows to set how often the integral list is recomputed. }
+
+\spekeyword{HIGH\_LEVEL\_FORCES}{\{DFT, EXTERNAL\}}{}{}{\&MTS}{HIGH LEVEL FORCES}
+ \desc{
+    Set the computational model for the calculation of high level forces in the MTS scheme.
+    For now two options exists: (i) The forces are obtained from the DFT code internal to CPMD. 
+    In that case, the high level functional has to be set in the 
+    \&DFT section with the \refspekeyword{MTS\_HIGH\_FUNC}{MTS HIGH FUNC} keyword.
+    (ii) The forces are calculated by an external program which called via a script which should be named
+    \texttt{EXT\_HIGH\_FORCES}. When the forces are needed, CPMD will write a file \texttt{geometry.xyz} containing
+    the current geometry in xyz format (carthesian coordinates in Aangstroms). Then the script will 
+    be called and CPMD will wait until a file \texttt{forces.xyz} becomes available with the new forces
+    in xyz format (atomic units are expected). See the \texttt{get\_external\_forces} routine in the
+    \texttt{interface\_utils.mod.F90} file.
+
+    The keyword \refspekeyword{LOW\_LEVEL\_FORCES}{LOW LEVEL FORCES} can be used in exactly the same way for the 
+    selection of the computational model used to calculate the low level forces in the MTS scheme.
+    Similarly, if the DFT code internal to CPMD is chosen as low level, 
+    the keyword \refspekeyword{MTS\_LOW\_FUNC}{MTS LOW FUNC} 
+    (\&DFT section), can be used to select the low level density functional. \\
+
+    {\bf Default:} Forces are calculated with the DFT code internal to CPMD.
+ }
 
 \keyword{HTHRS}{}{}{}{\&LINRES}
  \desc{
@@ -3677,6 +3737,9 @@ specify the \refkeyword{POINT GROUP}.
 \keyword{LOCAL SPIN DENSITY}{}{}{}{\&CPMD}
   \desc{Alias for \refkeyword{LSD}.}
 
+\spekeyword{LOW\_LEVEL\_FORCES}{\{DFT, EXTERNAL\}}{}{}{\&MTS}{LOW LEVEL FORCES}
+ \desc{Analogue to \refspekeyword{HIGH\_LEVEL\_FORCES}{HIGH LEVEL FORCES}.}
+
 \keyword{LOW SPIN EXCITATION}{}{[ROKS,ROSS,ROOTHAAN,CAS22]}{}{\&SYSTEM}
   \desc{Use the low spin excited state functional~\cite{Frank98}. 
 For ROKS calculations, see also the \refkeyword{ROKS} keyword in the \&CPMD-section.}
@@ -3858,6 +3921,17 @@ For ROKS calculations, see also the \refkeyword{ROKS} keyword in the \&CPMD-sect
   \desc{This keyword only applies to LSD calculations.\\
       The multiplicity (2$S$+1) is read from the next line.\\
       {\bf Default} is the {\bf smallest possible} multiplicity.}
+
+\spekeyword{MTS\_HIGH\_FUNC}{}{}{functionals}{\&DFT}{MTS HIGH FUNC}
+  \desc{Alias for \refkeyword{FUNCTIONAL} that makes sense when used with the MTS scheme since it
+  corresponds to the high level functional in that context (see \&MTS section).
+  {\bf Note:} The functionals in combination with the MTS scheme have to be set with 
+      \refspekeyword{XC\_DRIVER}{XC DRIVER}.}
+
+\spekeyword{MTS\_LOW\_FUNC}{}{}{functionals}{\&DFT}{MTS LOW FUNC}
+  \desc{Select the low level functional in the MTS scheme. To be used like \refkeyword{FUNCTIONAL}.
+  {\bf Note:} The functionals in combination with the MTS scheme have to be set with 
+      \refspekeyword{XC\_DRIVER}{XC DRIVER}.}
 
 \spekeyword{N\_CYCLES}{}{}{}{\&PTDDFT}{N-CYCLES}
   \desc{Defines the number of cycles (time steps) used in the propagation
@@ -4436,6 +4510,15 @@ read from the next line.}
 \keyword{PRINT FF}{}{}{}{\&CLASSIC}
   \desc{Not documented}
 
+\spekeyword{PRINT\_FORCES}{[OFF]}{}{}{\&MTS}{PRINT FORCES}
+  \desc{
+     Turn on/off the printing of the high and low level forces along the MTS-MD trajectory.
+     The forces are printed to two distinct trajectory files in the \texttt{.xyz} format,
+     \texttt{MTS\_LOW\_FORCES.xyz} and \texttt{MTS\_HIGH\_FORCES.xyz}. \\
+
+     {\bf Default}: OFF.
+  }
+
 \keyword{PRINT LEVEL}{}{}{}{\&PIMD}
   \desc{The detail of printing information is read as an integer number
         from the next line.
@@ -4893,6 +4976,16 @@ for the propagation of the KS orbitals.}
   \desc{Identical functionality as described in \refspekeyword{HFX\_SCALE}{HFX SCALE}, but applies to the \refkeyword{LR KERNEL}
         rather than the \refkeyword{FUNCTIONAL}.}
 
+\keyword{SCEX}{}{}{}{\&DFT}
+  \desc{Activate the use of the coordinate-scaled exact exchange scheme by Bircher and
+        Rothlisberger\cite{bircher_rothlisberger18b} for \emph{isolated systems}.
+        Speedups of up to one order of magnitude can be achieved. Please note that
+        the simulation supercell must imperatively span twice the size of the charge density,
+        and that the molecule has to remain centred in the box.}
+
+\keyword{SCALED EXCHANGE}{}{}{}{\&DFT}
+  \desc{Alias for \refkeyword{SCEX}.}
+
 \keyword{SCREENED EXCHANGE}{\{ASHCROFT,CAM,ERFC,EXP\}}{}{}{\&DFT}
   \desc{Screening / range separation applied to the Hartree-Fock exchange term \emph{only}.
         Possible options are: 
@@ -5306,6 +5399,15 @@ for the propagation of the KS orbitals.}
       {\bf Default} is a time step of {\bf 5 a.u.}
       ($1\, a.u. = 0.0241888428$ fs).}
 
+\spekeyword{TIMESTEP\_FACTOR}{}{}{}{\&MTS}{TIMESTEP FACTOR}
+  \desc{
+     The time step factor ($n$) used in the MTS scheme is read from the next line. \\
+
+  For instance, if \refkeyword{TIMESTEP IONS} is set to {\bf 15 a.u.}, and ($n=4$) then the high level correction
+  to the forces in the MTS scheme will be calculated every 4 steps, i.e. every {\bf 60 a.u.}
+  {\bf Default} is a factor of 1, i.e. the MD will be identical to a Velocity-Verlet MD with the high level forces.
+  }
+
 \keyword{TRACE}{}{[ALL,MASTER]}{}{\&CPMD}
 \desc{ Activate the tracing of the procedures. {\sl ALL} specifies that all the mpi tasks are traced.
   {\sl ALL} specifies that only the master is traced.
@@ -5405,6 +5507,9 @@ for the propagation of the KS orbitals.}
  \desc{ Specify that MPI shall be used for parallel reading/writing of the RESTART file.
    This shall be used with {\sl USE\_IN\_STREAM} and /or {\sl USE\_OUT\_STREAM}.
  }
+
+\spekeyword{USE\_MTS}{}{}{}{\&CPMD}{USE MTS}
+ \desc{Switch on the Multiple Time-Step scheme for molecular dynamics (see \&MTS section).\cite{Liberatore2018}}
 
 \keyword{VDW CORRECTION}{[ON,OFF]}{}{}{\&CPMD}
 
@@ -8400,12 +8505,10 @@ the shifted Gaussians are used, where the tails after a given
 cutoff are set equal to zero; in this case, if $RCUT$ is read,
 the cutoff $rshift$ and the boosting factor $f_b$ are also read
 immediately after (defaults: $rshift = 2$,$f_b=1$). \\
-if the same line contains $WELLTEMP$ well--tempered variant of metadynamics is performed.
 In all this cases, if the symbol $=$ is read in the same
 line as $HILLS$, the perpendicular width $\Delta s^{\perp}$
 and the height $W$ are read immediately after (defaults:
 $\Delta s^{\perp} = 0.1 \, u.s.$, $W = 0.001 \, Hartree$).
-For well--tempered metadynamics, the $\Delta T$ value in Kelvin is read after the $W$ parameter.
 
 \item{TUNING HHEIGHT:} With this keyword the height of the hills is
 tuned according to the curvature of the underlying potential.
@@ -10999,7 +11102,7 @@ section is used in CPMD for two purposes:
    using ``better'' wavefunctions does not pay off.
 \end{enumerate}
 %
-% jgh
+% xc_driver
 %%%%%%%%%%
 
 \faqquestion{newdft}
@@ -11016,6 +11119,52 @@ The inclusion of hybrids will require additional modifications to dftin\_utils.m
 cpfunc\_func\_init (in cp\_xc\_utils.mod.F90). The variables for
 range separation are currently still found in func.mod.F90 and the range separated exact exchange
 is handled in initclust\_utils.mod.F90.
+%
+% Minnesota
+%%%%%%%%%%
+
+\faqquestion{minnesotaconv}
+I am trying to use the Minnesota functionals (M06, M11, \dots), but the results I get are most erratic,
+or they require very high values for the \refkeyword{CUTOFF}.
+What is wrong?
+
+\faqanswer
+The Minnesota functionals require unusually dense integration grids. Simply increasing the cutoff will
+introduce numerical noise and make the wavefunction optimisation unstable. This issue can be overcome by
+increasing the \refkeyword{DUAL} up to 8-12. A detailled assessment of these effects along with recommendations
+for appropriate values can be found in the following reference: M.P. Bircher, P. Lopez-Tarifa and U. Rothlisberger:
+\emph{J.\ Chem.\ Theory Comput.}, \textbf{15} (1), 557 (2019). DOI: 10.1021/acs.jctc.8b00897
+
+\faqquestion{minnesotacomp}
+Results obtained from the Minnesota functionals (M05, M06, M08, M11) seem well converged, but exhibit significant differences with
+respect to Gaussian bases. Is there something wrong?
+
+\faqanswer
+Due to their highly flexible functional form, the Minnesota functionals are extremely sensitive to the
+choice and flexibility of the underlying basis set. Since Gaussian functions always impose a certain rigidity,
+results obtained in Gaussian basis sets may occasionally differ by more than just chemical accuracy from the
+plane wave results. This effect is not limited to plane waves, it can also be observed - to a lesser extent -
+when comparing plane waves and Slater functions, and can be rather pronounced when comparing Gaussian and Slater functions.
+A detailled study of basis set effects is provided in the following article: M.P. Bircher, P. Lopez-Tarifa and U. Rothlisberger:
+\emph{J.\ Chem.\ Theory Comput.}, \textbf{15} (1), 557 (2019). DOI: 10.1021/acs.jctc.8b00897
+%
+% Minnesota
+%%%%%%%%%%
+
+\faqquestion{hfxslow}
+I am running a calculation with exact exchange, but it is exceedingly slow compared to a GGA or MGGA run.
+Can this issue be resolved?
+
+\faqanswer
+The implementation of exact (or Hartree-Fock) exchange in CPMD is highly efficient and parallel. If the number of
+available nodes is limited, increasing the value in \refspekeyword{HFX\_BLOCK\_SIZE}{HFX BLOCK SIZE} can substantially speed up
+the calculation. In the presence of ample computational resources, the calculation can be sped up by using
+\refspekeyword{CP\_GROUPS}{CP GROUPS}.
+
+In isolated systems, the calculation can be sped up by up to an additional order of magnitude by using the coordinate-scaling
+scheme by Bircher and Rothlisberger. For details, see \refkeyword{SCEX}.
+
+
 %
 % AK
 %%%%%%%%%%
@@ -11572,6 +11721,10 @@ Phys.~Rev.~B  {\bf 73}, 094204,(2006).
     L. Knoll and D. Marx,
     Eur.~Phys.~J.~D {\bf 10}, 353 (2000).
 
+\bibitem{Liberatore2018} 
+   E.~Liberatore, R.~Meli, and U.~Rothlisberger,
+   J.~Chem.~Theory~Comput., {\bf 14}, 2834 (2018).
+
 \bibitem{mooij:99}
     W.~T.~M. Mooij, F.~B. van Duijneveldt,J.~G.~C.~M. van Duijneveldt-van de Rijdt,
     and B.~P. van Eijck, J.~Phys.~Chem~A {\bf 103}, 9872 (1999).
@@ -11749,6 +11902,14 @@ M.~Schw\"{o}rer, B.~Breitenfeld, P.~Tr\"{o}ster, S.~Bauer, K.~Lorenzen, P.~Tavan
 \bibitem{Schwoerer2015}
 M.~Schw\"{o}rer, K.~Lorenzen, G.~Mathias, and P.~Tavan,
  J.\ Chem.\ Phys., {\bf 142}   (2015).
+
+\bibitem{bircher_rothlisberger18b}
+M.P.~Bircher and U.~Rothlisberger,
+ J.\ Phys.\ Chem.\ Lett., {\bf 9} (14), 3886 (2018).
+
+\bibitem{bircher_rothlisberger19}
+M.P.~Bircher, P.~Lopez-Tarifa and U.~Rothlisberger,
+ J.\ Chem.\ Theory Comput., {\bf 15} (1), 557 (2019).
 
 %-> References correctly reordered until this point.
 
