@@ -1,0 +1,27 @@
+ &ATOM
+  Z  =     37.0000000000000     
+  ZV =     9.00000000000000     
+  XC = 0055   0.6666666667
+  TYPE = NORMCONSERVING GOEDECKER
+ &END
+ &INFO
+    ============================================================
+    |    Pseudopotential Report     Thu Feb  3 07:47:31 2005   |
+    ------------------------------------------------------------
+    |  Atomic Symbol                   :   Rb                  |
+    |  Atomic Number                   :  37                   |
+    |  Exchange-Correlation Functional :                       |
+    |     Gradient corrected HCTH/120 functional               |
+    |     Handy et al., JCP 109, 6264 (1998)                   |
+    |  Goedecker/Hartwigsen normconserving PP                  |
+    ============================================================
+ &END
+ &POTENTIAL
+     GOEDECKER
+           3                                    LMAX
+      0.490000000                                 RC
+   2     4.487069640    -0.703899708   #C  C1 C2
+      0.282300767  2   9.585080772  -3.680622014   9.503325177 H(s) 11 12 22           
+      0.301886145  2   2.238278981  -2.318333093   5.486177416 H(p) 11 12 22           
+      0.514895281  1   0.450997633 H(d) 11                 
+ &END

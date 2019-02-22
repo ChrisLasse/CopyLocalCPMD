@@ -31,6 +31,8 @@ M05
  5.0d0 1.0d0 1.0d0  0.0d0 0.0d0 0.0d0
  CUTOFF 
  20d0
+ DUAL
+ 4.0
 &END
 
 &ATOMS

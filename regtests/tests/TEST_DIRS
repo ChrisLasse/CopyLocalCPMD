@@ -33,6 +33,7 @@ TD/saop
 CP/VDB/mixed-psp-1
 CP/VDB/cp-1
 CP/VDB/cp-2
+CP/VDB/cp-3
 CP/PRL/npt-1
 CP/PRL/npt-2
 DFTU/vdb-warmup
@@ -61,6 +62,7 @@ SPECT/IR/methan-fd-nosymm
 SPECT/IR/methan-fd
 SPECT/IR/methan-opt-nosymm
 SPECT/IR/methan-opt
+SP/k-points/bug-1
 SP/k-points/Nb_1
 SP/k-points/Nb_2
 SP/k-points/Nb_3
@@ -201,6 +203,7 @@ CP/thermostats/NoseLocalPoly
 CP/HCl
 #CP/H2O
 BO/VDB/mixed-psp-1
+BO/hybrid/w-1_MTS_BLYP_B3LYP
 BO/hybrid/w-1
 BO/hybrid/w-2
 BO/hybrid/w-3
@@ -524,6 +527,10 @@ SP/restart/rest-7-a-uks
 SP/restart/rest-7-b-uks
 SP/restart/rest-8-a-uks
 SP/restart/rest-8-b-uks
+PINT/pi-0
+PINT/pi-1
+PINT/pi-2
+PINT/pi-3
 PINT/bug-1/run
 PINT/bug-1/warmup
 PINT/inp-1
@@ -688,6 +695,7 @@ BO/thermostats/h2oNoseUltra
 BO/thermostats/h2oNoseMassive-a
 BO/thermostats/h2oNoseMassive-b
 BO/thermostats/h2oNose
+BO/gga/h2o_MTS_LDA_BLYP
 BO/gga/h2oMT
 BO/gga/h2oVel
 BO/gga/h2o-vb-1
@@ -821,3 +829,21 @@ BO/libxc/u-5
 SP/tdforce-1
 SPECT/VAO/RESTART-1/1
 SPECT/VAO/RESTART-1/2
+SP/functionals/CPFunc/M05
+SP/functionals/CPFunc/M05_2X
+SP/functionals/CPFunc/M05_2X_LSD
+SP/functionals/CPFunc/M05_LSD
+SP/functionals/CPFunc/M06
+SP/functionals/CPFunc/M06_2X
+SP/functionals/CPFunc/M06_2X_LSD
+SP/functionals/CPFunc/M06_HF
+SP/functionals/CPFunc/M06_HF_LSD
+SP/functionals/CPFunc/M06_L
+SP/functionals/CPFunc/M06_LSD
+SP/functionals/CPFunc/M06_L_LSD
+SP/functionals/CPFunc/M11_L
+SP/functionals/CPFunc/M11_L_LSD
+SP/functionals/CPFunc/MN12_L
+SP/functionals/CPFunc/MN12_L_LSD
+SP/functionals/CPFunc/MN12_SX
+SP/functionals/CPFunc/MN12_SX_LSD

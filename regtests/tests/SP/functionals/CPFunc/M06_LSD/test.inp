@@ -33,6 +33,8 @@ OH radical, M06
  5.0d0 1.0d0 1.0d0  0.0d0 0.0d0 0.0d0
  CUTOFF 
  120d0
+ DUAL
+ 8.0
 &END
 
 &ATOMS

@@ -1,0 +1,29 @@
+ &ATOM
+  Z  =     37.0000000000000     
+  ZV =     9.00000000000000     
+  XC = 1134   0.6666666667
+  TYPE = NORMCONSERVING GOEDECKER
+ &END
+ &INFO
+    ============================================================
+    |    Pseudopotential Report     Mon Nov  1 17:41:03 2004   |
+    ------------------------------------------------------------
+    |  Atomic Symbol                   :   Rb                  |
+    |  Atomic Number                   :  37                   |
+    |  Exchange-Correlation Functional :                       |
+    |     Slater exchange :  0.6667                            |
+    |     LDA correlation : Ceperley-Alder                     |
+    |     Exchange GC     : Perdew-Burke-Ernzerhof             |
+    |     Correlation GC  : Perdew-Burke-Ernzerhof             |
+    |  Goedecker/Hartwigsen normconserving PP                  |
+    ============================================================
+ &END
+ &POTENTIAL
+     GOEDECKER
+           3                                    LMAX
+      0.490000000                                 RC
+   2     4.553608509    -0.703899708   #C  C1 C2
+      0.282300767  2   9.552579721  -3.680622014   9.503325177 H(s) 11 12 22           
+      0.301886145  2   2.248018789  -2.314416514   5.476909099 H(p) 11 12 22           
+      0.514895281  1   0.450845272 H(d) 11                 
+ &END

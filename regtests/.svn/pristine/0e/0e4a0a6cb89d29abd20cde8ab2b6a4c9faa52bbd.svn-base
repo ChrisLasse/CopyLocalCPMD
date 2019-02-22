@@ -1,6 +1,0 @@
-QM/MM Regtests for AMBER force field:
-
- Car-Parrinello MD within BLYP and link atom                  atp_blyp_cpmd_capH.in
- Born-Oppenheimer MD within BLYP and link atom                atp_blyp_bo_capH.in
- Car-Parrinello MD within BLYP and link atom + SPLIT option   atp_blyp_cpmd_capH_split.in
-

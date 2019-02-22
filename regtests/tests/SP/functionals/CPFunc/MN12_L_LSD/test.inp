@@ -35,6 +35,8 @@ OH radical, MN12
  5.0d0 1.0d0 1.0d0  0.0d0 0.0d0 0.0d0
  CUTOFF 
  20d0
+ DUAL
+ 12.0
 &END
 
 &ATOMS

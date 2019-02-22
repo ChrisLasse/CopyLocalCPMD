@@ -1,7 +1,0 @@
-QM/MM Regtests for AMBER force field:
-
- CPMD metadynamics within BLYP and link atom                  atp_blyp_cpmd_capH_mtd.in
- BOMD metadynamics within BLYP and link atom                  atp_blyp_bo_capH_mtd.in
- CPMD metadynamics within BLYP and optimized eff. core pot.   atp_blyp_cpmd_oecp_mtd.in
- BOMD metadynamics within BLYP and optimized eff. core pot.   atp_blyp_bo_oecp_mtd.in
-
