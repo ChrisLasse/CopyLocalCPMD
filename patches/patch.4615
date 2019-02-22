@@ -1,0 +1,147 @@
+Index: doc/manual/manual.tex
+===================================================================
+--- doc/manual/manual.tex	(revision 4614)
++++ doc/manual/manual.tex	(revision 4615)
+@@ -641,10 +641,14 @@
+ %
+ With the version 4.3, we have ported some of the core-procedures to gpu. The XC procedures
+ have been refactored and it was added the possibility to link to libxc.
++Coulomb-attenuated functionals (CAM) and the Minnesota functionals (M05, M06, M08 and
++M11 families) are now available as internal xc procedures.
+ A new development for Eherenfest dynamics with ionized states is deployed.
+-Few novel implementation: a multiple time step scheme for MD and the stress tensor LSD and UltraSoft Vanderbilt pseudopotentials and NPT
++Few novel implementations are available: a multiple time step scheme for MD,
++accelerated exact exchange for isolated systems, 
++the stress tensor, LSD and UltraSoft Vanderbilt pseudopotentials and NPT.
+ Also a new bicanonical ensemble method is made available with version 4.3.
+-Extensive cleanup and bug fixes and strenghten of the regression test suite.
++Extensive cleanup and bug fixes and strenghtening of the regression test suite.
+ 
+ 
+ % XXX tutorial added.
+@@ -1447,6 +1451,8 @@
+ \refspekeyword{HFX\_BLOCK\_SIZE}{HFX BLOCK SIZE}\options{}{}{}
+ \refspekeyword{HFX\_DISTRIBUTION}{HFX DISTRIBUTION}\options{}{[BLOCK\_CYCLIC,DYNAMIC]}{}
+ \refkeyword{HFX SCREENING}\options{\{WFC,DIAG,EPS\_INT,RECOMPUTE\_TWO\_INT\_LIST\_EVERY\}}{}{}
++\refkeyword{SCEX}\options{}{}{}
++\refkeyword{SCALED EXCHANGE}\options{}{}{}
+ \refkeyword{GC-CUTOFF}\options{}{}{}
+ \refkeyword{GRADIENT CORRECTION}\options{}{}{functionals}
+ \refkeyword{LIBRARY}\options{}{}{library\_for\_functional\_1, library\_for\_functional\_2, \dots}
+@@ -3010,6 +3016,13 @@
+       \\
+       \textbf{HYB\_MGGA\_XC} \_M05, \_M05\_2X, \_M06, \_M06\_2X, \_M06\_HF, \_M08\_SO, \_M08\_HX, \_M11, \_MN12\_SX
+       \\~\\
++      \textbf{Important note on Minnesota functionals:}
++      \\
++      At the usual plane wave cutoff values, the Minnesota functionals require unusually dense integration grids.
++      In order to avoid introducing noise, this should be achieved by increasing the value of the \refkeyword{DUAL}.
++      For usage recommendations and more details: Bircher, Lopez-Tarifa and Rothlisberger\cite{bircher_rothlisberger19},
++      DOI: 10.1021/acs.jctc.8b00897.
++      \\~\\
+       % MPB: No space for this on one page
+       % Please note that, for your convenience, some of these combinations have been hard-coded in the internal library only,
+       % they may not be available directly in libxc.
+@@ -3229,7 +3242,7 @@
+     \texttt{EXT\_HIGH\_FORCES}. When the forces are needed, CPMD will write a file \texttt{geometry.xyz} containing
+     the current geometry in xyz format (carthesian coordinates in Aangstroms). Then the script will 
+     be called and CPMD will wait until a file \texttt{forces.xyz} becomes available with the new forces
+-    in xyz format (atomic units are expected). See the \textt{get\_external\_forces} routine in the
++    in xyz format (atomic units are expected). See the \texttt{get\_external\_forces} routine in the
+     \texttt{interface\_utils.mod.F90} file.
+ 
+     The keyword \refspekeyword{LOW\_LEVEL\_FORCES}{LOW LEVEL FORCES} can be used in exactly the same way for the 
+@@ -4963,6 +4976,16 @@
+   \desc{Identical functionality as described in \refspekeyword{HFX\_SCALE}{HFX SCALE}, but applies to the \refkeyword{LR KERNEL}
+         rather than the \refkeyword{FUNCTIONAL}.}
+ 
++\keyword{SCEX}{}{}{}{\&DFT}
++  \desc{Activate the use of the coordinate-scaled exact exchange scheme by Bircher and
++        Rothlisberger\cite{bircher_rothlisberger18b} for \emph{isolated systems}.
++        Speedups of up to one order of magnitude can be achieved. Please note that
++        the simulation supercell must imperatively span twice the size of the charge density,
++        and that the molecule has to remain centred in the box.}
++
++\keyword{SCALED EXCHANGE}{}{}{}{\&DFT}
++  \desc{Alias for \refkeyword{SCEX}.}
++
+ \keyword{SCREENED EXCHANGE}{\{ASHCROFT,CAM,ERFC,EXP\}}{}{}{\&DFT}
+   \desc{Screening / range separation applied to the Hartree-Fock exchange term \emph{only}.
+         Possible options are: 
+@@ -11079,7 +11102,7 @@
+    using ``better'' wavefunctions does not pay off.
+ \end{enumerate}
+ %
+-% jgh
++% xc_driver
+ %%%%%%%%%%
+ 
+ \faqquestion{newdft}
+@@ -11097,6 +11120,52 @@
+ range separation are currently still found in func.mod.F90 and the range separated exact exchange
+ is handled in initclust\_utils.mod.F90.
+ %
++% Minnesota
++%%%%%%%%%%
++
++\faqquestion{minnesotaconv}
++I am trying to use the Minnesota functionals (M06, M11, \dots), but the results I get are most erratic,
++or they require very high values for the \refkeyword{CUTOFF}.
++What is wrong?
++
++\faqanswer
++The Minnesota functionals require unusually dense integration grids. Simply increasing the cutoff will
++introduce numerical noise and make the wavefunction optimisation unstable. This issue can be overcome by
++increasing the \refkeyword{DUAL} up to 8-12. A detailled assessment of these effects along with recommendations
++for appropriate values can be found in the following reference: M.P. Bircher, P. Lopez-Tarifa and U. Rothlisberger:
++\emph{J.\ Chem.\ Theory Comput.}, \textbf{15} (1), 557 (2019). DOI: 10.1021/acs.jctc.8b00897
++
++\faqquestion{minnesotacomp}
++Results obtained from the Minnesota functionals (M05, M06, M08, M11) seem well converged, but exhibit significant differences with
++respect to Gaussian bases. Is there something wrong?
++
++\faqanswer
++Due to their highly flexible functional form, the Minnesota functionals are extremely sensitive to the
++choice and flexibility of the underlying basis set. Since Gaussian functions always impose a certain rigidity,
++results obtained in Gaussian basis sets may occasionally differ by more than just chemical accuracy from the
++plane wave results. This effect is not limited to plane waves, it can also be observed - to a lesser extent -
++when comparing plane waves and Slater functions, and can be rather pronounced when comparing Gaussian and Slater functions.
++A detailled study of basis set effects is provided in the following article: M.P. Bircher, P. Lopez-Tarifa and U. Rothlisberger:
++\emph{J.\ Chem.\ Theory Comput.}, \textbf{15} (1), 557 (2019). DOI: 10.1021/acs.jctc.8b00897
++%
++% Minnesota
++%%%%%%%%%%
++
++\faqquestion{hfxslow}
++I am running a calculation with exact exchange, but it is exceedingly slow compared to a GGA or MGGA run.
++Can this issue be resolved?
++
++\faqanswer
++The implementation of exact (or Hartree-Fock) exchange in CPMD is highly efficient and parallel. If the number of
++available nodes is limited, increasing the value in \refspekeyword{HFX\_BLOCK\_SIZE}{HFX BLOCK SIZE} can substantially speed up
++the calculation. In the presence of ample computational resources, the calculation can be sped up by using
++\refspekeyword{CP\_GROUPS}{CP GROUPS}.
++
++In isolated systems, the calculation can be sped up by up to an additional order of magnitude by using the coordinate-scaling
++scheme by Bircher and Rothlisberger. For details, see \refkeyword{SCEX}.
++
++
++%
+ % AK
+ %%%%%%%%%%
+ 
+@@ -11834,6 +11903,14 @@
+ M.~Schw\"{o}rer, K.~Lorenzen, G.~Mathias, and P.~Tavan,
+  J.\ Chem.\ Phys., {\bf 142}   (2015).
+ 
++\bibitem{bircher_rothlisberger18b}
++M.P.~Bircher and U.~Rothlisberger,
++ J.\ Phys.\ Chem.\ Lett., {\bf 9} (14), 3886 (2018).
++
++\bibitem{bircher_rothlisberger19}
++M.P.~Bircher, P.~Lopez-Tarifa and U.~Rothlisberger,
++ J.\ Chem.\ Theory Comput., {\bf 15} (1), 557 (2019).
++
+ %-> References correctly reordered until this point.
+ 
+ %\bibitem{LeSar}

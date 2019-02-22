@@ -1,0 +1,1416 @@
+Index: src/fftnew_utils.mod.F90
+===================================================================
+--- src/fftnew_utils.mod.F90	(revision 4607)
++++ src/fftnew_utils.mod.F90	(revision 4608)
+@@ -408,13 +408,13 @@
+     ! 
+     IF (paral%io_parent) THEN
+        WRITE(6,*)
+-       WRITE(6,'(A,T50,A,I4)') ' Add new FFT set ',' set number ',&
++       WRITE(6,'(A,T50,A,I4)') ' ADD NEW FFT SET ',' SET NUMBER ',&
+             ipooL
+-       WRITE(6,'(A,T51,3I5)') ' Real space Grid ',lr1s,lr2s,lr3S
+-       WRITE(6,'(A,T20,A,F6.0,T44,A,I10)') ' Sparse FFT setup: ',&
+-            'Cutoff [Ry]:',ecuts,'Plane Waves:',jgwS
+-       WRITE(6,'(A,T20,A,F6.0,T44,A,I10)') ' Full FFT setup  : ',&
+-            'Cutoff [Ry]:',ecutf,'Plane Waves:',jhgS
++       WRITE(6,'(A,T51,3I5)') ' REAL SPACE GRID ',lr1s,lr2s,lr3S
++       WRITE(6,'(A,T20,A,F6.0,T44,A,I10)') ' SPARSE FFT SETUP: ',&
++            'CUTOFF [Ry]:',ecuts,'PLANE WAVES:',jgwS
++       WRITE(6,'(A,T20,A,F6.0,T44,A,I10)') ' FULL FFT SETUP  : ',&
++            'CUTOFF [Ry]:',ecutf,'PLANE WAVES:',jhgS
+        WRITE(6,*)
+     ENDIF
+     ! ==--------------------------------------------------------------==
+Index: src/pw_hfx.mod.F90
+===================================================================
+--- src/pw_hfx.mod.F90	(revision 4607)
++++ src/pw_hfx.mod.F90	(revision 4608)
+@@ -159,7 +159,9 @@
+   ! ================================================================== 
+   SUBROUTINE hfx_new(c0,c2,f,psic,nstate,ehfx,vhfx,redist_c2)
+     ! ==--------------------------------------------------------------==
+-
++    ! - Refactored: New procedures for ehfx, potentials, pair densities
++    !               Scaled exact exchange (ScEX), some prettifications
++    !                             21.11.2018 - M. P. Bircher @ LCBC/EPFL
+     ! ==--------------------------------------------------------------==
+ 
+     COMPLEX(real_8)                          :: c0(:,:), c2(:,:)
+@@ -191,14 +193,13 @@
+     TYPE(list_t)                             :: c_list, r_list
+     TYPE(pp_t)                               :: pp
+ 
+-! KPT replace NGW -> NGWK (maybe not C2....)
+-! ==--------------------------------------------------------------==
+-! ==--------------------------------------------------------------==
++    ! KPT replace NGW -> NGWK (maybe not C2....)
++    ! ==--------------------------------------------------------------==
+ 
+     ehfx = 0.0_real_8
+     vhfx = 0.0_real_8
+ 
+-    IF (func1%mhfx.NE.1) RETURN
++    IF (func1%mhfx /= 1) RETURN
+ 
+     ! ==--------------------------------------------------------------==
+ 
+@@ -210,7 +211,7 @@
+          __LINE__,__FILE__)
+     IF (lspin2%tlse) CALL stopgm(procedureN,'LSE NOT IMPLEMENTED',& 
+          __LINE__,__FILE__)
+-    IF (group%nogrp.GT.1) CALL stopgm(procedureN,'TASK GROUPS NOT IMPLEMENTED',& 
++    IF (group%nogrp > 1) CALL stopgm(procedureN,'TASK GROUPS NOT IMPLEMENTED',& 
+          __LINE__,__FILE__)
+ 
+     ! ==--------------------------------------------------------------==
+@@ -218,6 +219,8 @@
+     IF (cntl%use_scaled_hfx) THEN
+        IF (.NOT. scex%init) CALL stopgm(procedureN,'ScEX requested, but not initialised',&
+                                         __LINE__,__FILE__)
++       IF (cntl%tlsd) CALL stopgm(procedureN,'ScEX for LSD NYI',&
++                                  __LINE__,__FILE__)
+        CALL setfftn(scex_ID_parent)
+        ehfx_scale = 2.0_real_8
+     ELSE
+@@ -249,7 +252,7 @@
+        IF (.NOT.ALLOCATED(thresh%int_vals)) THEN
+           ! this should be allocated before and deallocated
+           ALLOCATE(thresh%int_vals( nstate*(nstate+1)/2 ),stat=ierr)
+-          IF (ierr.NE.0) CALL stopgm(procedureN,'allocation problem',& 
++          IF (ierr /= 0) CALL stopgm(procedureN,'allocation problem',& 
+                __LINE__,__FILE__)
+           CALL zeroing(thresh%int_vals)
+        ENDIF
+@@ -261,7 +264,7 @@
+ 
+     hfx_dist = hfxc5%hfx_distribution
+     max_block_size = hfxc5%hfx_block_size
+-    IF (max_block_size.LT.1) CALL stopgm( procedureN,&
++    IF (max_block_size < 1) CALL stopgm( procedureN,&
+          'HFX_BLOCK_SIZE should be greater than zero' ,& 
+          __LINE__,__FILE__)
+ 
+@@ -273,16 +276,16 @@
+ 
+     IF (.NOT.ALLOCATED(tick_blks)) THEN
+        ALLOCATE(tick_blks(max_nblks,nspins),stat=ierr)
+-       IF (ierr.NE.0) CALL stopgm( procedureN, 'Allocation problem' ,& 
++       IF (ierr /= 0) CALL stopgm( procedureN, 'Allocation problem' ,& 
+             __LINE__,__FILE__)
+        tick_blks(:,:) = 1
+     ELSE
+        IF( SIZE(tick_blks,1) /= max_nblks ) THEN
+           DEALLOCATE(tick_blks,stat=ierr)
+-          IF (ierr.NE.0) CALL stopgm( procedureN, 'Deallocation problem' ,&
++          IF (ierr /= 0) CALL stopgm( procedureN, 'Deallocation problem' ,&
+                __LINE__,__FILE__)
+           ALLOCATE(tick_blks(max_nblks,nspins),stat=ierr)
+-          IF (ierr.NE.0) CALL stopgm( procedureN, 'Allocation problem' ,&
++          IF (ierr /= 0) CALL stopgm( procedureN, 'Allocation problem' ,&
+                __LINE__,__FILE__)
+           tick_blks(:,:) = 1
+        ENDIF
+@@ -296,7 +299,7 @@
+          new_tick_blks(max_nblks), &
+          psi_row_pack(maxfftn), &
+          stat=ierr)
+-    IF (ierr.NE.0) CALL stopgm( procedureN, 'Allocation problem' ,& 
++    IF (ierr /= 0) CALL stopgm( procedureN, 'Allocation problem' ,& 
+          __LINE__,__FILE__)
+ 
+     CALL pp_init( pp, max_block_size )
+@@ -323,7 +326,7 @@
+ 
+     DEALLOCATE(vpotg,vpotr,psi_row,psi_col,new_tick_blks,&
+          sizes,offsets,psi_row_pack,STAT=ierr)
+-    IF (ierr.NE.0) CALL stopgm(procedureN,'Deallocation problem',& 
++    IF (ierr /= 0) CALL stopgm(procedureN,'Deallocation problem',& 
+          __LINE__,__FILE__)
+ 
+     CALL pp_destroy( pp )
+@@ -346,7 +349,7 @@
+     ! 
+     ! redistribute EHFX and C2_hfx over the groups if needed
+     ! 
+-    IF (parai%cp_nogrp.GT.1) THEN
++    IF (parai%cp_nogrp > 1) THEN
+        CALL tiset(procedureN//'_b',isub6)
+        CALL mp_sum(ehfx,parai%cp_inter_grp)
+        IF (redist_c2) CALL cp_grp_redist(C2_hfx,ncpw%ngw,nstate)
+@@ -374,13 +377,13 @@
+     ! ==--------------------------------------------------------------==
+ 
+     ! Redistribute timings if needed
+-    IF (parai%cp_nogrp.GT.1.AND.hfx_dist.NE.hfx_dist_block_cyclic) THEN
++    IF (parai%cp_nogrp > 1.AND.hfx_dist /= hfx_dist_block_cyclic) THEN
+        CALL mp_sum(tick_blks,max_nblks*nspins,parai%cp_inter_grp)
+     ENDIF
+     ! ==--------------------------------------------------------------==
+ 
+     IF (PRINT_GROUP_INFOS) THEN
+-       IF (parai%me.EQ.0) THEN
++       IF (parai%me == 0) THEN
+           WRITE(6,'(1X,3(A,I0),A,F0.2,A,F0.2)')&
+                procedureN//'| group ',parai%cp_inter_me,&
+                ' computed ',nbr_integrals,&
+@@ -389,13 +392,13 @@
+                ', t_per_1k_ints ',1.0e3_real_8*t_outer/(REAL(nbr_integrals,kind=real_8)+1.0e-6_real_8) ! to avoid NANs
+           CALL m_flush(6)
+        ENDIF
+-       IF (parai%cp_nogrp.GT.1) THEN
++       IF (parai%cp_nogrp > 1) THEN
+           i8_buff(1) = nbr_integrals
+           i8_buff(2) = nbr_rwfn_precomputed
+           CALL mp_sum(i8_buff,2,parai%cp_inter_grp)
+           nbr_integrals = i8_buff(1)
+           nbr_rwfn_precomputed = i8_buff(2)
+-          IF (parai%cp_me.EQ.0) THEN
++          IF (parai%cp_me == 0) THEN
+              WRITE(6,'(1X,3(A,I0))')&
+                   procedureN//'| all the groups computed ',&
+                   nbr_integrals,' integrals, precomputed ',&
+@@ -407,7 +410,7 @@
+     ! ==--------------------------------------------------------------==
+ 
+     DEALLOCATE(C2_hfx,stat=ierr)
+-    IF (ierr.NE.0) CALL stopgm(procedureN,'Deallocation problem',& 
++    IF (ierr /= 0) CALL stopgm(procedureN,'Deallocation problem',& 
+          __LINE__,__FILE__)
+ 
+     ! ==--------------------------------------------------------------==
+@@ -426,7 +429,7 @@
+ 
+          nst = nstates(ispin)
+          st_offst = 0
+-         IF (ispin.EQ.2) st_offst = nstates(1)
++         IF (ispin == 2) st_offst = nstates(1)
+ 
+          ! get the number of block pairs
+          nbr_blk = CEILING(REAL(nst,kind=real_8)/REAL(max_block_size,kind=real_8))
+@@ -476,6 +479,7 @@
+       ! ==--------------------------------------------------------------==
+       ! Iterator for coordinate-scaled exchange; with storage of real-space
+       ! pair potentials.
++      !                             20.11.2018 - M. P. Bircher @ LCBC/EPFL
+ 
+       COMPLEX(real_8), DIMENSION(:,:), &
+                        ALLOCATABLE :: C2_in_real_space
+@@ -482,9 +486,11 @@
+       COMPLEX(real_8), DIMENSION(:,:,:), &
+                        ALLOCATABLE :: scr_psic, scr_sent, scr_recv
+ 
+-      INTEGER  :: istate, ig, ir
+-      INTEGER  :: blk_state, blk_resid
++      CHARACTER(len=*), PARAMETER  :: subprocedureN = procedureN//'_process_scaled_blocks'
+ 
++      INTEGER         :: istate, ig, ir
++      INTEGER         :: blk_state, blk_resid
++
+       COMPLEX(real_8) :: fp, fm
+ 
+       !
+@@ -492,7 +498,7 @@
+       !
+       ALLOCATE(C2_in_real_space(maxfftn,nstate),&
+                stat=ierr)
+-      IF (ierr /= 0) CALL stopgm(procedureN,'Allocation problem',&
++      IF (ierr /= 0) CALL stopgm(subprocedureN,'Allocation problem',&
+                                  __LINE__,__FILE__)
+       CALL zeroing(C2_in_real_space)
+ 
+@@ -592,7 +598,7 @@
+       CALL scex%annihilate_density_scaling()
+ 
+       DEALLOCATE(C2_in_real_space,stat=ierr)
+-      IF (ierr /= 0) CALL stopgm(procedureN,'Deallocation problem',&
++      IF (ierr /= 0) CALL stopgm(subprocedureN,'Deallocation problem',&
+                                  __LINE__,__FILE__)
+ 
+       ! ==--------------------------------------------------------------==
+@@ -601,8 +607,13 @@
+   END SUBROUTINE hfx_new
+   ! ================================================================== 
+ 
++  ! ================================================================== 
++  ! Thresholding and list construction
++  ! ================================================================== 
+ 
++  ! ================================================================== 
+   SUBROUTINE thresh_init_local(thresh,nstate)
++    ! ==--------------------------------------------------------------==
+ 
+     TYPE(thresh_t), INTENT(inout)            :: thresh
+     INTEGER, INTENT(in)                      :: nstate
+@@ -631,7 +642,7 @@
+ 
+        ALLOCATE(thresh%acc_vals( nstate*(nstate+1)/2 ),&
+             thresh%new_vals( nstate*(nstate+1)/2 ), STAT=ierr )
+-       IF (ierr.NE.0) CALL stopgm(procedureN,'allocation problem',& 
++       IF (ierr /= 0) CALL stopgm(procedureN,'allocation problem',& 
+             __LINE__,__FILE__)
+        CALL zeroing(thresh%acc_vals)
+        CALL zeroing(thresh%new_vals)
+@@ -659,10 +670,11 @@
+     ENDIF
+ 
+ 
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE thresh_init_local
+-
+-
++  ! ================================================================== 
+   SUBROUTINE thresh_clean_local(thresh)
++    ! ==--------------------------------------------------------------==
+     TYPE(thresh_t), INTENT(inout)            :: thresh
+ 
+     CHARACTER(*), PARAMETER :: procedureN = 'thresh_clean_local'
+@@ -671,18 +683,19 @@
+ 
+     IF(ALLOCATED(thresh%acc_vals)) THEN
+        DEALLOCATE(thresh%acc_vals, STAT=ierr )
+-       IF (ierr.NE.0) CALL stopgm(procedureN,'deallocation problem',& 
++       IF (ierr /= 0) CALL stopgm(procedureN,'deallocation problem',& 
+             __LINE__,__FILE__)
+     ENDIF
+     IF(ALLOCATED(thresh%new_vals)) THEN
+        DEALLOCATE(thresh%new_vals, STAT=ierr )
+-       IF (ierr.NE.0) CALL stopgm(procedureN,'deallocation problem',& 
++       IF (ierr /= 0) CALL stopgm(procedureN,'deallocation problem',& 
+             __LINE__,__FILE__)
+     ENDIF
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE thresh_clean_local
+-
+-
++  ! ================================================================== 
+   SUBROUTINE thresh_get_new_radius(thresh)
++    ! ==--------------------------------------------------------------==
+     TYPE(thresh_t), INTENT(inout)            :: thresh
+ 
+     CHARACTER(*), PARAMETER :: procedureN = 'thresh_get_new_radius'
+@@ -705,7 +718,7 @@
+ 
+        ALLOCATE( max_vals( INT( bin_max / bin_range ) + 1 ),&
+             bin_vals( INT( bin_max / bin_range ) + 1 ), STAT=ierr )
+-       IF (ierr.NE.0) CALL stopgm(procedureN,'allocation problem',& 
++       IF (ierr /= 0) CALL stopgm(procedureN,'allocation problem',& 
+             __LINE__,__FILE__)
+ 
+        max_vals(:) = 0.0_real_8
+@@ -772,15 +785,16 @@
+ !!$    endif
+ 
+        DEALLOCATE(max_vals,bin_vals,stat=ierr)
+-       IF (ierr.NE.0) CALL stopgm(procedureN,'deallocation problem',& 
++       IF (ierr /= 0) CALL stopgm(procedureN,'deallocation problem',& 
+             __LINE__,__FILE__)
+ 
+     ENDIF
+ 
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE thresh_get_new_radius
+-
+-
++  ! ================================================================== 
+   SUBROUTINE build_dist(dist,nblks,TYPE,dist_costs)
++    ! ==--------------------------------------------------------------==
+     TYPE(dist_t)                             :: dist
+     INTEGER, INTENT(in)                      :: nblks, TYPE
+     INTEGER, DIMENSION(:), INTENT(in)        :: dist_costs
+@@ -803,7 +817,7 @@
+        dist%nblks_loc = part_1d_nbr_elems(dist%nblks,&
+             parai%cp_inter_me,parai%cp_nogrp)
+        ALLOCATE(dist%dist(dist%nblks_loc),stat=ierr)
+-       IF (ierr.NE.0)CALL stopgm(procedureN,'Allocation problem',& 
++       IF (ierr /= 0)CALL stopgm(procedureN,'Allocation problem',& 
+             __LINE__,__FILE__)
+        DO i = 1,dist%nblks_loc
+           blk = part_1d_get_elem(i,parai%cp_inter_me,parai%cp_nogrp)
+@@ -813,7 +827,7 @@
+     CASE(hfx_dist_dynamic)
+ 
+        ALLOCATE( nblks_per_bin( parai%cp_nogrp ), stat=ierr )
+-       IF (ierr.NE.0)CALL stopgm(procedureN,'Allocation problem',& 
++       IF (ierr /= 0)CALL stopgm(procedureN,'Allocation problem',& 
+             __LINE__,__FILE__)
+ 
+        CALL heap_new( heap, parai%cp_nogrp )
+@@ -824,7 +838,7 @@
+             (/( 0, grp = 1,parai%cp_nogrp )/) )
+ 
+        nblks_per_bin(:) = 0
+-       IF (parai%me.EQ.parai%source) THEN
++       IF (parai%me == parai%source) THEN
+           DO blk = 1,nblks
+              CALL heap_get_first(heap,root_bin,root_cost)
+              nblks_per_bin(root_bin) = nblks_per_bin(root_bin) + 1
+@@ -837,12 +851,12 @@
+             parai%source,parai%allgrp)
+ 
+        IF (PRINT_GROUP_INFOS) THEN
+-          IF (parai%cp_me.EQ.0)WRITE(6,'(2A,2(I0,1X),F7.2)')procedureN,&
++          IF (parai%cp_me == 0)WRITE(6,'(2A,2(I0,1X),F7.2)')procedureN,&
+                ' nblks_per_bin min/max/avg : ',&
+                MINVAL(nblks_per_bin),MAXVAL(nblks_per_bin),&
+                SUM(REAL(nblks_per_bin,kind=real_8))/REAL(SIZE(nblks_per_bin),kind=real_8)
+-          IF (parai%me.EQ.parai%source.AND.&
+-               parai%cp_inter_me.EQ.0)WRITE(6,'(2A,2(I0,1X),F0.2)')procedureN,&
++          IF (parai%me == parai%source.AND.&
++               parai%cp_inter_me == 0)WRITE(6,'(2A,2(I0,1X),F0.2)')procedureN,&
+                ' costs min/max/avg : ',&
+                MINVAL(heap%vals),MAXVAL(heap%vals),&
+                SUM(REAL(heap%vals,kind=real_8))/REAL(SIZE(heap%vals),kind=real_8)
+@@ -850,7 +864,7 @@
+ 
+        dist%nblks_loc = nblks_per_bin( parai%cp_inter_me + 1 )
+        ALLOCATE( dist%dist( dist%nblks_loc ), stat=ierr )
+-       IF (ierr.NE.0)CALL stopgm(procedureN,'Allocation problem',& 
++       IF (ierr /= 0)CALL stopgm(procedureN,'Allocation problem',& 
+             __LINE__,__FILE__)
+ 
+        ! 
+@@ -859,11 +873,11 @@
+        CALL heap_fill( heap, (/( grp, grp = 1,parai%cp_nogrp )/),&
+             (/( 0, grp = 1,parai%cp_nogrp )/) )
+ 
+-       IF (parai%me.EQ.parai%source) THEN
++       IF (parai%me == parai%source) THEN
+           i = 1
+           DO blk = 1,nblks
+              CALL heap_get_first(heap,root_bin,root_cost)
+-             IF ( parai%cp_inter_me + 1 .EQ. root_bin) THEN
++             IF ( parai%cp_inter_me + 1  ==  root_bin) THEN
+                 dist%dist( i ) = blk
+                 i = i + 1
+              ENDIF
+@@ -877,7 +891,7 @@
+        CALL heap_release( heap )
+ 
+        DEALLOCATE( nblks_per_bin, stat=ierr )
+-       IF (ierr.NE.0)CALL stopgm(procedureN,'Deallocation problem',& 
++       IF (ierr /= 0)CALL stopgm(procedureN,'Deallocation problem',& 
+             __LINE__,__FILE__)
+ 
+     CASE default
+@@ -887,9 +901,11 @@
+ 
+     END SELECT
+ 
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE build_dist
+-
++  ! ================================================================== 
+   SUBROUTINE release_dist(dist)
++    ! ==--------------------------------------------------------------==
+     TYPE(dist_t)                             :: dist
+ 
+     CHARACTER(*), PARAMETER                  :: procedureN = 'release_dist'
+@@ -898,12 +914,14 @@
+ 
+     IF (ASSOCIATED(dist%dist)) THEN
+        DEALLOCATE(dist%dist,stat=ierr)
+-       IF (ierr.NE.0)CALL stopgm(procedureN,'Deallocation problem',& 
++       IF (ierr /= 0)CALL stopgm(procedureN,'Deallocation problem',& 
+             __LINE__,__FILE__)
+     ENDIF
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE release_dist
+-
++  ! ================================================================== 
+   SUBROUTINE iterator_start(iter,dist)
++    ! ==--------------------------------------------------------------==
+     TYPE(iterator_t)                         :: iter
+     TYPE(dist_t)                             :: dist
+ 
+@@ -910,31 +928,39 @@
+     iter%blk_count = 0
+     iter%max_blk_count = dist%nblks_loc
+     iter%dist => dist%dist
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE iterator_start
+-
++  ! ================================================================== 
+   LOGICAL FUNCTION iterator_blocks(iter)
++    ! ==--------------------------------------------------------------==
+     TYPE(iterator_t) :: iter
+     iter%blk_count = iter%blk_count + 1
+-    iterator_blocks = iter%blk_count .LE. iter%max_blk_count
++    iterator_blocks = iter%blk_count <= iter%max_blk_count
++    ! ==--------------------------------------------------------------==
+   END FUNCTION iterator_blocks
+-
++  ! ================================================================== 
+   SUBROUTINE iterator_stop(iter)
++    ! ==--------------------------------------------------------------==
+     TYPE(iterator_t)                         :: iter
+ 
+     iter%blk_count = 0
+     iter%max_blk_count = 0
+     NULLIFY(iter%dist)
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE iterator_stop
+-
++  ! ================================================================== 
+   SUBROUTINE iterator_next_block(iter,blk)
++    ! ==--------------------------------------------------------------==
+     TYPE(iterator_t)                         :: iter
+     INTEGER, INTENT(out)                     :: blk
+ 
+     blk = iter%dist(iter%blk_count)
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE iterator_next_block
+-
++  ! ================================================================== 
+   SUBROUTINE build_block_info(n,nbr_blk,blk_size,&
+        offsets,sizes)
++    ! ==--------------------------------------------------------------==
+     INTEGER, INTENT(in)                      :: n, nbr_blk, blk_size
+     INTEGER, DIMENSION(:), INTENT(out)       :: offsets, sizes
+ 
+@@ -942,10 +968,10 @@
+ 
+     INTEGER                                  :: blk
+ 
+-    IF (SIZE(offsets).LT.nbr_blk) CALL stopgm(procedureN,&
++    IF (SIZE(offsets) < nbr_blk) CALL stopgm(procedureN,&
+          'size of array not valid',& 
+          __LINE__,__FILE__)
+-    IF (SIZE(sizes).LT.nbr_blk) CALL stopgm(procedureN,&
++    IF (SIZE(sizes) < nbr_blk) CALL stopgm(procedureN,&
+          'size of array not valid',& 
+          __LINE__,__FILE__)
+ 
+@@ -955,12 +981,13 @@
+        sizes(blk) = blk_size
+     ENDDO
+     ! need to protect vs nbr_blk=0
+-    IF (nbr_blk.GT.0) sizes(nbr_blk) = n - offsets(nbr_blk) + 1
++    IF (nbr_blk > 0) sizes(nbr_blk) = n - offsets(nbr_blk) + 1
+ 
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE build_block_info
+-
+-
++  ! ================================================================== 
+   SUBROUTINE pp_init( pp, max_entry )
++    ! ==--------------------------------------------------------------==
+     TYPE(pp_t), INTENT(inout)                :: pp
+     INTEGER, INTENT(in)                      :: max_entry
+ 
+@@ -973,10 +1000,11 @@
+     IF(ierr/=0) CALL stopgm(procedureN,'Allocation problem',&
+          & __LINE__,__FILE__)
+     pp%pp_ptr(:)=HUGE(0);pp%pp(:,:)=HUGE(0)
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE pp_init
+-
+-
++  ! ================================================================== 
+   SUBROUTINE pp_destroy( pp )
++    ! ==--------------------------------------------------------------==
+     TYPE(pp_t), INTENT(inout)                :: pp
+ 
+     CHARACTER(*), PARAMETER                  :: procedureN = 'pp_destroy'
+@@ -987,10 +1015,11 @@
+     DEALLOCATE(pp%pp_ptr,pp%pp,STAT=ierr)
+     IF(ierr/=0) CALL stopgm(procedureN,'Allocation problem',&
+          & __LINE__,__FILE__)
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE pp_destroy
+-
+-
++  ! ================================================================== 
+   SUBROUTINE list_init( list, max_list_size )
++    ! ==--------------------------------------------------------------==
+     TYPE(list_t), INTENT(inout)              :: list
+     INTEGER, INTENT(in)                      :: max_list_size
+ 
+@@ -1006,10 +1035,11 @@
+     list%a(:) = HUGE(0)
+     list%r(:) = HUGE(0)
+     list%stored_in(:) = HUGE(0)
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE list_init
+-
+-
++  ! ================================================================== 
+   SUBROUTINE list_destroy( list )
++    ! ==--------------------------------------------------------------==
+     TYPE(list_t), INTENT(inout)              :: list
+ 
+     CHARACTER(*), PARAMETER                  :: procedureN = 'list_destroy'
+@@ -1021,19 +1051,20 @@
+          & list%stored_in,STAT=ierr)
+     IF(ierr/=0) CALL stopgm(procedureN,'Deallocation problem',&
+          & __LINE__,__FILE__)
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE list_destroy
+-
+-
++  ! ================================================================== 
+   INTEGER FUNCTION get_ticks()
++    ! ==--------------------------------------------------------------==
+     INTEGER :: count
+     INTEGER,SAVE :: count_max,count_rate,cycles=-666,last_count
+-    IF (cycles.EQ.-666) THEN
++    IF (cycles == -666) THEN
+        CALL SYSTEM_CLOCK(count,count_rate,count_max)
+        cycles=0;last_count=0
+     ENDIF
+     CALL SYSTEM_CLOCK(count)
+-    IF (count.LT.last_count) THEN
+-       IF (last_count-count.LT.count_max/100) THEN
++    IF (count < last_count) THEN
++       IF (last_count-count < count_max/100) THEN
+           count=last_count
+        ELSE
+           cycles=cycles+1
+@@ -1041,10 +1072,11 @@
+     ENDIF
+     last_count=count
+     get_ticks = count + cycles * count_max
++    ! ==--------------------------------------------------------------==
+   END FUNCTION get_ticks
+-
+-
++  ! ================================================================== 
+   SUBROUTINE block_filter(thresh,row_offset,row_size,col_offset,col_size,pp,r_list,c_list)
++    ! ==--------------------------------------------------------------==
+ 
+     TYPE(thresh_t), INTENT(inout)            :: thresh
+     INTEGER, INTENT(in)                      :: row_offset, row_size, &
+@@ -1136,7 +1168,7 @@
+                 !
+                 IF(hfxc3%twfc) THEN
+                    CALL get_wannier_separation(row_abs,col_abs,dist_ab)
+-                   IF(dist_ab.GT.hfxc4%dwfc) THEN
++                   IF(dist_ab > hfxc4%dwfc) THEN
+                       CALL sub2ind(row_abs,col_abs,ij)
+                       ! Set the int_vals to something that if the
+                       ! pair comes within the radius any time later
+@@ -1236,24 +1268,29 @@
+ 
+     CALL tihalt(procedureN,isub)
+ 
++    ! ==--------------------------------------------------------------==
+   END SUBROUTINE block_filter
++  ! ================================================================== 
+ 
++  ! ================================================================== 
++  ! Block FFT 
++  ! ================================================================== 
+ 
+   ! ================================================================== 
+   SUBROUTINE block_invfft_old(c0,psis,offset,size)
+     ! ==--------------------------------------------------------------==
++    ! KPT replace NGW -> NGWK
+     ! ==--------------------------------------------------------------==
+-    ! KPT replace NGW -> NGWK
++
+     COMPLEX(real_8)                          :: c0(:,:), psis(:,:)
+     INTEGER, INTENT(in)                      :: offset, size
+ 
+-    CHARACTER(*), PARAMETER :: procedureN = 'block_invfft_old'
++    CHARACTER(*), PARAMETER                  :: procedureN = 'block_invfft_old'
+     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
+ 
+     INTEGER                                  :: i, isub, nbr_ffts, ptr
+ 
+-! ==--------------------------------------------------------------==
+-! ==--------------------------------------------------------------==
++    ! ==--------------------------------------------------------------==
+ 
+     CALL tiset(procedureN,isub)
+ 
+@@ -1267,7 +1304,7 @@
+        ! KPT          IF(TKPNT) THEN
+        ! KPT            CALL SET_PSI_1_STATE_G_KPTS(ZONE,C0(1,IS1),PSI)
+        ! KPT          ELSE
+-       IF (i.EQ.offset+size-1) THEN
++       IF (i == offset+size-1) THEN
+           CALL set_psi_1_state_g(zone,c0(:,i),psis(:,ptr))
+        ELSE
+           CALL set_psi_2_states_g(c0(:,i),c0(:,i+1),&
+@@ -1317,7 +1354,7 @@
+        ! KPT          IF(TKPNT) THEN
+        ! KPT            CALL SET_PSI_1_STATE_G_KPTS(ZONE,C0(1,IS1),PSI)
+        ! KPT          ELSE
+-       IF (l.EQ.list%n) THEN
++       IF (l == list%n) THEN
+           i0_a = list%a(l)
+           i0_r = list%r(l)
+           list%stored_in(i0_r) = ptr ! real
+@@ -1357,7 +1394,6 @@
+   SUBROUTINE hfx_compute_block_new(C2_hfx,ehfx,f,vpotg,vpotr,psic,pp,&
+        psi_row,psi_col,r_list,c_list,psi_row_pack,thresh)
+     ! ==--------------------------------------------------------------==
+-    ! ==--------------------------------------------------------------==
+     ! KPT replace NGW -> NGWK
+     COMPLEX(real_8) :: C2_hfx(:,:)
+     REAL(real_8), INTENT(inout) :: ehfx
+@@ -1458,9 +1494,9 @@
+        !  DONE 1) copy r1,r2 to some buff
+        !  DONE 2) change the var name r_ptr, c_stored_in_real and add the row buff
+ 
+-       IF (r1.GT.c) r1 = 0
+-       IF (r2.GT.c) r2 = 0
+-       IF (r1.NE.0.OR.r2.NE.0) CALL evaluate_pair()
++       IF (r1 > c) r1 = 0
++       IF (r2 > c) r2 = 0
++       IF (r1 /= 0.OR.r2 /= 0) CALL evaluate_pair()
+ 
+     ENDDO
+ 
+@@ -1475,21 +1511,19 @@
+     ! ================================================================== 
+     SUBROUTINE evaluate_pair()
+       ! ==--------------------------------------------------------------==
+-    CHARACTER(*), PARAMETER                  :: procedureN = 'evaluate_pair'
++      CHARACTER(*), PARAMETER                  :: procedureN = 'evaluate_pair'
+ 
+-! ==--------------------------------------------------------------==
+-
+       EHFX_loc_1 = 0.0_real_8
+       EHFX_loc_2 = 0.0_real_8
+       EHFX_nothresh_1 = 0.0_real_8
+       EHFX_nothresh_2 = 0.0_real_8
+ 
+-      IF (r1.NE.0.AND.r2.NE.0) THEN
++      IF (r1 /= 0.AND.r2 /= 0) THEN
+          nbr_integrals = nbr_integrals+2
+          pfx1 = pfl * f(c) * f(r1)
+          pfx2 = pfl * f(c) * f(r2)
+          ! This is needed to avoid aliasing
+-         IF (c.EQ.r1) THEN
++         IF (c == r1) THEN
+             CALL hfxaa_new(EHFX_loc_1,EHFX_nothresh_1,pfx1,psi_col(:,c_pt),c_in_re,vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c))
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_1,c,c,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1
+@@ -1497,7 +1531,7 @@
+                            vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c),C2_hfx(:,r2))
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_1,c,r2,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1
+-         ELSEIF (c.EQ.r2) THEN
++         ELSEIF (c == r2) THEN
+             CALL hfxaa_new(EHFX_loc_1,EHFX_nothresh_1,pfx2,psi_col(:,c_pt),c_in_re,vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c))
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_1,c,c,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1
+@@ -1514,10 +1548,10 @@
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_2,c,r2,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1 + EHFX_loc_2
+          ENDIF
+-      ELSEIF (r1.NE.0.AND.r2.EQ.0) THEN
++      ELSEIF (r1 /= 0.AND.r2 == 0) THEN
+          nbr_integrals = nbr_integrals+1
+          pfx1 = pfl * f(c) * f(r1)
+-         IF (c.EQ.r1) THEN
++         IF (c == r1) THEN
+             CALL hfxaa_new(EHFX_loc_1,EHFX_nothresh_1,pfx1,psi_col(:,c_pt),c_in_re,vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c))
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_1,c,c,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1
+@@ -1527,10 +1561,10 @@
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_1,c,r1,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1
+          ENDIF
+-      ELSEIF (r1.EQ.0.AND.r2.NE.0) THEN
++      ELSEIF (r1 == 0.AND.r2 /= 0) THEN
+          nbr_integrals = nbr_integrals+1
+          pfx2 = pfl * f(c) * f(r2)
+-         IF (c.EQ.r2) THEN
++         IF (c == r2) THEN
+             CALL hfxaa_new(EHFX_loc_1,EHFX_nothresh_1,pfx1,psi_col(:,c_pt),c_in_re,vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c))
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_1,c,c,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1
+@@ -1570,7 +1604,6 @@
+   SUBROUTINE hfx_compute_block(C2_hfx,ehfx,f,vpotg,vpotr,psic,&
+        psi_row,row_offset,row_size,psi_col,col_offset,col_size)
+     ! ==--------------------------------------------------------------==
+-    ! ==--------------------------------------------------------------==
+     ! KPT replace NGW -> NGWK
+     COMPLEX(real_8) :: C2_hfx(:,:)
+     REAL(real_8), INTENT(inout) :: ehfx
+@@ -1613,9 +1646,9 @@
+        DO r = row_beg, row_end, 2
+           r1 = r
+           r2 = r + 1
+-          IF (r1.GT.c) r1 = 0
+-          IF (r2.GT.c.OR.r2.GT.row_end) r2 = 0
+-          IF (r1.NE.0.OR.r2.NE.0) CALL evaluate_pair()
++          IF (r1 > c) r1 = 0
++          IF (r2 > c.OR.r2 > row_end) r2 = 0
++          IF (r1 /= 0.OR.r2 /= 0) CALL evaluate_pair()
+           r_ptr = r_ptr + 1
+        ENDDO
+        c_pt = c_pt + MOD(c - col_beg, 2)
+@@ -1635,15 +1668,13 @@
+       ! ==--------------------------------------------------------------==
+     CHARACTER(*), PARAMETER                  :: procedureN = 'evaluate_pair'
+ 
+-! ==--------------------------------------------------------------==
+-
+       EHFX_loc = 0.0_real_8
+-      IF (r1.NE.0.AND.r2.NE.0) THEN
++      IF (r1 /= 0.AND.r2 /= 0) THEN
+          nbr_integrals = nbr_integrals+2
+          pfx1 = pfl * f(c) * f(r1)
+          pfx2 = pfl * f(c) * f(r2)
+          ! This is needed to avoid aliasing
+-         IF (c.EQ.r1) THEN
++         IF (c == r1) THEN
+             CALL hfxaa(EHFX_loc,pfx1,&
+                  psi_col(:,c_pt),c_stored_in_real,&
+                  vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c))
+@@ -1653,7 +1684,7 @@
+                  psi_row(:,r_ptr),.FALSE.,&
+                  vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c),c2_hfx(:,r2))
+             ehfx = ehfx + EHFX_loc
+-         ELSEIF (c.EQ.r2) THEN
++         ELSEIF (c == r2) THEN
+             CALL hfxaa(EHFX_loc,pfx2,&
+                  psi_col(:,c_pt),c_stored_in_real,&
+                  vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c))
+@@ -1671,10 +1702,10 @@
+                  C2_hfx(:,c),c2_hfx(:,r1),c2_hfx(:,r2))
+             ehfx = ehfx + EHFX_loc_1 + EHFX_loc_2
+          ENDIF
+-      ELSEIF (r1.NE.0.AND.r2.EQ.0) THEN
++      ELSEIF (r1 /= 0.AND.r2 == 0) THEN
+          nbr_integrals = nbr_integrals+1
+          pfx1 = pfl * f(c) * f(r1)
+-         IF (c.EQ.r1) THEN
++         IF (c == r1) THEN
+             CALL hfxaa(EHFX_loc,pfx1,&
+                  psi_col(:,c_pt),c_stored_in_real,&
+                  vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c))
+@@ -1685,10 +1716,10 @@
+                  vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c),c2_hfx(:,r1))
+          ENDIF
+          ehfx = ehfx + EHFX_loc
+-      ELSEIF (r1.EQ.0.AND.r2.NE.0) THEN
++      ELSEIF (r1 == 0.AND.r2 /= 0) THEN
+          nbr_integrals = nbr_integrals+1
+          pfx2 = pfl * f(c) * f(r2)
+-         IF (c.EQ.r2) THEN
++         IF (c == r2) THEN
+             CALL hfxaa(EHFX_loc,pfx1,&
+                  psi_col(:,c_pt),c_stored_in_real,&
+                  vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c))
+@@ -1704,7 +1735,6 @@
+               __LINE__,__FILE__)
+       ENDIF
+ 
+-
+       ! ==--------------------------------------------------------------==
+     END SUBROUTINE evaluate_pair
+     ! ================================================================== 
+@@ -1713,8 +1743,84 @@
+   END SUBROUTINE hfx_compute_block
+   ! ================================================================== 
+ 
++  ! ==================================================================
++  ! Coulomb potential between orbital pairs: Old routines
++  ! ==================================================================
+ 
+   ! ==================================================================
++  SUBROUTINE hfxaa(ehfx,pf,psia,a_stored_in_real,&
++       vpotg,vpotr,psic,c2a)
++    ! ==================================================================
++    REAL(real_8)                             :: ehfx, pf
++    COMPLEX(real_8)                          :: psia(:)
++    LOGICAL                                  :: a_stored_in_real
++    COMPLEX(real_8)                          :: vpotg(:)
++    REAL(real_8)                             :: vpotr(:)
++    COMPLEX(real_8)                          :: psic(:), c2a(:)
++
++    CHARACTER(*), PARAMETER                  :: procedureN = 'hfxaa'
++
++    COMPLEX(real_8)                          :: fm, fp
++    INTEGER                                  :: ig, ir, isub
++
++    CALL tiset(procedureN,isub)
++    ehfx=0.0_real_8
++    IF (a_stored_in_real) THEN
++       !$omp parallel do private(IR)
++       DO ir=1,llr1
++          psic(ir)=REAL(psia(ir))*REAL(psia(ir))
++       ENDDO
++    ELSE
++       !$omp parallel do private(IR)
++       DO ir=1,llr1
++          psic(ir)=AIMAG(psia(ir))*AIMAG(psia(ir))
++       ENDDO
++    ENDIF
++    CALL dscal(2*llr1,1._real_8/parm%omega,psic,1)
++    CALL fwfftn(psic,.FALSE.,parai%allgrp)
++    !$omp parallel do private(IG,FP) &
++    !$omp  reduction(+:ehfx)
++    DO ig=1,jhg
++       fp=psic(nzff(ig))
++       vpotg(ig)=-pf*scgx(ig)*fp
++       ehfx=ehfx+REAL(2._real_8*vpotg(ig)*CONJG(fp))
++    ENDDO
++    IF (geq0) ehfx=ehfx-REAL(vpotg(1)*CONJG(psic(nzff(1))))
++    CALL zeroing(psic)
++    !$omp parallel do private(IG)
++    DO ig=1,jhg
++       psic(nzff(ig))=vpotg(ig)
++       psic(inzf(ig))=CONJG(vpotg(ig))
++    ENDDO
++    IF (geq0) psic(nzff(1))=vpotg(1)
++    CALL invfftn(psic,.FALSE.,parai%allgrp)
++    !$omp parallel do private(IR)
++    DO ir=1,llr1
++       vpotr(ir)=REAL(psic(ir))
++    ENDDO
++    IF (a_stored_in_real) THEN
++       !$omp parallel do private(IR)
++       DO ir=1,llr1
++          psic(ir)=vpotr(ir)*REAL(psia(ir))
++       ENDDO
++    ELSE
++       !$omp parallel do private(IR)
++       DO ir=1,llr1
++          psic(ir)=vpotr(ir)*AIMAG(psia(ir))
++       ENDDO
++    ENDIF
++    CALL fwfftn(psic,.TRUE.,parai%allgrp)
++    !$omp parallel do private(IG,FP,FM)
++    DO ig=1,jgw
++       fp=psic(nzfs(ig))+psic(inzs(ig))
++       fm=psic(nzfs(ig))-psic(inzs(ig))
++       c2a(ig)=c2a(ig)-CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
++    ENDDO
++    CALL tihalt(procedureN,isub)
++    ! ==--------------------------------------------------------------==
++    RETURN
++  END SUBROUTINE hfxaa
++  ! ==================================================================
+   SUBROUTINE hfxab(ehfx,pf,psia,a_stored_in_real,&
+        psib,b_stored_in_real,vpotg,vpotr,psic,c2a,c2b)
+     ! ==================================================================
+@@ -1732,9 +1838,9 @@
+     COMPLEX(real_8)                          :: fm, fp
+     INTEGER                                  :: ig, ir, isub
+ 
+-! KPT replace NGW -> NGWK
+-! Variables
+-! ==--------------------------------------------------------------==
++    ! KPT replace NGW -> NGWK
++    ! Variables
++    ! ==--------------------------------------------------------------==
+ 
+     CALL tiset(procedureN,isub)
+     ehfx=0.0_real_8
+@@ -1965,87 +2071,12 @@
+     CALL tihalt(procedureN,isub)
+     ! ==--------------------------------------------------------------==
+   END SUBROUTINE hfxab2
++  ! ==================================================================
+ 
+-
+   ! ==================================================================
+-  SUBROUTINE hfxab2_new(ehfx_1,ehfx_2,ehfx_nothresh_1,ehfx_nothresh_2,&
+-       pf1,pf2,psia,a_stored_in_real,psib,vpotg,vpotr,psic,c2a,c2b1,c2b2)
+-    ! ==--------------------------------------------------------------==
++  ! New routines for Coulomb potential between orbital pairs
++  ! ==================================================================
+ 
+-    REAL(real_8), INTENT(out)                :: ehfx_1, ehfx_2, &
+-                                                ehfx_nothresh_1, &
+-                                                ehfx_nothresh_2
+-    REAL(real_8), INTENT(in)                 :: pf1, pf2
+-    COMPLEX(real_8)                          :: psia(:)
+-    LOGICAL                                  :: a_stored_in_real
+-    COMPLEX(real_8)                          :: psib(:), vpotg(:,:)
+-    REAL(real_8)                             :: vpotr(:,:)
+-    COMPLEX(real_8)                          :: psic(:), c2a(:), c2b1(:), &
+-                                                c2b2(:)
+-
+-    CHARACTER(*), PARAMETER                  :: procedureN = 'hfxab2_new'
+-    LOGICAL, PARAMETER                       :: b_stored_in_real_1 = .TRUE.
+-    LOGICAL, PARAMETER                       :: b_stored_in_real_2 = .FALSE.
+-
+-    COMPLEX(real_8)                          :: fm, fp
+-    INTEGER                                  :: ig, ir, isub
+-    LOGICAL                                  :: too_small_int_1, &
+-                                                too_small_int_2
+-    REAL(real_8)                             :: ehfx_sum(2)
+-
+-    CALL tiset(procedureN,isub)
+-    ehfx_nothresh_1 = 0.0_real_8
+-    ehfx_nothresh_2 = 0.0_real_8
+-    too_small_int_1 = .FALSE.
+-    too_small_int_2 = .FALSE.
+-
+-    CALL hfx_get_pair_density(psia,psib,psic,a_stored_in_real)
+-    CALL fwfftn(psic,.FALSE.,parai%allgrp)
+-    CALL hfxab2_get_ehfx(psic,vpotg,pf1,pf2,ehfx_nothresh_1,ehfx_nothresh_2)
+-
+-    too_small_int_1 = check_int(ehfx_nothresh_1)
+-    too_small_int_2 = check_int(ehfx_nothresh_2)
+-
+-    IF (too_small_int_1 .AND. too_small_int_2) THEN
+-       ehfx_1 = 0.0_real_8
+-       ehfx_2 = 0.0_real_8
+-    ELSE
+-       CALL hfx_set_vpotg(psic,vpotg(:,1),vpotg_2=vpotg(:,2))
+-       CALL invfftn(psic,.FALSE.,parai%allgrp)
+-       CALL hfx_set_vpotr(psic,vpotr(:,1),vpotr_2=vpotr(:,2))
+-
+-       IF(too_small_int_1) THEN
+-          ehfx_1 = 0.0_real_8
+-       ELSE
+-          ehfx_1 = ehfx_nothresh_1
+-          CALL hfx_get_potential(psia,psib,psic,vpotr(:,1),a_stored_in_real,b_stored_in_real=b_stored_in_real_1)
+-          IF (cntl%use_scaled_hfx) THEN
+-             CALL hfx_get_c2_real_space(psic,c2b1,c2_2=c2a)
+-             ehfx_1 = scex_lambda*ehfx_1
+-          ELSE
+-             CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-             CALL hfx_get_c2(psic,c2b1,c2_2=c2a)
+-          ENDIF
+-       ENDIF
+-
+-       IF(too_small_int_2) THEN
+-          ehfx_2 = 0.0_real_8
+-       ELSE
+-          ehfx_2 = ehfx_nothresh_2
+-          CALL hfx_get_potential(psia,psib,psic,vpotr(:,2),a_stored_in_real,b_stored_in_real=b_stored_in_real_2)
+-          IF (cntl%use_scaled_hfx) THEN
+-             CALL hfx_get_c2_real_space(psic,c2b2,c2_2=c2a)
+-             ehfx_2 = scex_lambda*ehfx_2
+-          ELSE
+-             CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-             CALL hfx_get_c2(psic,c2b2,c2_2=c2a)
+-          ENDIF
+-       ENDIF
+-    ENDIF
+-
+-    CALL tihalt(procedureN,isub)
+-    ! ==--------------------------------------------------------------==
+-  END SUBROUTINE hfxab2_new
+   ! ==================================================================
+   SUBROUTINE hfxaa_new(ehfx,ehfx_nothresh,pf,psia,a_stored_in_real,&
+        vpotg,vpotr,psic,c2a)
+@@ -2117,10 +2148,6 @@
+     LOGICAL                                  :: too_small_int
+     REAL(real_8)                             :: ehfx_sum
+ 
+-! KPT replace NGW -> NGWK
+-! Variables
+-! ==--------------------------------------------------------------==
+-
+     CALL tiset(procedureN,isub)
+     ehfx_nothresh = 0.0_real_8
+     too_small_int = .FALSE.
+@@ -2151,82 +2178,91 @@
+     ! ==--------------------------------------------------------------==
+   END SUBROUTINE hfxab_new
+   ! ==================================================================
+-  SUBROUTINE hfxaa(ehfx,pf,psia,a_stored_in_real,&
+-       vpotg,vpotr,psic,c2a)
+-    ! ==================================================================
+-    REAL(real_8)                             :: ehfx, pf
++  SUBROUTINE hfxab2_new(ehfx_1,ehfx_2,ehfx_nothresh_1,ehfx_nothresh_2,&
++       pf1,pf2,psia,a_stored_in_real,psib,vpotg,vpotr,psic,c2a,c2b1,c2b2)
++    ! ==--------------------------------------------------------------==
++
++    REAL(real_8), INTENT(out)                :: ehfx_1, ehfx_2, &
++                                                ehfx_nothresh_1, &
++                                                ehfx_nothresh_2
++    REAL(real_8), INTENT(in)                 :: pf1, pf2
+     COMPLEX(real_8)                          :: psia(:)
+     LOGICAL                                  :: a_stored_in_real
+-    COMPLEX(real_8)                          :: vpotg(:)
+-    REAL(real_8)                             :: vpotr(:)
+-    COMPLEX(real_8)                          :: psic(:), c2a(:)
++    COMPLEX(real_8)                          :: psib(:), vpotg(:,:)
++    REAL(real_8)                             :: vpotr(:,:)
++    COMPLEX(real_8)                          :: psic(:), c2a(:), c2b1(:), &
++                                                c2b2(:)
+ 
+-    CHARACTER(*), PARAMETER                  :: procedureN = 'hfxaa'
++    CHARACTER(*), PARAMETER                  :: procedureN = 'hfxab2_new'
++    LOGICAL, PARAMETER                       :: b_stored_in_real_1 = .TRUE.
++    LOGICAL, PARAMETER                       :: b_stored_in_real_2 = .FALSE.
+ 
+     COMPLEX(real_8)                          :: fm, fp
+     INTEGER                                  :: ig, ir, isub
++    LOGICAL                                  :: too_small_int_1, &
++                                                too_small_int_2
++    REAL(real_8)                             :: ehfx_sum(2)
+ 
+     CALL tiset(procedureN,isub)
+-    ehfx=0.0_real_8
+-    IF (a_stored_in_real) THEN
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          psic(ir)=REAL(psia(ir))*REAL(psia(ir))
+-       ENDDO
+-    ELSE
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          psic(ir)=AIMAG(psia(ir))*AIMAG(psia(ir))
+-       ENDDO
+-    ENDIF
+-    CALL dscal(2*llr1,1._real_8/parm%omega,psic,1)
++    ehfx_nothresh_1 = 0.0_real_8
++    ehfx_nothresh_2 = 0.0_real_8
++    too_small_int_1 = .FALSE.
++    too_small_int_2 = .FALSE.
++
++    CALL hfx_get_pair_density(psia,psib,psic,a_stored_in_real)
+     CALL fwfftn(psic,.FALSE.,parai%allgrp)
+-    !$omp parallel do private(IG,FP) &
+-    !$omp  reduction(+:ehfx)
+-    DO ig=1,jhg
+-       fp=psic(nzff(ig))
+-       vpotg(ig)=-pf*scgx(ig)*fp
+-       ehfx=ehfx+REAL(2._real_8*vpotg(ig)*CONJG(fp))
+-    ENDDO
+-    IF (geq0) ehfx=ehfx-REAL(vpotg(1)*CONJG(psic(nzff(1))))
+-    CALL zeroing(psic)
+-    !$omp parallel do private(IG)
+-    DO ig=1,jhg
+-       psic(nzff(ig))=vpotg(ig)
+-       psic(inzf(ig))=CONJG(vpotg(ig))
+-    ENDDO
+-    IF (geq0) psic(nzff(1))=vpotg(1)
+-    CALL invfftn(psic,.FALSE.,parai%allgrp)
+-    !$omp parallel do private(IR)
+-    DO ir=1,llr1
+-       vpotr(ir)=REAL(psic(ir))
+-    ENDDO
+-    IF (a_stored_in_real) THEN
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          psic(ir)=vpotr(ir)*REAL(psia(ir))
+-       ENDDO
++    CALL hfxab2_get_ehfx(psic,vpotg,pf1,pf2,ehfx_nothresh_1,ehfx_nothresh_2)
++
++    too_small_int_1 = check_int(ehfx_nothresh_1)
++    too_small_int_2 = check_int(ehfx_nothresh_2)
++
++    IF (too_small_int_1 .AND. too_small_int_2) THEN
++       ehfx_1 = 0.0_real_8
++       ehfx_2 = 0.0_real_8
+     ELSE
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          psic(ir)=vpotr(ir)*AIMAG(psia(ir))
+-       ENDDO
++       CALL hfx_set_vpotg(psic,vpotg(:,1),vpotg_2=vpotg(:,2))
++       CALL invfftn(psic,.FALSE.,parai%allgrp)
++       CALL hfx_set_vpotr(psic,vpotr(:,1),vpotr_2=vpotr(:,2))
++
++       IF(too_small_int_1) THEN
++          ehfx_1 = 0.0_real_8
++       ELSE
++          ehfx_1 = ehfx_nothresh_1
++          CALL hfx_get_potential(psia,psib,psic,vpotr(:,1),a_stored_in_real,b_stored_in_real=b_stored_in_real_1)
++          IF (cntl%use_scaled_hfx) THEN
++             CALL hfx_get_c2_real_space(psic,c2b1,c2_2=c2a)
++             ehfx_1 = scex_lambda*ehfx_1
++          ELSE
++             CALL fwfftn(psic,.TRUE.,parai%allgrp)
++             CALL hfx_get_c2(psic,c2b1,c2_2=c2a)
++          ENDIF
++       ENDIF
++
++       IF(too_small_int_2) THEN
++          ehfx_2 = 0.0_real_8
++       ELSE
++          ehfx_2 = ehfx_nothresh_2
++          CALL hfx_get_potential(psia,psib,psic,vpotr(:,2),a_stored_in_real,b_stored_in_real=b_stored_in_real_2)
++          IF (cntl%use_scaled_hfx) THEN
++             CALL hfx_get_c2_real_space(psic,c2b2,c2_2=c2a)
++             ehfx_2 = scex_lambda*ehfx_2
++          ELSE
++             CALL fwfftn(psic,.TRUE.,parai%allgrp)
++             CALL hfx_get_c2(psic,c2b2,c2_2=c2a)
++          ENDIF
++       ENDIF
+     ENDIF
+-    CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-    !$omp parallel do private(IG,FP,FM)
+-    DO ig=1,jgw
+-       fp=psic(nzfs(ig))+psic(inzs(ig))
+-       fm=psic(nzfs(ig))-psic(inzs(ig))
+-       c2a(ig)=c2a(ig)-CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+-    ENDDO
++
+     CALL tihalt(procedureN,isub)
+     ! ==--------------------------------------------------------------==
+-    RETURN
+-  END SUBROUTINE hfxaa
++  END SUBROUTINE hfxab2_new
+   ! ==================================================================
+ 
+-
++  ! ==================================================================
+   ! Generic routines for hfxaa, hfxab, hfxab2
++  ! Refactored out of hfx..._new
++  !                             21.11.2018 - M. P. Bircher @ LCBC/EPFL
++  ! ==================================================================
+ 
+   ! ==================================================================
+   SUBROUTINE hfx_set_vpotg(psic,vpotg,vpotg_2)
+@@ -2480,7 +2516,9 @@
+   END FUNCTION
+   ! ================================================================== 
+ 
++  ! ==================================================================
+   ! Routines that are not generalised
++  ! ==================================================================
+ 
+   ! ==================================================================
+   PURE SUBROUTINE hfxaa_ab_get_ehfx(psic,vpotg,pf,ef,ehfx_nothresh)
+@@ -2546,6 +2584,9 @@
+   END SUBROUTINE hfxab2_get_ehfx
+   ! ==================================================================
+ 
++  ! ================================================================== 
++  ! Routines for list
++  ! ================================================================== 
+ 
+   ! ================================================================== 
+   PURE SUBROUTINE sub2ind(r,c,ij)
+@@ -2555,8 +2596,6 @@
+ 
+     INTEGER                                  :: i, j
+ 
+-! ==--------------------------------------------------------------==
+-
+     i = MIN(c,r)
+     j = MAX(c,r)
+     ij = j*(j-1)/2+i
+@@ -2568,8 +2607,6 @@
+     INTEGER, INTENT(in)                      :: i
+     INTEGER, INTENT(out)                     :: r, c
+ 
+-! ==--------------------------------------------------------------==
+-
+     c = CEILING((-1.0_real_8 + SQRT(1.0_real_8+8.0_real_8*REAL(i,kind=real_8)))/2.0_real_8)
+     r = i - c * ( c - 1 ) / 2
+     ! ==--------------------------------------------------------------==
+@@ -2580,8 +2617,6 @@
+     INTEGER, INTENT(in)                      :: n, i
+     INTEGER, INTENT(out)                     :: r, c
+ 
+-! ==--------------------------------------------------------------==
+-
+     c = CEILING( REAL(i,kind=real_8) / REAL(n,kind=real_8) )
+     r = i - ( c - 1 ) * n
+     ! ==--------------------------------------------------------------==
+Index: src/dftin_utils.mod.F90
+===================================================================
+--- src/dftin_utils.mod.F90	(revision 4607)
++++ src/dftin_utils.mod.F90	(revision 4608)
+@@ -2132,6 +2132,13 @@
+              END SELECT
+              WRITE(output_unit,'(A,T62,I4)') ' BLOCK SIZE ',hfxc5%hfx_block_size
+           ENDIF
++          IF (cntl%use_scaled_hfx) THEN
++             WRITE(output_unit,'(1X,A)') 'USE COORDINATE-SCALED EXACT EXCHANGE (ScEX) FOR ISOLATED SYSTEMS'
++             WRITE(output_unit,'(1X,A)') 'AND THE TUCKERMAN-MARTYNA POISSON SOLVER. PLEASE CITE:'
++             WRITE(output_unit,'(1X,A)') '                               M.P. Bircher and U. Rothlisberger'
++             WRITE(output_unit,'(1X,A)') '                J. Phys. Chem. Lett., 2018, 9 (14), pp 3886–3890'
++             WRITE(output_unit,'(1X,A)') '                                DOI: 10.1021/acs.jpclett.8b01620'
++          ENDIF
+        ENDIF
+ 
+     END SUBROUTINE hfx_report
+Index: src/scex_utils.mod.F90
+===================================================================
+--- src/scex_utils.mod.F90	(revision 4607)
++++ src/scex_utils.mod.F90	(revision 4608)
+@@ -21,6 +21,8 @@
+   USE fftnew_utils,                    ONLY: setfftn,&
+                                              addfftnset
+   USE hfxmod,                          ONLY: ipoolhfx
++  USE isos,                            ONLY: isos1,&
++                                             isos3
+   USE kinds,                           ONLY: real_8
+   USE mp_interface,                    ONLY: mp_recv,&
+                                              mp_send,&
+@@ -88,11 +90,12 @@
+      PROCEDURE, PASS, PUBLIC  :: grid_init                  => scex_grid_init
+      PROCEDURE, PASS, PUBLIC  :: do_density_scaling         => scex_do_density_scaling
+      PROCEDURE, PASS, PUBLIC  :: undo_density_scaling       => scex_undo_density_scaling
+-     PROCEDURE, PASS, PUBLIC  :: start_density_scaling       => scex_start_density_scaling
++     PROCEDURE, PASS, PUBLIC  :: start_density_scaling      => scex_start_density_scaling
+      PROCEDURE, PASS, PUBLIC  :: switch_density_scaling     => scex_switch_density_scaling
+-     PROCEDURE, PASS, PUBLIC  :: annihilate_density_scaling   => scex_annihilate_density_scaling
++     PROCEDURE, PASS, PUBLIC  :: annihilate_density_scaling => scex_annihilate_density_scaling
+      PROCEDURE, PASS, PRIVATE :: comm_init                  => scex_comm_init
+      PROCEDURE, PASS, PRIVATE :: comm_check                 => scex_comm_check
++     PROCEDURE, PASS, PRIVATE :: settings_check             => scex_settings_check
+   END TYPE scex_t
+ 
+   TYPE(scex_t), PUBLIC, SAVE  :: scex
+@@ -112,8 +115,8 @@
+     CLASS(scex_t), INTENT(inout) :: scex
+ 
+     CALL addfftnset(cntr%ecut,cntr%ecut,scex_ID_scaled)
++    CALL scex%settings_check()
+     CALL scex%comm_init()
+-    CALL scex%comm_check()
+     CALL setfftn(scex_ID_parent)
+     ipoolhfx = scex_ID_scaled
+ 
+@@ -198,11 +201,11 @@
+     scex%my_mpi_recv_tag(:) = -1
+     plane_mpi_dest(:)       = -1
+     plane_mpi_source(:)     = -1
+-    scex%grp_size(:)       = -1
+-    scex%grp_sender(:)     = -1
+-    scex%grp_receiver(:)   = -1
+-    scex%grp_recv_start(:) = -1
+-    scex%grp_send_start(:) = -1
++    scex%grp_size(:)        = -1
++    scex%grp_sender(:)      = -1
++    scex%grp_receiver(:)    = -1
++    scex%grp_recv_start(:)  = -1
++    scex%grp_send_start(:)  = -1
+ 
+ 
+     !
+@@ -272,6 +275,11 @@
+     scex%nbr_mpi_groups = nbr_groups
+ 
+     !
++    ! Before printing, make sure there is nothing wrong with the setup
++    !
++    CALL scex%comm_check()
++
++    !
+     ! Report the groups
+     !
+     IF (paral%io_parent) THEN
+@@ -313,38 +321,47 @@
+ 
+     CLASS(scex_t), INTENT(in)    :: scex
+ 
+-    IF (.NOT. scex%init) CALL stopgm(procedureN,'ScEX type is not intialised',&
++    IF (scex%init) CALL stopgm(procedureN,'ScEX type is already intialised',&
+                                __LINE__,__FILE__)
+ 
+     IF (scex%parent%lr1s /= 2*scex%scaled%lr1s) THEN
+-       WRITE(cpmd_output_unit,'(1X,A)') 'SCEX GRID PROBLEM: GRIDS ARE NOT COMMENSURATE.'
+-       WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') 'TWICE THE AUXILIARY GRID POINTS IN X:', &
+-                                                   2*scex%scaled%lr1s, 'POINTS'
+-       WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') '                 BUT THERE SHOULD BE:', &
+-                                                   scex%parent%lr1s, 'POINTS'
+-       WRITE(cpmd_output_unit,'(1X,A)') 'PLEASE ADJUST CUTOFF VALUE UNTIL A COMMENSURATE GRID IS GENERATED'
++       IF (paral%io_parent) THEN
++         WRITE(cpmd_output_unit,'(1X,A)') 'SCEX GRID PROBLEM: GRIDS ARE NOT COMMENSURATE.'
++         WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') 'TWICE THE AUXILIARY GRID POINTS IN X:', &
++                                                     2*scex%scaled%lr1s, 'POINTS'
++         WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') '                 BUT THERE SHOULD BE:', &
++                                                     scex%parent%lr1s, 'POINTS'
++         WRITE(cpmd_output_unit,'(1X,A)') 'PLEASE CHANGE THE BOX SIZE TO ACCOMMODATE A COMPATIBLE GRID OR'
++         WRITE(cpmd_output_unit,'(1X,A)') 'ADJUST CUTOFF VALUE UNTIL A COMMENSURATE GRID CAN BE GENERATED'
++       ENDIF
+        CALL stopgm(procedureN,'ScEX: Full grid and auxiliary grid are not commensurate in '// &
+                                'x-direction, cf. output file',__LINE__,__FILE__)
+     ENDIF
+ 
+     IF (scex%parent%lr2s /= 2*scex%scaled%lr2s) THEN
+-       WRITE(cpmd_output_unit,'(1X,A)') 'SCEX GRID PROBLEM: GRIDS ARE NOT COMMENSURATE.'
+-       WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') 'TWICE THE AUXILIARY GRID POINTS IN Y:', &
+-                                                   2*scex%scaled%lr2s, 'POINTS'
+-       WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') '                 BUT THERE SHOULD BE:', &
+-                                                   scex%parent%lr2s, 'POINTS'
+-       WRITE(cpmd_output_unit,'(1X,A)') 'PLEASE ADJUST CUTOFF VALUE UNTIL A COMMENSURATE GRID IS GENERATED'
++       IF (paral%io_parent) THEN
++         WRITE(cpmd_output_unit,'(1X,A)') 'SCEX GRID PROBLEM: GRIDS ARE NOT COMMENSURATE.'
++         WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') 'TWICE THE AUXILIARY GRID POINTS IN Y:', &
++                                                     2*scex%scaled%lr2s, 'POINTS'
++         WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') '                 BUT THERE SHOULD BE:', &
++                                                     scex%parent%lr2s, 'POINTS'
++         WRITE(cpmd_output_unit,'(1X,A)') 'PLEASE CHANGE THE BOX SIZE TO ACCOMMODATE A COMPATIBLE GRID OR'
++         WRITE(cpmd_output_unit,'(1X,A)') 'ADJUST CUTOFF VALUE UNTIL A COMMENSURATE GRID CAN BE GENERATED'
++       ENDIF
+        CALL stopgm(procedureN,'ScEX: Full grid and auxiliary grid are not commensurate in '// &
+                                'y-direction, cf. output file',__LINE__,__FILE__)
+     ENDIF
+     
+     IF (scex%parent%lr3s /= 2*scex%scaled%lr3s) THEN
+-       WRITE(cpmd_output_unit,'(1X,A)') 'SCEX GRID PROBLEM: GRIDS ARE NOT COMMENSURATE.'
+-       WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') 'TWICE THE AUXILIARY GRID POINTS IN Z:', &
+-                                                   2*scex%scaled%lr3s, 'POINTS'
+-       WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') '                 BUT THERE SHOULD BE:', &
+-                                                   scex%parent%lr3s, 'POINTS'
+-       WRITE(cpmd_output_unit,'(1X,A)') 'PLEASE ADJUST CUTOFF VALUE UNTIL A COMMENSURATE GRID IS GENERATED'
++       IF (paral%io_parent) THEN
++          WRITE(cpmd_output_unit,'(1X,A)') 'SCEX GRID PROBLEM: GRIDS ARE NOT COMMENSURATE.'
++          WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') 'TWICE THE AUXILIARY GRID POINTS IN Z:', &
++                                                      2*scex%scaled%lr3s, 'POINTS'
++          WRITE(cpmd_output_unit,'(1X,A,1X,I5,1X,A)') '                 BUT THERE SHOULD BE:', &
++                                                      scex%parent%lr3s, 'POINTS'
++          WRITE(cpmd_output_unit,'(1X,A)') 'PLEASE CHANGE THE BOX SIZE TO ACCOMMODATE A COMPATIBLE GRID OR'
++          WRITE(cpmd_output_unit,'(1X,A)') 'ADJUST CUTOFF VALUE UNTIL A COMMENSURATE GRID CAN BE GENERATED'
++       ENDIF
+        CALL stopgm(procedureN,'ScEX: Full grid and auxiliary grid are not commensurate in '// &
+                                'z-direction, cf. output file',__LINE__,__FILE__)
+     ENDIF
+@@ -352,8 +369,41 @@
+     ! ==--------------------------------------------------------------== 
+   END SUBROUTINE scex_comm_check
+   ! ==================================================================
++  SUBROUTINE scex_settings_check(scex)
++    ! ==--------------------------------------------------------------==
+ 
++    CHARACTER(len=*), PARAMETER  :: procedureN = 'scex_settings_check'
++
++    CLASS(scex_t), INTENT(in)    :: scex
++
++    IF (scex%init) CALL stopgm(procedureN,'ScEX type is already intialised',&
++                               __LINE__,__FILE__)
++
++    IF (isos3%ps_type /= 2) THEN
++       WRITE(cpmd_output_unit,'(A)') 'SCALED EXACT EXCHANGE ONLY WORKS WITH TUCKERMAN-MARTYNA'
++       WRITE(cpmd_output_unit,'(A)') 'POISSON SOLVER. PLEASE ADJUST YOUR INPUT FILE.'
++       CALL stopgm(procedureN,'ScEX can only work with the '// &
++                              'TUCKERMAN-MARTYNA Poisson solver!',&
++                               __LINE__,__FILE__)
++    ENDIF
++
++    IF (.NOT. isos1%tcent) THEN
++       IF (paral%io_parent) THEN
++          WRITE(cpmd_output_unit,'(1X,64("!"))')
++          WRITE(cpmd_output_unit,'(1X,A)') 'WARNING! POSSIBLE ISSUE FOR SCALED EXACT EXCHANGE (ScEX):'
++          WRITE(cpmd_output_unit,'(1X,A)') '         CENTERING OF YOUR CLUSTER IS TURNED OFF. IN CASE OF'
++          WRITE(cpmd_output_unit,'(1X,A)') '         CONVERGENCE PROBLEMS, PLEASE ENSURE CENTERING BY EITHER'
++          WRITE(cpmd_output_unit,'(1X,A)') '         REQUESTING CENTER MOLECULE ON IN &CPMD OR BY MANUALLY'
++          WRITE(cpmd_output_unit,'(1X,A)') '         ADJUSTING AND/OR CONSTRAINING THE MOLECULAR COORDINATES'
++          WRITE(cpmd_output_unit,'(1X,64("!"),/)')
++       ENDIF
++    ENDIF
++
++    ! ==--------------------------------------------------------------== 
++  END SUBROUTINE scex_settings_check
+   ! ==================================================================
++
++  ! ==================================================================
+   ! Allocators for scratch space
+   ! ==================================================================
+ 
+Index: src/cp_xc_utils.mod.F90
+===================================================================
+--- src/cp_xc_utils.mod.F90	(revision 4607)
++++ src/cp_xc_utils.mod.F90	(revision 4608)
+@@ -1864,6 +1864,12 @@
+                'MU [BOHR]:', this%hfx_screening, &
+                '; ALPHA:', this%hfx_constant, &
+                '; BETA:', this%hfx_attenuated
++          WRITE(write_to_unit,'(A)')
++          WRITE(write_to_unit,'(1X,A)') 'FOR THE RECIPROCAL SPACE IMPLEMENTATION OF CAM, PLEASE REFER TO:'
++          WRITE(write_to_unit,'(1X,A)') '                               M.P. Bircher and U. Rothlisberger'
++          WRITE(write_to_unit,'(1X,A)') '             J. Chem. Theory Comput., 2018, 14 (6), pp 3184–3195'
++          WRITE(write_to_unit,'(1X,A)') '                                   DOI: 10.1021/acs.jctc.8b00069'
++          WRITE(write_to_unit,'(A)')
+ 
+        CASE DEFAULT
+           WRITE(write_to_unit,'(4x,F5.1,A1,1x,A,3x,A)') 100_real_8*this%hfx_constant , '%', 'HFX', 'EXACT EXCHANGE'

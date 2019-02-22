@@ -1,0 +1,183 @@
+Index: src/pw_hfx.mod.F90
+===================================================================
+--- src/pw_hfx.mod.F90	(revision 4604)
++++ src/pw_hfx.mod.F90	(revision 4605)
+@@ -294,53 +294,8 @@
+ 
+     t_outer_1=m_cputime()
+ 
+-    DO ispin = 1,nspins
++    CALL process_blocks()
+ 
+-       nst = nstates(ispin)
+-       st_offst = 0
+-       IF (ispin.EQ.2) st_offst = nstates(1)
+-
+-       ! get the number of block pairs
+-       nbr_blk = CEILING(REAL(nst,kind=real_8)/REAL(max_block_size,kind=real_8))
+-       nblks = nbr_blk * ( nbr_blk + 1 ) / 2
+-
+-       CALL build_block_info(nst,nbr_blk,max_block_size,offsets,sizes)
+-       CALL build_dist(dist,nblks,hfx_dist,tick_blks(:,ispin))
+-
+-       new_tick_blks(:) = 0
+-       CALL iterator_start(iter,dist)
+-       DO WHILE (iterator_blocks(iter))
+-          CALL iterator_next_block(iter,blk)
+-          CALL ind2sub(blk,row_blk,col_blk)
+-          row_offset = offsets(row_blk) + st_offst
+-          col_offset = offsets(col_blk) + st_offst
+-          row_size = sizes(row_blk); col_size = sizes(col_blk)
+-
+-          tick_1 = get_ticks()
+-
+-          CALL block_filter(thresh,row_offset,row_size,col_offset,col_size,pp,r_list,c_list)
+-
+-          CALL block_invfft(c0,psi_row,r_list)
+-          CALL block_invfft(c0,psi_col,c_list)
+-          !call block_invfft_old(c0,psi_row,row_offset,row_size)
+-          !call block_invfft_old(c0,psi_col,col_offset,col_size)
+-
+-          CALL hfx_compute_block_new( C2_hfx, ehfx, f, vpotg, vpotr, psic, pp, &
+-               psi_row, psi_col, r_list, c_list, psi_row_pack, thresh )
+-
+-          !call hfx_compute_block( C2_hfx, ehfx, f, vpotg, vpotr, psic,&
+-          !     psi_row, row_offset, row_size,&
+-          !     psi_col, col_offset, col_size)
+-
+-          tick_2 = get_ticks()
+-
+-          new_tick_blks(blk) = tick_2 - tick_1
+-
+-       ENDDO
+-       CALL release_dist(dist)
+-       tick_blks(:,ispin) = new_tick_blks(:)
+-    ENDDO
+-
+     t_outer_2=m_cputime()
+     t_outer = t_outer_2 - t_outer_1
+ 
+@@ -439,6 +394,63 @@
+ 
+     CALL tihalt(procedureN,isub)
+ 
++    CONTAINS
++
++    ! ================================================================== 
++    SUBROUTINE process_blocks()
++      ! ==--------------------------------------------------------------==
++      ! Conventional algorithm for full HFX; no storage of real-space
++      ! pair potentials.
++
++      DO ispin = 1,nspins
++
++         nst = nstates(ispin)
++         st_offst = 0
++         IF (ispin.EQ.2) st_offst = nstates(1)
++
++         ! get the number of block pairs
++         nbr_blk = CEILING(REAL(nst,kind=real_8)/REAL(max_block_size,kind=real_8))
++         nblks = nbr_blk * ( nbr_blk + 1 ) / 2
++
++         CALL build_block_info(nst,nbr_blk,max_block_size,offsets,sizes)
++         CALL build_dist(dist,nblks,hfx_dist,tick_blks(:,ispin))
++
++         new_tick_blks(:) = 0
++         CALL iterator_start(iter,dist)
++         DO WHILE (iterator_blocks(iter))
++            CALL iterator_next_block(iter,blk)
++            CALL ind2sub(blk,row_blk,col_blk)
++            row_offset = offsets(row_blk) + st_offst
++            col_offset = offsets(col_blk) + st_offst
++            row_size = sizes(row_blk); col_size = sizes(col_blk)
++
++            tick_1 = get_ticks()
++
++            CALL block_filter(thresh,row_offset,row_size,col_offset,col_size,pp,r_list,c_list)
++
++            CALL block_invfft(c0,psi_row,r_list)
++            CALL block_invfft(c0,psi_col,c_list)
++            !call block_invfft_old(c0,psi_row,row_offset,row_size)
++            !call block_invfft_old(c0,psi_col,col_offset,col_size)
++
++            CALL hfx_compute_block_new( C2_hfx, ehfx, f, vpotg, vpotr, psic, pp, &
++                 psi_row, psi_col, r_list, c_list, psi_row_pack, thresh )
++
++            !call hfx_compute_block( C2_hfx, ehfx, f, vpotg, vpotr, psic,&
++            !     psi_row, row_offset, row_size,&
++            !     psi_col, col_offset, col_size)
++
++            tick_2 = get_ticks()
++
++            new_tick_blks(blk) = tick_2 - tick_1
++
++         ENDDO
++         CALL release_dist(dist)
++         tick_blks(:,ispin) = new_tick_blks(:)
++      ENDDO
++
++      ! ==--------------------------------------------------------------==
++    END SUBROUTINE process_blocks
+     ! ==--------------------------------------------------------------==
+   END SUBROUTINE hfx_new
+   ! ================================================================== 
+@@ -1303,7 +1315,7 @@
+ 
+        IF (r1.GT.c) r1 = 0
+        IF (r2.GT.c) r2 = 0
+-       IF (r1.NE.0.OR.r2.NE.0) CALL evalute_pair()
++       IF (r1.NE.0.OR.r2.NE.0) CALL evaluate_pair()
+ 
+     ENDDO
+ 
+@@ -1316,9 +1328,9 @@
+   CONTAINS
+ 
+     ! ================================================================== 
+-    SUBROUTINE evalute_pair()
++    SUBROUTINE evaluate_pair()
+       ! ==--------------------------------------------------------------==
+-    CHARACTER(*), PARAMETER                  :: procedureN = 'evalute_pair'
++    CHARACTER(*), PARAMETER                  :: procedureN = 'evaluate_pair'
+ 
+ ! ==--------------------------------------------------------------==
+ 
+@@ -1389,7 +1401,7 @@
+ 
+ 
+       ! ==--------------------------------------------------------------==
+-    END SUBROUTINE evalute_pair
++    END SUBROUTINE evaluate_pair
+     ! ================================================================== 
+ 
+     SUBROUTINE add_int_to_list(v,i,j,avs,nvs)
+@@ -1456,7 +1468,7 @@
+           r2 = r + 1
+           IF (r1.GT.c) r1 = 0
+           IF (r2.GT.c.OR.r2.GT.row_end) r2 = 0
+-          IF (r1.NE.0.OR.r2.NE.0) CALL evalute_pair()
++          IF (r1.NE.0.OR.r2.NE.0) CALL evaluate_pair()
+           r_ptr = r_ptr + 1
+        ENDDO
+        c_pt = c_pt + MOD(c - col_beg, 2)
+@@ -1472,9 +1484,9 @@
+   CONTAINS
+ 
+     ! ================================================================== 
+-    SUBROUTINE evalute_pair()
++    SUBROUTINE evaluate_pair()
+       ! ==--------------------------------------------------------------==
+-    CHARACTER(*), PARAMETER                  :: procedureN = 'evalute_pair'
++    CHARACTER(*), PARAMETER                  :: procedureN = 'evaluate_pair'
+ 
+ ! ==--------------------------------------------------------------==
+ 
+@@ -1547,7 +1559,7 @@
+ 
+ 
+       ! ==--------------------------------------------------------------==
+-    END SUBROUTINE evalute_pair
++    END SUBROUTINE evaluate_pair
+     ! ================================================================== 
+ 
+     ! ==--------------------------------------------------------------==

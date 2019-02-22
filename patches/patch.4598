@@ -1,0 +1,2030 @@
+Index: doc/manual/manual.tex
+===================================================================
+--- doc/manual/manual.tex	(revision 4597)
++++ doc/manual/manual.tex	(revision 4598)
+@@ -972,9 +972,10 @@
+     \texttt{ratom\_utils.mod.F90},    \texttt{recpnew\_utils.mod.F90},  \texttt{detsp\_utils.mod.F90},
+     \texttt{proppt\_utils.mod.F90},   \texttt{setbasis\_utils.mod.F90}, \texttt{vdwin\_utils.mod.F90},
+     \texttt{respin\_p\_utils.mod.F90}, \texttt{lr\_in\_utils.mod.F90},  \texttt{orbhard\_utils.mod.F90},
+-    \texttt{egointer\_utils.mod.F90}, \texttt{pi\_cntl\_utils.mod.F90}
+-    \texttt{cl\_init\_utils.mod.F90}, \texttt{cplngs\_utils.mod.F90}
++    \texttt{egointer\_utils.mod.F90}, \texttt{pi\_cntl\_utils.mod.F90}, \texttt{cl\_init\_utils.mod.F90}, 
++    \texttt{cplngs\_utils.mod.F90},  \texttt{mts\_utils.mod.F90}
+ 
++
+   \item The input is free format except when especially stated
+ 
+   \item In most cases, only the first 80 characters of a line are read
+@@ -1092,6 +1093,9 @@
+ \> This section is only evaluated if either the keyword \refkeyword{DCACP}, \refkeyword{VDW CORRECTION}, \\
+ \> or \refkeyword{VDW WANNIER} is given in
+    the \&CPMD section.\\
++\\
++\> \&MTS ...  \> \&END  \>  $\leftrightarrow$ \>
++   Parameters for the Multiple Time-Step MD scheme. \\
+ \end{tabbing}
+ 
+   A detailed discussion of the different keywords will be given in the
+@@ -1257,6 +1261,7 @@
+ \refspekeyword{USE\_IN\_STREAM}{USE IN STREAM}\options{}{}{}
+ \refspekeyword{USE\_OUT\_STREAM}{USE OUT STREAM}\options{}{}{}
+ \refspekeyword{USE\_MPI\_IO}{USE MPI IO}\options{}{}{}
++\refspekeyword{USE\_MTS}{USE MTS}\options{}{}{}
+ \refkeyword{QMMM}\options{}{[QMMMEASY]}{}{}{}
+ %_FM[
+ \refkeyword{FORCEMATCH}\options{}{}{}
+@@ -1458,6 +1463,8 @@
+ \refkeyword{REFUNCT}\options{}{}{functionals}
+ \refspekeyword{XC\_DRIVER}{XC DRIVER}\options{}{}{}\options{}{}{}
+ \refspekeyword{XC\_KERNEL}{XC KERNEL}\options{}{}{functionals}
++\refspekeyword{MTS\_LOW\_FUNC}{MTS LOW FUNC}\options{}{}{functionals}
++\refspekeyword{MTS\_HIGH\_FUNC}{MTS HIGH FUNC}\options{}{}{functionals}
+ 
+ 
+ %
+@@ -1622,6 +1629,14 @@
+ \refkeyword{VERBOSE}\options{}{}{}
+ \refkeyword{WRITE LOCALTEMP}\options{[STEP \{nfi\_lt\}]}{}{}
+ %
++\subsubsection[\&MTS ... \&END]{\&MTS $\ldots$ \&END}
++%
++\options{}{}{}
++\refspekeyword{TIMESTEP\_FACTOR}{TIMESTEP FACTOR}\options{}{}{}
++\refspekeyword{PRINT\_FORCES}{PRINT FORCES}\options{}{}{}
++\refspekeyword{LOW\_LEVEL\_FORCES}{LOW LEVEL FORCES}\options{\{DFT, EXTERNAL\}}{}{}
++\refspekeyword{HIGH\_LEVEL\_FORCES}{HIGH LEVEL FORCES}\options{\{DFT, EXTERNAL\}}{}{}
++%
+ \clearpage
+ %
+ %---------------------------------------------------------------------
+@@ -3194,6 +3209,28 @@
+         are included ({\sl DIAG}). {\sl RECOMPUTE\_TWO\_INT\_LIST\_EVERY} 
+         allows to set how often the integral list is recomputed. }
+ 
++\spekeyword{HIGH\_LEVEL\_FORCES}{\{DFT, EXTERNAL\}}{}{}{\&MTS}{HIGH LEVEL FORCES}
++ \desc{
++    Set the computational model for the calculation of high level forces in the MTS scheme.
++    For now two options exists: (i) The forces are obtained from the DFT code internal to CPMD. 
++    In that case, the high level functional has to be set in the 
++    \&DFT section with the \refspekeyword{MTS\_HIGH\_FUNC}{MTS HIGH FUNC} keyword.
++    (ii) The forces are calculated by an external program which called via a script which should be named
++    \texttt{EXT\_HIGH\_FORCES}. When the forces are needed, CPMD will write a file \texttt{geometry.xyz} containing
++    the current geometry in xyz format (carthesian coordinates in Aangstroms). Then the script will 
++    be called and CPMD will wait until a file \texttt{forces.xyz} becomes available with the new forces
++    in xyz format (atomic units are expected). See the \textt{get\_external\_forces} routine in the
++    \texttt{interface\_utils.mod.F90} file.
++
++    The keyword \refspekeyword{LOW\_LEVEL\_FORCES}{LOW LEVEL FORCES} can be used in exactly the same way for the 
++    selection of the computational model used to calculate the low level forces in the MTS scheme.
++    Similarly, if the DFT code internal to CPMD is chosen as low level, 
++    the keyword \refspekeyword{MTS\_LOW\_FUNC}{MTS LOW FUNC} 
++    (\&DFT section), can be used to select the low level density functional. \\
++
++    {\bf Default:} Forces are calculated with the DFT code internal to CPMD.
++ }
++
+ \keyword{HTHRS}{}{}{}{\&LINRES}
+  \desc{
+  Threshold for Hessian in preconditioner for linear response optimizations.
+@@ -3677,6 +3714,9 @@
+ \keyword{LOCAL SPIN DENSITY}{}{}{}{\&CPMD}
+   \desc{Alias for \refkeyword{LSD}.}
+ 
++\spekeyword{LOW\_LEVEL\_FORCES}{\{DFT, EXTERNAL\}}{}{}{\&MTS}{LOW LEVEL FORCES}
++ \desc{Analogue to \refspekeyword{HIGH\_LEVEL\_FORCES}{HIGH LEVEL FORCES}.}
++
+ \keyword{LOW SPIN EXCITATION}{}{[ROKS,ROSS,ROOTHAAN,CAS22]}{}{\&SYSTEM}
+   \desc{Use the low spin excited state functional~\cite{Frank98}. 
+ For ROKS calculations, see also the \refkeyword{ROKS} keyword in the \&CPMD-section.}
+@@ -3859,6 +3899,17 @@
+       The multiplicity (2$S$+1) is read from the next line.\\
+       {\bf Default} is the {\bf smallest possible} multiplicity.}
+ 
++\spekeyword{MTS\_HIGH\_FUNC}{}{}{functionals}{\&DFT}{MTS HIGH FUNC}
++  \desc{Alias for \refkeyword{FUNCTIONAL} that makes sense when used with the MTS scheme since it
++  corresponds to the high level functional in that context (see \&MTS section).
++  {\bf Note:} The functionals in combination with the MTS scheme have to be set with 
++      \refspekeyword{XC\_DRIVER}{XC DRIVER}.}
++
++\spekeyword{MTS\_LOW\_FUNC}{}{}{functionals}{\&DFT}{MTS LOW FUNC}
++  \desc{Select the low level functional in the MTS scheme. To be used like \refkeyword{FUNCTIONAL}.
++  {\bf Note:} The functionals in combination with the MTS scheme have to be set with 
++      \refspekeyword{XC\_DRIVER}{XC DRIVER}.}
++
+ \spekeyword{N\_CYCLES}{}{}{}{\&PTDDFT}{N-CYCLES}
+   \desc{Defines the number of cycles (time steps) used in the propagation
+         of the perturbed KS orbitals in a \refkeyword{PROPAGATION SPECTRA} calculation.
+@@ -4436,6 +4487,15 @@
+ \keyword{PRINT FF}{}{}{}{\&CLASSIC}
+   \desc{Not documented}
+ 
++\spekeyword{PRINT\_FORCES}{[OFF]}{}{}{\&MTS}{PRINT FORCES}
++  \desc{
++     Turn on/off the printing of the high and low level forces along the MTS-MD trajectory.
++     The forces are printed to two distinct trajectory files in the \texttt{.xyz} format,
++     \texttt{MTS\_LOW\_FORCES.xyz} and \texttt{MTS\_HIGH\_FORCES.xyz}. \\
++
++     {\bf Default}: OFF.
++  }
++
+ \keyword{PRINT LEVEL}{}{}{}{\&PIMD}
+   \desc{The detail of printing information is read as an integer number
+         from the next line.
+@@ -5306,6 +5366,15 @@
+       {\bf Default} is a time step of {\bf 5 a.u.}
+       ($1\, a.u. = 0.0241888428$ fs).}
+ 
++\spekeyword{TIMESTEP\_FACTOR}{}{}{}{\&MTS}{TIMESTEP FACTOR}
++  \desc{
++     The time step factor ($n$) used in the MTS scheme is read from the next line. \\
++
++  For instance, if \refkeyword{TIMESTEP IONS} is set to {\bf 15 a.u.}, and ($n=4$) then the high level correction
++  to the forces in the MTS scheme will be calculated every 4 steps, i.e. every {\bf 60 a.u.}
++  {\bf Default} is a factor of 1, i.e. the MD will be identical to a Velocity-Verlet MD with the high level forces.
++  }
++
+ \keyword{TRACE}{}{[ALL,MASTER]}{}{\&CPMD}
+ \desc{ Activate the tracing of the procedures. {\sl ALL} specifies that all the mpi tasks are traced.
+   {\sl ALL} specifies that only the master is traced.
+@@ -5406,6 +5475,9 @@
+    This shall be used with {\sl USE\_IN\_STREAM} and /or {\sl USE\_OUT\_STREAM}.
+  }
+ 
++\spekeyword{USE\_MTS}{}{}{}{\&CPMD}{USE MTS}
++ \desc{Switch on the Multiple Time-Step scheme for molecular dynamics (see \&MTS section).\cite{Liberatore2018}}
++
+ \keyword{VDW CORRECTION}{[ON,OFF]}{}{}{\&CPMD}
+ 
+ \desc{An empirical van der Waals correction scheme is applied to
+@@ -11570,6 +11642,10 @@
+     L. Knoll and D. Marx,
+     Eur.~Phys.~J.~D {\bf 10}, 353 (2000).
+ 
++\bibitem{Liberatore2018} 
++   E.~Liberatore, R.~Meli, and U.~Rothlisberger,
++   J.~Chem.~Theory~Comput., {\bf 14}, 2834 (2018).
++
+ \bibitem{mooij:99}
+     W.~T.~M. Mooij, F.~B. van Duijneveldt,J.~G.~C.~M. van Duijneveldt-van de Rijdt,
+     and B.~P. van Eijck, J.~Phys.~Chem~A {\bf 103}, 9872 (1999).
+Index: src/printp_utils.mod.F90
+===================================================================
+--- src/printp_utils.mod.F90	(revision 4597)
++++ src/printp_utils.mod.F90	(revision 4598)
+@@ -67,6 +67,7 @@
+ 
+   PUBLIC :: printp
+   PUBLIC :: printp2
++  PUBLIC :: print_mts_forces
+ 
+ CONTAINS
+ 
+@@ -616,4 +617,90 @@
+   END SUBROUTINE printp2
+   ! ==================================================================
+ 
++
++  ! Purpose: print MTS low or high level forces depending on job input
++  !      The effective forces which can be a combination of low and high levels
++  !      are already printed to the FTRAJECTORY file.
++  !      The file is printed in xyz format. (N atoms, title line, xyz data)
++  !
++  ! Author: Pablo Baudin
++  ! Date: May 2018
++  subroutine print_mts_forces(forces, title, job)
++
++     implicit none
++     !> forces to be printed
++     real(real_8), intent(in) :: forces(:,:,:)
++     !> title string to be printed
++     character(len=100), intent(in) :: title
++     !> Job type 'HIGH' or 'LOW' level
++     character(len=*), intent(in) :: job
++
++     real(real_8), allocatable :: gr_forces(:,:)
++     integer, allocatable :: gr_iat(:)
++     integer :: i, ia, is, k, funit, ierr
++     logical :: ferror
++     character(len=20) :: fname
++     character(*), parameter :: procedureN = 'print_mts_forces'
++
++     if (paral%io_parent) then
++        ! get file name
++        select case(job)
++        case('LOW')
++           fname = 'MTS_LOW_FORCES.xyz '
++        case('HIGH')
++           fname = 'MTS_HIGH_FORCES.xyz'
++        end select
++
++
++        ! allocate gromos arrays
++        ALLOCATE(gr_iat(ions1%nat+1),STAT=ierr)
++        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem: gr_iat',&
++           __LINE__,__FILE__)
++        ALLOCATE(gr_forces(3,ions1%nat),STAT=ierr)
++        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem: gr_forces',&
++           __LINE__,__FILE__)
++
++        ! get forces into gromos ordering
++        i=0
++        do is=1,ions1%nsp
++           do ia=1,ions0%na(is)
++              i=i+1
++              gr_iat(nat_grm(i))=ions0%iatyp(is)
++              do k=1,3
++                 gr_forces(k,nat_grm(i))=forces(k,ia,is)
++              end do
++           end do
++        end do
++
++
++        ! WRITE FILE:
++        ! -----------
++        !
++        funit = 4
++        call fileopen(funit,fname,fo_app,ferror)
++        !
++        ! write number of atoms
++        write(funit,*) ions1%nat
++
++        ! write title line
++        write(funit,*) title
++
++        ! write ionic forces
++        do i=1,ions1%nat
++           write(funit,'(a2,3(2x,f22.14))') elem%el(gr_iat(i)),(gr_forces(k,i),k=1,3)
++        enddo
++        call fileclose(funit)
++
++
++        ! deallocate gromos arrays
++        DEALLOCATE(gr_forces,STAT=ierr)
++        IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem: gr_forces',&
++           __LINE__,__FILE__)
++        DEALLOCATE(gr_iat,STAT=ierr)
++        IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem: gr_iat',&
++           __LINE__,__FILE__)
++     end if
++
++  end subroutine print_mts_forces
++
+ END MODULE printp_utils
+Index: src/initclust_utils.mod.F90
+===================================================================
+--- src/initclust_utils.mod.F90	(revision 4597)
++++ src/initclust_utils.mod.F90	(revision 4598)
+@@ -9,7 +9,8 @@
+                                              scg,&
+                                              scgx
+   USE cp_xc_utils,                     ONLY: cp_xc_functional, &
+-                                             cp_xc_kernel
++                                             cp_xc_kernel, &
++                                             cp_xc_mts_low_func
+   USE elct,                            ONLY: crge
+   USE error_handling,                  ONLY: stopgm
+   USE fft,                             ONLY: llr1
+@@ -120,11 +121,13 @@
+     INTEGER                                  :: ierr, ldim, nstate
+     INTEGER                                  :: functional_msrx, functional_mhfx
+     INTEGER                                  :: kernel_msrx, kernel_mhfx
++    INTEGER                                  :: mts_low_func_msrx, mts_low_func_mhfx
+     INTEGER                                  :: mhfx, msrx
+     INTEGER, SAVE                            :: ifirst = 0
+     REAL(real_8)                             :: rmem, rstate
+     REAL(real_8)                             :: functional_srxa
+     REAL(real_8)                             :: kernel_srxa
++    REAL(real_8)                             :: mts_low_func_srxa
+     REAL(real_8)                             :: srxa, cam_alpha, cam_beta
+ 
+     !
+@@ -137,6 +140,7 @@
+     IF ( cntl%use_xc_driver ) THEN
+        CALL cp_xc_functional%get(mhfx=functional_mhfx,msrx=functional_msrx,srxa=functional_srxa)
+        CALL cp_xc_kernel%get(mhfx=kernel_mhfx,msrx=kernel_msrx,srxa=kernel_srxa)
++       CALL cp_xc_mts_low_func%get(mhfx=mts_low_func_mhfx,msrx=mts_low_func_msrx,srxa=mts_low_func_srxa)
+        !
+        ! Do we use HFX both times? Then, we cannot mix CAM and HFX for the moment
+        ! (will fix that later)
+@@ -159,6 +163,26 @@
+           CALL stopgm(procedureN,'Invalid HFX combination between kernel and functional',&
+                       __LINE__,__FILE__)
+        ENDIF
++
++       ! same thing for MTS low functional
++       IF (mts_low_func_mhfx == functional_mhfx) THEN
++          IF (functional_msrx /= mts_low_func_msrx) CALL stopgm(procedureN,&
++             'MTS: LOW and HIGH level FUNCTIONALS must imperatively use the same HFX screening function',&
++             __LINE__,__FILE__)
++          IF (functional_srxa /= mts_low_func_srxa) CALL stopgm(procedureN,&
++             'MTS: LOW and HIGH level FUNCTIONALS must imperatively use the same HFX screening parameter',&
++             __LINE__,__FILE__)
++          CALL cp_xc_functional%get(mhfx=mhfx,msrx=msrx,srxa=srxa,cam_alpha=cam_alpha,cam_beta=cam_beta)
++       ELSEIF (mts_low_func_mhfx > 0 .and. functional_mhfx == 0) THEN
++          ! No HFX in functional, but in MTS low func., thus get the parameters from the MTS low func.
++          CALL cp_xc_mts_low_func%get(mhfx=mhfx,msrx=msrx,srxa=srxa,cam_alpha=cam_alpha,cam_beta=cam_beta)
++       ELSEIF (mts_low_func_mhfx == 0 .and. functional_mhfx > 0) THEN
++          ! No HFX in MTS low func., but in the main functional, thus get the parameters from the main functional
++          CALL cp_xc_functional%get(mhfx=mhfx,msrx=msrx,srxa=srxa,cam_alpha=cam_alpha,cam_beta=cam_beta)
++       ELSE
++          CALL stopgm(procedureN,'MTS: Invalid HFX combination between secomdary and primary functionals',&
++                      __LINE__,__FILE__)
++       ENDIF
+     ELSE
+        mhfx      = func1%mhfx
+        msrx      = func1%msrx
+Index: src/control_utils.mod.F90
+===================================================================
+--- src/control_utils.mod.F90	(revision 4597)
++++ src/control_utils.mod.F90	(revision 4598)
+@@ -2275,6 +2275,8 @@
+                    something_went_wrong = .true.
+                    go_on_reading        = .false.
+                 ENDIF
++             ELSEIF ( keyword_contains(line,'USE_MTS') ) THEN
++                cntl%use_mts=.true.
+              ELSEIF ( keyword_contains(line,'TIMESTEP') ) THEN
+                 ! Time step for electrons and ions
+                 previous_line = line
+Index: src/pi_npt_bomd_utils.mod.F90
+===================================================================
+--- src/pi_npt_bomd_utils.mod.F90	(revision 4597)
++++ src/pi_npt_bomd_utils.mod.F90	(revision 4598)
+@@ -836,7 +836,7 @@
+                      coldall(1,1,1,1,ipx),1,cold,1)
+                 nnow=nnowall(ipx); numcold=numcoldall(ipx)
+              ENDIF
+-             CALL extrapwf(infi,c0(:,:,ipx),scr,cold,crge%n,cnti%mextra)
++             CALL extrapwf(infi,c0(:,:,ipx),scr,cold,nnow,numcold,crge%n,cnti%mextra)
+              IF (np_local>1) THEN
+                 CALL zcopy(nkpt%ngwk*crge%n*nkpt%nkpnt*cnti%mextra,&
+                      cold,1,coldall(1,1,1,1,ipx),1)
+Index: src/cpmd.F90
+===================================================================
+--- src/cpmd.F90	(revision 4597)
++++ src/cpmd.F90	(revision 4598)
+@@ -96,6 +96,8 @@
+        tddft_input
+   USE cp_cuda_utils, ONLY: cp_cuda_init, cp_cuda_finalize
+   USE ortho_utils, ONLY: ortho_init, ortho_finalize
++  USE mts_utils, ONLY: read_mts_input
++
+   IMPLICIT NONE
+   CHARACTER(*), PARAMETER                    :: procedureN = 'cpmd'
+ 
+@@ -141,6 +143,9 @@
+   ! we need to start the timer after the call to control
+   CALL tiset(procedureN, isub)
+ 
++  ! READ MTS INFORMATION
++  CALL read_mts_input
++
+   ! READ INFORMATION ON XC FUNCTIONAL
+   CALL dftin
+ 
+Index: src/system.mod.F90
+===================================================================
+--- src/system.mod.F90	(revision 4597)
++++ src/system.mod.F90	(revision 4598)
+@@ -395,6 +395,7 @@
+   ! == IS_IN_STREAM : use stream input                              ==
+   ! == IS_OUT_STREAM : use stream output                            ==
+   ! == USE_MPI_IO : use mpi for the parallel io                     ==
++  ! == USE_MTS: use multiple time step algorithm in MD              ==
+   ! ==--------------------------------------------------------------==
+   TYPE, PUBLIC :: cntl_t
+      LOGICAL :: md = .FALSE.
+@@ -560,6 +561,7 @@
+      LOGICAL :: use_xc_driver = .FALSE.
+      LOGICAL :: div_analytical = .FALSE.
+      LOGICAL :: thubb  = .FALSE.
++     LOGICAL :: use_mts = .false.
+   END TYPE cntl_t
+   TYPE(cntl_t), SAVE, PUBLIC :: cntl
+   ! ==================================================================
+Index: src/interface_utils.mod.F90
+===================================================================
+--- src/interface_utils.mod.F90	(revision 0)
++++ src/interface_utils.mod.F90	(revision 4598)
+@@ -0,0 +1,144 @@
++! Purpose: utilities for interface with external programs
++! Author: Pablo Baudin
++! Date: May 2018
++module interface_utils
++
++   use adat,                            only: elem
++   use fileopenmod,                     only: fo_info
++   use ions,                            only: ions0,ions1
++   use machine,                         only: m_sleep, m_system
++   use mp_interface,                    only: mp_bcast, mp_sync
++   use parac,                           only: paral,parai
++   use system,                          only: iatpt,maxsys
++   use zeroing_utils,                   only: zeroing
++   use kinds,                           only: real_8
++   use timer,                           only: tiset, tihalt
++   use cnst,                            only: fbohr
++   use error_handling,                  only: stopgm
++
++   implicit none
++
++   private 
++
++   public :: get_external_forces
++
++contains   
++
++   ! Purpose: Call external program to get ionic forces from current position
++   ! Author: Pablo Baudin
++   ! Date: May 2018 
++   subroutine get_external_forces(prog, positions, forces, path, args)
++      implicit none
++      !> Name of the program or script to call
++      character(len=*), intent(in) :: prog
++      !> position of the ions to be used for the calculation of the forces
++      real(real_8), intent(in) ::  positions(3,maxsys%nax,*)
++      !> forces produced by the external program
++      real(real_8), intent(out) ::  forces(:,:,:)
++      !> path of the script and arguments to pass to the script
++      character(len=*), intent(in), optional :: path, args
++
++      character(len=100) :: mypath, myargs, title
++      character(len=3) :: symbol
++      logical :: exists
++      integer :: funit, iat, ia, is, l, mat, msglen
++
++      mypath = fo_info%fpath(fo_info%iapath:fo_info%iepath)
++      if (present(path)) mypath = path
++      myargs = ''
++      if (present(args)) myargs = ' '//args
++      funit = 211
++
++
++      ! write the ionic positions to file to be read by program
++      if (paral%io_parent) then
++         open(funit,file='geometry.xyz',status='unknown')
++         write(funit,*) ions1%nat 
++         write(funit,*) 'new GEOMETRY from CPMD'
++         do iat=1,ions1%nat
++            ia=iatpt(1,iat)
++            is=iatpt(2,iat)
++            !look for atomic label
++            write(funit,'(A3,3F20.12)') elem%el(ions0%iatyp(is)), (positions(l,ia,is)/fbohr,l=1,3)
++         enddo
++         close(funit)
++      endif
++      call mp_sync(parai%allgrp)
++
++
++      ! check if external program exists and call it
++      if(paral%io_parent) then
++         inquire(file=trim(mypath)//prog,exist=exists)
++         if (exists) then
++            ! call program
++            call m_system(trim(mypath)//prog//myargs)
++         else
++            call stopgm('call_external','External program '//trim(mypath)//prog//' not present!',&
++            __LINE__,__FILE__)
++         end if
++      end if
++
++
++      ! wait until program is done (check for existence of file: forces.xyz)
++      call interface_f_wait('forces.xyz', 'EXT.error', mypath)
++
++      ! read forces
++      call zeroing(forces)
++      if (paral%io_parent) then
++         open(funit,file=trim(mypath)//'forces.xyz',status='unknown')
++         read(funit,*) mat 
++         read(funit,'(a)') title
++         write(6,*) title
++         do iat=1,mat
++            ia=iatpt(1,iat)
++            is=iatpt(2,iat)
++            read(funit,*) symbol,(forces(l,ia,is),l=1,3)
++         enddo
++         close(funit)
++      endif
++      call mp_sync(parai%allgrp)
++      msglen = 3*maxsys%nax*maxsys%nsx
++      call mp_bcast(forces,msglen,parai%io_source,parai%allgrp)
++
++   end subroutine get_external_forces
++
++   ! Purpose: wait until a given file has been produced
++   ! Author: Pablo Baudin
++   ! Date: May 2018
++   subroutine interface_f_wait(filename, error_file, path)
++      implicit none
++      !> name of the file to be produced
++      character(len=*), intent(in) :: filename, error_file
++      !> path of file
++      character(len=*), intent(in), optional :: path
++
++      logical ::  test, error
++      integer ::  isub
++      character(*), parameter :: procedureN = 'interface_f_wait'
++      character(len=100) :: mypath
++
++      mypath = fo_info%fpath(fo_info%iapath:fo_info%iepath)
++      if (present(path)) mypath = path
++
++      call tiset(procedureN,isub)
++      if (paral%io_parent) then
++         do while (.not. test)
++
++            ! wait until required file is produced   
++            inquire(file=trim(mypath)//filename,exist=test)
++
++            ! wait 1 sec.
++            call m_sleep(1)
++
++            ! check for error file
++            inquire(file=trim(mypath)//error_file,exist=error)
++            if (error) call stopgm(proceduren,'External program error see '//error_file//' file',&
++               __LINE__,__FILE__)
++
++         end do
++      end if
++      call tihalt(procedureN,isub)
++
++   end subroutine interface_f_wait
++
++end module interface_utils
+Index: src/mm_extrap.mod.F90
+===================================================================
+--- src/mm_extrap.mod.F90	(revision 4597)
++++ src/mm_extrap.mod.F90	(revision 4598)
+@@ -5,7 +5,10 @@
+ 
+   ! storage for wavefunction extrapolation in BOMD.
+   COMPLEX(real_8), ALLOCATABLE, SAVE :: cold(:,:,:,:)
++  INTEGER, SAVE :: numcold, nnow
+ 
+-  INTEGER, SAVE :: numcold,nnow
++  ! MTS high level functional quantities
++  COMPLEX(real_8), ALLOCATABLE, SAVE :: cold_high(:,:,:,:)
++  INTEGER, SAVE :: numcold_high, nnow_high
+ 
+ END MODULE mm_extrap
+Index: src/cp_xc_utils.mod.F90
+===================================================================
+--- src/cp_xc_utils.mod.F90	(revision 4597)
++++ src/cp_xc_utils.mod.F90	(revision 4598)
+@@ -326,8 +326,10 @@
+ 
+   TYPE(cp_xc_env_t), SAVE, PUBLIC :: cp_xc_functional_env
+   TYPE(cp_xc_env_t), SAVE, PUBLIC :: cp_xc_kernel_env
++  TYPE(cp_xc_env_t), SAVE, PUBLIC :: cp_xc_mts_low_func_env
+ 
+   TYPE(cp_xc_t), SAVE, TARGET,  PUBLIC :: cp_xc_functional
++  TYPE(cp_xc_t), SAVE, TARGET,  PUBLIC :: cp_xc_mts_low_func
+   TYPE(cp_xc_t), SAVE, TARGET,  PUBLIC :: cp_xc_kernel
+   TYPE(cp_xc_t), SAVE, POINTER, PUBLIC :: cp_xc => NULL()
+ 
+Index: src/nabdy_md.mod.F90
+===================================================================
+--- src/nabdy_md.mod.F90	(revision 4597)
++++ src/nabdy_md.mod.F90	(revision 4598)
+@@ -76,7 +76,7 @@
+                                              mm_go_mm,&
+                                              mm_revert,&
+                                              nat_grm
+-  USE mm_extrap,                       ONLY: cold
++  USE mm_extrap,                       ONLY: cold, nnow, numcold
+   USE moverho_utils,                   ONLY: moverho
+   USE mp_interface,                    ONLY: mp_bcast,&
+                                              mp_sync
+@@ -641,7 +641,7 @@
+           ropt_mod%calste=cntl%tpres.AND.MOD(iteropt%nfi,cnti%npres).EQ.0
+           IF (cntl%textrap) THEN
+              ! Extrapolate wavefunctions
+-             CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra)
++             CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
+           ENDIF
+           ! mb - Wannier stuff for vdW-WC
+           vdwwfl%twannup=vdwwfl%twannup.OR.(infi.EQ.1.AND..NOT.vdwwfl%trwannc)
+Index: src/prbomd_utils.mod.F90
+===================================================================
+--- src/prbomd_utils.mod.F90	(revision 4597)
++++ src/prbomd_utils.mod.F90	(revision 4598)
+@@ -67,7 +67,7 @@
+   USE meta_exlagr_utils,               ONLY: ekincv_global,&
+                                              meta_stress
+   USE metr,                            ONLY: metr_com
+-  USE mm_extrap,                       ONLY: cold
++  USE mm_extrap,                       ONLY: cold, nnow, numcold 
+   USE moverho_utils,                   ONLY: give_scr_moverho,&
+                                              moverho
+   USE mp_interface,                    ONLY: mp_bcast
+@@ -495,7 +495,7 @@
+        ENDIF
+        IF (cntl%textrap) THEN
+           ! Extrapolate wavefunctions
+-          CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra)
++          CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
+        ENDIF
+        ! CALCULATE THE FORCES
+        CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
+Index: src/pi_diag_utils.mod.F90
+===================================================================
+--- src/pi_diag_utils.mod.F90	(revision 4597)
++++ src/pi_diag_utils.mod.F90	(revision 4598)
+@@ -740,7 +740,7 @@
+                      coldall(1,1,1,1,ipx),1,cold,1)
+                 nnow=nnowall(ipx); numcold=numcoldall(ipx)
+              ENDIF
+-             CALL extrapwf(infi,c0(:,:,ipx),scr,cold,crge%n,cnti%mextra)
++             CALL extrapwf(infi,c0(:,:,ipx),scr,cold,nnow,numcold,crge%n,cnti%mextra)
+              IF (np_local>1) THEN
+                 CALL zcopy(nkpt%ngwk*crge%n*nkpt%nkpnt*cnti%mextra,&
+                      cold,1,coldall(1,1,1,1,ipx),1)
+Index: src/md_driver.mod.F90
+===================================================================
+--- src/md_driver.mod.F90	(revision 4597)
++++ src/md_driver.mod.F90	(revision 4598)
+@@ -100,12 +100,16 @@
+   USE meta_multiple_walkers_utils,     ONLY: mw_assign_filenames,&
+                                              mw_filename
+   USE mfep,                            ONLY: mfepi
+-  USE mm_extrap,                       ONLY: cold
++  USE mm_extrap,                       ONLY: cold , cold_high, &
++                                             numcold, numcold_high, &
++                                             nnow, nnow_high
+   USE moverho_utils,                   ONLY: give_scr_moverho,&
+                                              moverho
+   USE mp_interface,                    ONLY: mp_bcast,&
+                                              mp_sum,&
+                                              mp_sync
++  USE interface_utils,                 ONLY: get_external_forces
++  USE mts_utils,                       ONLY: mts, set_mts_functional
+   USE mw,                              ONLY: mwi,&
+                                              tmw
+   USE nlcc,                            ONLY: corel
+@@ -129,7 +133,8 @@
+   USE posupi_utils,                    ONLY: posupi
+   USE printave_utils,                  ONLY: paccc
+   USE printp_utils,                    ONLY: printp,&
+-                                             printp2
++                                             printp2,&
++                                             print_mts_forces
+   USE proppt_utils,                    ONLY: give_scr_propcal,&
+                                              propcal
+   USE pslo,                            ONLY: pslo_com
+@@ -177,7 +182,7 @@
+        cprint, irec_ac, irec_nop1, irec_nop2, irec_nop3, irec_nop4, irec_vel, &
+        restart1, rout1, store1
+   USE system,                          ONLY: &
+-       cnti, cntl, cntr, fpar, maxsys, nacc, ncpw, nkpt, restf
++       cnti, cntl, cntr, fpar, maxsys, nacc, ncpw, nkpt, restf, iatpt
+   USE td_utils,                        ONLY: initialize_ehrenfest_dyn
+   USE testex_utils,                    ONLY: testex,&
+                                              testex_mw
+@@ -231,6 +236,16 @@
+     REAL(real_8), ALLOCATABLE :: eigs(:), eigv(:,:), norms(:), rhoe(:,:), &
+       rinp(:), rm1(:), scr(:), soc_array(:), taui(:,:,:), tauio(:,:), &
+       taur(:,:,:)
++    ! MTS[
++    ! number of inner steps between two large steps and total number of large steps
++    integer :: n_inner_steps, n_large_steps
++    ! logical to know if the current step is a large step in the MTS scheme
++    logical :: mts_large_step, mts_pure_dft
++    ! high level ionic forces
++    real(real_8), allocatable :: fion_high(:,:,:)
++    ! high level wave-function parameters
++    complex(real_8), allocatable :: c0_high(:,:,:)
++    ! MTS]
+ 
+     CALL tiset(procedureN,isub)
+     IF (cntl%tddft.AND.cntl%tresponse) CALL stopgm("MDDIAG",&
+@@ -239,6 +254,26 @@
+     ! ==--------------------------------------------------------------==
+ 
+     time1 =m_walltime()
++
++    mts_pure_dft = .false.
++    if (cntl%use_mts) then
++
++       ! allocate high level forces array
++       allocate(fion_high(3,maxsys%nax,maxsys%nsx),stat=ierr)
++       if(ierr/=0) call stopgm(proceduren,'allocation problem: fion_high',&
++          __LINE__,__FILE__)
++       call zeroing(fion_high)
++
++       ! allocate high level WF param array only if needed
++       mts_pure_dft = ( (mts%low_level == 'DFT') .and. (mts%high_level == 'DFT') ) 
++       if (mts_pure_dft) then
++          allocate( c0_high(size(c0,1),size(c0,2),size(c0,3)), stat=ierr )
++          if(ierr/=0) call stopgm(proceduren,'allocation problem : c0_high',&
++             __LINE__,__FILE__)
++       end if
++
++    end if 
++
+     ! EHR[
+     IF (cntl%tmdeh) THEN
+        ALLOCATE(ch(nkpt%ngwk,crge%n,1),STAT=ierr)
+@@ -570,7 +605,17 @@
+        ALLOCATE(cold(nkpt%ngwk,crge%n,nkpt%nkpnt,lenext/(crge%n*nkpt%ngwk*nkpt%nkpnt)),STAT=ierr)
+        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+             __LINE__,__FILE__)
++       call zeroing(cold)
+ 
++       ! allocate array for high level WF extrapolation
++       if (mts_pure_dft) then
++          allocate(cold_high(nkpt%ngwk,crge%n,nkpt%nkpnt,lenext/(crge%n*nkpt%ngwk*nkpt%nkpnt)),stat=ierr)
++          if(ierr/=0) call stopgm(proceduren,'allocation problem: cold_high',&
++               __LINE__,__FILE__)
++          call zeroing(cold_high)
++          rmem=rmem*2._real_8
++       endif
++
+        IF (paral%io_parent)&
+             WRITE(6,'(A,T51,F8.3,A)') ' MDDIAG| '&
+             // 'EXTRAPOLATION WAVEFUNCTION HISTORY TAKES ',rmem,' MBYTES'
+@@ -827,23 +872,28 @@
+     ifcalc=0
+     IF (cntl%bsymm) THEN
+        CALL bs_forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
+-            rhoe,psi,&
+-            tau0,velp,taui,fion,ifcalc,&
+-            irec,.TRUE.,.TRUE.)
+-    ELSE
+-       ! EHR[
+-       IF (cntl%tmdeh) THEN
+-          CALL forces_prop(nstate,c0,ch,c2,cm,sc0,cm(nx:),vpp,eigv,&
+-               rhoe,psi,&
+-               tau0,velp,taui,fion,ifcalc,&
+-               irec,.TRUE.,.TRUE.)
+-       ELSE
+-          CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
+-               rhoe,psi,&
+-               tau0,velp,taui,fion,ifcalc,&
+-               irec,.TRUE.,.TRUE.)
+-       ENDIF
++          rhoe,psi,&
++          tau0,velp,taui,fion,ifcalc,&
++          irec,.TRUE.,.TRUE.)
++    ELSE IF (cntl%tmdeh) THEN ! EHR[
++       CALL forces_prop(nstate,c0,ch,c2,cm,sc0,cm(nx:),vpp,eigv,&
++          rhoe,psi,&
++          tau0,velp,taui,fion,ifcalc,&
++          irec,.TRUE.,.TRUE.)
+        ! EHR]
++
++    ELSE IF (cntl%use_mts) then
++       n_inner_steps=0
++       n_large_steps=0
++       call get_mts_forces(.true.,.true.,n_inner_steps,n_large_steps,&
++          mts_pure_dft,fion_high,c0_high,cold_high,nnow_high,numcold_high,infi,&
++          nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
++          rhoe,psi,tau0,velp,taui,fion,ifcalc,irec,.true.,.true.)
++
++    else 
++       CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
++          rhoe,psi,tau0,velp,taui,fion,ifcalc,irec,.TRUE.,.TRUE.)
++
+     ENDIF
+     IF (cntl%tddft) THEN
+        CALL lr_tddft(c0(:,:,1),c1,c2(:,:,1),sc0,rhoe,psi,tau0,fion,eigv,&
+@@ -923,6 +973,8 @@
+     CALL hpm_start('MD LOOP')
+ #endif
+     infi=0
++    n_inner_steps=0
++    n_large_steps=0
+     nfimin=iteropt%nfi+1
+     nfimax=iteropt%nfi+cnti%nomore
+     DO loopnfi=nfimin,nfimax
+@@ -929,6 +981,17 @@
+        time1=m_walltime()
+        CALL mp_sync(parai%cp_grp)
+        infi=infi+1
++
++       ! MTS time step counters
++       n_inner_steps=n_inner_steps+1
++       mts_large_step=.false.
++       ! check if it is a large step
++       if (n_inner_steps==mts%timestep_factor) then
++          mts_large_step=.true.
++          n_large_steps=n_large_steps+1
++          n_inner_steps=0
++       endif
++
+        ! ..TSH[
+        IF (tshl%tdtully) tshi%shstep=tshi%shstep+1
+        ! ..TSH]
+@@ -942,13 +1005,15 @@
+           hubbu%tpom=.False.
+        ENDIF
+        ! ANNEALING
+-       CALL anneal(velp,c2,nstate,scr)
+-       CALL berendsen(velp,c2,nstate,scr,0.0_real_8,0.0_real_8)
+-       ! UPDATE NOSE THERMOSTATS
+-       CALL noseup(velp,c2,nstate,ipwalk)
+-       ! FIRST HALF OF GLE EVOLUTION
+-       CALL gle_step
+-
++       ! thermostats only if 1) standard dynamics 2) larger MTS step
++       if ( .not.cntl%use_mts .or. mts_large_step ) then
++          CALL anneal(velp,c2,nstate,scr)
++          CALL berendsen(velp,c2,nstate,scr,0.0_real_8,0.0_real_8)
++          ! UPDATE NOSE THERMOSTATS
++          CALL noseup(velp,c2,nstate,ipwalk)
++          ! FIRST HALF OF GLE EVOLUTION
++          CALL gle_step
++       endif 
+        ! SUBTRACT CENTER OF MASS VELOCITY
+        IF (paral%io_parent.AND.comvl%subcom) CALL comvel(velp,vcmio,.TRUE.)
+        ! SUBTRACT ROTATION AROUND CENTER OF MASS
+@@ -990,7 +1055,7 @@
+        ropt_mod%calste=cntl%tpres.AND.MOD(iteropt%nfi,cnti%npres).EQ.0
+        IF (cntl%textrap) THEN
+           ! Extrapolate wavefunctions
+-          CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra)
++          CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
+        ENDIF
+        IF (cntl%tlanc) nx=1
+        IF (cntl%tdavi) nx=cnti%ndavv*nkpt%nkpnt+1
+@@ -1008,27 +1073,28 @@
+ 
+           ! switch off the info printing
+           dmbi%inter_pt_firstcall=.FALSE.
+-       ELSE
++       ELSE 
++
+           IF (cntl%bsymm) THEN
+              CALL bs_forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
+-                  rhoe,psi,&
+-                  taup,velp,taui,fion,ifcalc,&
+-                  irec,.TRUE.,.FALSE.)
++                rhoe,psi,&
++                taup,velp,taui,fion,ifcalc,&
++                irec,.TRUE.,.FALSE.)
++          ELSE IF (cntl%tmdeh) THEN
++             CALL forces_prop(nstate,c0,ch,c2,cm,sc0,cm(nx:),vpp,eigv,&
++                rhoe,psi,&
++                tau0,velp,taui,fion,ifcalc,&
++                irec,.TRUE.,.TRUE.)
++
++          ELSE IF (cntl%use_mts) then
++             call get_mts_forces(mts_large_step,.false.,n_inner_steps,n_large_steps,&
++                mts_pure_dft,fion_high,c0_high,cold_high,nnow_high,numcold_high,infi,&
++                nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
++                rhoe,psi,taup,velp,taui,fion,ifcalc,irec,.true.,.false.)
++
+           ELSE
+-             ! EHR[
+-             IF (cntl%tmdeh) THEN
+-                CALL forces_prop(nstate,c0,ch,c2,cm,sc0,cm(nx:),vpp,eigv,&
+-                     rhoe,psi,&
+-                     tau0,velp,taui,fion,ifcalc,&
+-                     irec,.TRUE.,.TRUE.)
+-             ELSE
+-                CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
+-                     rhoe,psi,&
+-                     taup,velp,taui,fion,ifcalc,&
+-                     irec,.TRUE.,.FALSE.)
+-             ENDIF
+-             ! call debug_eh
+-             ! EHR]
++             CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
++                rhoe,psi,taup,velp,taui,fion,ifcalc,irec,.TRUE.,.FALSE.)
+           ENDIF
+           IF (cntl%tddft) THEN
+              CALL lr_tddft(c0(:,:,1),c1,c2(:,:,1),sc0,rhoe,psi,taup,fion,eigv,&
+@@ -1170,14 +1236,17 @@
+        ! SUBTRACT CENTER OF MASS VELOCITY
+        IF (paral%io_parent.AND.comvl%subcom) CALL comvel(velp,vcmio,.FALSE.)
+ 
+-       ! SECOND HALF OF GLE EVOLUTION
+-       CALL gle_step
++       ! thermostats only if 1) standard dynamics 2) larger MTS step
++       if ( .not.cntl%use_mts .or. mts_large_step ) then
++          ! SECOND HALF OF GLE EVOLUTION
++          CALL gle_step
+ 
+-       ! UPDATE NOSE THERMOSTATS
+-       CALL noseup(velp,c2,nstate,ipwalk)
+-       CALL berendsen(velp,c2,nstate,scr,0.0_real_8,0.0_real_8)
+-       ! ANNEALING
+-       CALL anneal(velp,c2,nstate,scr)
++          ! UPDATE NOSE THERMOSTATS
++          CALL noseup(velp,c2,nstate,ipwalk)
++          CALL berendsen(velp,c2,nstate,scr,0.0_real_8,0.0_real_8)
++          ! ANNEALING
++          CALL anneal(velp,c2,nstate,scr)
++       endif
+        IF (paral%io_parent) THEN
+           CALL ekinpp(ekinp,velp)
+           IF (lmeta%lextlagrange.AND. ltcglobal) THEN
+@@ -1515,6 +1584,21 @@
+     IF (cntl%textrap) DEALLOCATE(cold,STAT=ierr)
+     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+          __LINE__,__FILE__)
++    if (cntl%use_mts) then
++       deallocate(fion_high,stat=ierr)
++       if(ierr/=0) call stopgm(proceduren,'deallocation problem: fion_high',&
++          __LINE__,__FILE__)
++       if (mts_pure_dft) then
++          deallocate(c0_high,stat=ierr)
++          if(ierr/=0) call stopgm(proceduren,'deallocation problem: c0_high',&
++             __LINE__,__FILE__)
++          if (cntl%textrap) then 
++             deallocate(cold_high,stat=ierr)
++             if(ierr/=0) call stopgm(proceduren,'deallocation problem: cold_high',&
++                __LINE__,__FILE__)
++          end if
++       end if
++    endif 
+     IF (comvl%tsubrot) DEALLOCATE(tauio,STAT=ierr)
+     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+          __LINE__,__FILE__)
+@@ -1603,6 +1687,138 @@
+     CALL tihalt(procedureN,isub)
+     ! ==--------------------------------------------------------------==
+   END SUBROUTINE mddiag
++
++
++  ! Purpose: returns effective ionic forces in MTS algorithm
++  !      The forces are either from the low level or from a 
++  !      combination of high and low levels.
++  !
++  ! Author: Pablo Baudin
++  ! Date: May 2018
++  subroutine get_mts_forces(large_step,initialization,n_inner_steps, n_large_steps,&
++        mts_pure_dft,fion_high,c0_high,cold_high,nnow_high,numcold_high,infi,&
++        nstate,c0,c2,cr,csc0,cscr,vpp,eigv,&
++        rhoe,psi,tau0,velp,taui,fion,ifcalc,irec,tfor,tinfo)
++
++     implicit none
++
++     logical, intent(in) :: large_step, initialization, mts_pure_dft
++     integer, intent(inout) :: n_inner_steps
++     integer, intent(in) :: n_large_steps
++     logical :: tfor, tinfo
++     integer :: nnow_high, numcold_high
++     integer :: infi, nstate
++     integer :: ifcalc, irec(:)
++     real(real_8), allocatable :: fion_high(:,:,:)
++     real(real_8) :: vpp(ncpw%ngw), eigv(*), rhoe(:,:)
++     real(real_8) :: tau0(:,:,:), velp(:,:,:), taui(:,:,:), fion(:,:,:)
++     complex(real_8), allocatable :: c0_high(:,:,:), cold_high(:,:,:,:)
++     complex(real_8) :: c0(:,:,:), c2(nkpt%ngwk,nstate), cr(*)
++     complex(real_8) :: csc0(nkpt%ngwk,nstate), cscr(*)
++     complex(real_8) :: psi(:,:)
++
++     character(*), parameter :: proceduren = 'get_mts_forces'
++     character(len=100) :: title
++     integer :: i, ia, is, x, N
++
++
++     ! GET LOW LEVEL FORCES
++     if (paral%io_parent) write(6,'(1x,3a)') 'MTS: LOW LEVEL FORCES: ', &
++        mts%low_level, mts%low_dft_func
++     select case(mts%low_level)
++     case('EXTERNAL')
++        call get_external_forces('EXT_LOW_FORCES', tau0, fion)
++
++     case('DFT')
++        if (initialization .and. mts_pure_dft) then
++           ! copy wf for extrapolation 
++           call dcopy(2*size(c0,1)*size(c0,2)*size(c0,3),c0,1,c0_high,1)
++        end if
++
++        call set_mts_functional('LOW')
++
++        call forces_diag(nstate,c0,c2,cr,csc0,cscr,vpp,eigv,&
++           rhoe,psi,tau0,velp,taui,fion,ifcalc,irec,tfor,tinfo)
++
++     case default
++        if(paral%io_parent) print *, 'Low level forces not available with', mts%low_level
++        call stopgm(proceduren,'wrong option for high level forces',&
++           __LINE__,__FILE__)
++
++     end select
++
++     ! print low level forces to file
++     if (mts%print_forces) then
++        write(title,'(1x,a,i10,10x,a,i10)') 'STEP:',iteropt%nfi,'N_INNER_STEPS:',n_inner_steps
++        call print_mts_forces(fion, title, 'LOW')
++     end if
++
++     if (large_step) then
++        ! GET HIGH LEVEL FORCES
++        if (paral%io_parent) write(6,'(1x,3a)') 'MTS: HIGH LEVEL FORCES: ', &
++           mts%high_level, mts%high_dft_func
++        select case(mts%high_level)
++        case('EXTERNAL')
++           call get_external_forces('EXT_HIGH_FORCES', tau0, fion_high)
++
++        case('DFT')
++
++           call set_mts_functional('HIGH')
++
++           if (mts_pure_dft) then
++
++              ! wf extrapolation
++              if (.not.initialization .and. cntl%textrap) then
++                 call extrapwf(infi,c0_high,cscr,cold_high,nnow_high,numcold_high,nstate,cnti%mextra)
++              end if
++
++              ! get forces
++              call forces_diag(nstate,c0_high,c2,cr,csc0,cscr,vpp,eigv,&
++                 rhoe,psi,tau0,velp,taui,fion_high,ifcalc,irec,tfor,tinfo)
++           else
++
++              ! In this case the wf extrap. is done in the main (outside) routine
++              call forces_diag(nstate,c0,c2,cr,csc0,cscr,vpp,eigv,&
++                 rhoe,psi,tau0,velp,taui,fion_high,ifcalc,irec,tfor,tinfo)
++           end if
++
++        case default
++           if(paral%io_parent) print *, 'High level forces not available with', mts%high_level
++           call stopgm(proceduren,'wrong option for high level forces',&
++              __LINE__,__FILE__)
++
++        end select
++
++        ! print high level forces to file
++        if (mts%print_forces) then
++           write(title,'(1x,a,i10,10x,a,i10)') 'STEP:',iteropt%nfi,'N_LARGE_STEPS:',n_large_steps
++           call print_mts_forces(fion_high, title, 'HIGH')
++        end if
++
++        ! get effective forces from difference between high and low level
++        !
++        !     F = F_low + (F_high - F_low) * N 
++        !     F = F_high * N - F_low * (N - 1)
++        !     
++        !     where N is the MTS time-step factor
++        ! 
++        N = mts%timestep_factor
++        do i=1,ions1%nat
++           ia=iatpt(1,i)
++           is=iatpt(2,i)
++           do x=1,3
++              fion(x,ia,is) = fion_high(x,ia,is) * N - fion(x,ia,is) * (N - 1)
++           end do
++        end do
++
++        ! reinitialize inner counter
++        n_inner_steps = 0
++
++     end if
++
++  end subroutine get_mts_forces
++
++
+   ! ==================================================================
+   SUBROUTINE give_scr_mddiag(lmddiag,tag)
+     ! ==--------------------------------------------------------------==
+@@ -1647,7 +1863,7 @@
+ END MODULE md_driver
+ 
+ ! ==================================================================
+-SUBROUTINE extrapwf(infi,c0,gam,chist,nstate,m)
++SUBROUTINE extrapwf(infi,c0,gam,cold,nnow,numcold,nstate,m)
+   USE dotp_utils, ONLY: dotp
+   USE kinds, ONLY: real_4, real_8, int_1, int_2, int_4, int_8
+   USE error_handling, ONLY: stopgm
+@@ -1660,18 +1876,15 @@
+   USE spin, ONLY : spin_mod
+   USE elct, ONLY : crge
+   USE pslo, ONLY : pslo_com
+-  USE mm_extrap, ONLY : cold, numcold, nnow
+   USE legendre_p_utils, ONLY : d_binom
+   USE ovlap_utils, ONLY : ovlap
+   USE rotate_utils, ONLY: rotate
+   USE zeroing_utils,                   ONLY: zeroing
+   IMPLICIT NONE
+-  INTEGER                                    :: infi
+-  COMPLEX(real_8)                            :: chist(*)
+-  INTEGER                                    :: nstate
++  INTEGER                                    :: nstate, infi, nnow, numcold, m
++  COMPLEX(real_8)                            :: cold(nkpt%ngwk,nstate,nkpt%nkpnt,*)
+   REAL(real_8)                               :: gam(nstate,*)
+   COMPLEX(real_8)                            :: c0(nkpt%ngwk,nstate,*)
+-  INTEGER                                    :: m
+ 
+   INTEGER                                    :: i, ik, isub, ma, n1, nm
+   REAL(real_8)                               :: fa, rsum, scalef
+@@ -1681,10 +1894,12 @@
+        'SUPPORTED FOR VANDERBILT PSEUDOPOTENTIALS',& 
+        __LINE__,__FILE__)
+   CALL tiset('  EXTRAPWF',isub)
+-  nnow=nnow+1
+-  nnow=MOD(nnow-1,m)+1
++
++  nnow=MOD(nnow,m)+1
+   CALL dcopy(2*nkpt%ngwk*nstate*nkpt%nkpnt,c0,1,cold(1,1,1,nnow),1)
++
+   numcold=MIN(numcold+1,m)
++
+   ma=numcold
+   IF (ma.GT.1) THEN
+      CALL zeroing(c0(:,:,1:nkpt%nkpnt))!,nkpt%ngwk*nstate*nkpt%nkpnt)
+Index: src/control_def_utils.mod.F90
+===================================================================
+--- src/control_def_utils.mod.F90	(revision 4597)
++++ src/control_def_utils.mod.F90	(revision 4598)
+@@ -114,6 +114,7 @@
+     cntl%tqmmech=.FALSE.
+     cntl%tsampl=.FALSE.
+     cntl%proper=.FALSE.
++    cntl%use_mts=.false.
+     restart1%restart=.FALSE.
+     cntl%cnstmd=.TRUE.
+     cntl%gaudyn=.FALSE.
+Index: src/npt_md_utils.mod.F90
+===================================================================
+--- src/npt_md_utils.mod.F90	(revision 4597)
++++ src/npt_md_utils.mod.F90	(revision 4598)
+@@ -50,7 +50,7 @@
+   USE metr,                            ONLY: eps,&
+                                              metr_com,&
+                                              veps
+-  USE mm_extrap,                       ONLY: cold
++  USE mm_extrap,                       ONLY: cold, nnow, numcold
+   USE mp_interface,                    ONLY: mp_bcast
+   USE newcell_utils,                   ONLY: give_scr_newcell,&
+                                              newcell
+@@ -942,7 +942,7 @@
+        ! CALCULATE THE FORCES
+        IF (cntl%textrap) THEN
+           ! Extrapolate wavefunctions
+-          CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra)
++          CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
+        ENDIF
+        ifcalc=0
+        CALL forces_diag(nstate,c0,c2,cm,sc0,cm(nx:),vpp,eigv,&
+Index: src/setsys_utils.mod.F90
+===================================================================
+--- src/setsys_utils.mod.F90	(revision 4597)
++++ src/setsys_utils.mod.F90	(revision 4598)
+@@ -60,8 +60,7 @@
+                                              mm_go_qm,&
+                                              mmdim,&
+                                              cpsp
+-  USE mm_extrap,                       ONLY: nnow,&
+-                                             numcold
++  USE mm_extrap,                       ONLY: nnow, numcold
+   USE mm_input,                        ONLY: lqmmm
+   USE mp_interface,                    ONLY: mp_bcast
+   USE multtb_utils,                    ONLY: multtb
+Index: src/mdfile_utils.mod.F90
+===================================================================
+--- src/mdfile_utils.mod.F90	(revision 4597)
++++ src/mdfile_utils.mod.F90	(revision 4598)
+@@ -54,7 +54,7 @@
+   USE lr_tddft_utils,                  ONLY: give_scr_lr_tddft,&
+                                              lr_tddft
+   USE machine,                         ONLY: m_walltime
+-  USE mm_extrap,                       ONLY: cold
++  USE mm_extrap,                       ONLY: cold, nnow, numcold
+   USE moverho_utils,                   ONLY: give_scr_moverho,&
+                                              moverho
+   USE mp_interface,                    ONLY: mp_bcast,&
+@@ -512,7 +512,7 @@
+        ropt_mod%calste=cntl%tpres.AND.MOD(iteropt%nfi,cnti%npres).EQ.0
+        IF (cntl%textrap) THEN
+           ! Extrapolate wavefunctions
+-          CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra)
++          CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
+        ENDIF
+        IF (cntl%tlanc) nx=1
+        IF (cntl%tdavi) nx=cnti%ndavv*nkpt%nkpnt+1
+Index: src/mts_utils.mod.F90
+===================================================================
+--- src/mts_utils.mod.F90	(revision 0)
++++ src/mts_utils.mod.F90	(revision 4598)
+@@ -0,0 +1,280 @@
++module mts_utils
++
++   use kinds, only: real_8
++   use parac, only: paral, parai
++   use system, only: cntl, cnti, cntr
++   use cp_xc_utils, only: cp_xc, cp_xc_functional, cp_xc_mts_low_func, cp_xc_functional_env, cp_xc_mts_low_func_env
++   use error_handling, only: stopgm
++   use inscan_utils, only: inscan
++   use readsr_utils, only: keyword_contains, input_string_len, xstring
++   use mp_interface, only: mp_bcast
++  USE func,                            ONLY: func1,&
++                                             func2,&
++                                             func3
++
++#include "sizeof.h"
++
++   implicit none
++
++   type :: mts_t
++      integer :: timestep_factor
++      character(len=10) :: low_level ! string defining the model for high level forces 
++      character(len=10) :: high_level ! string defining the model for low level forces  
++      character(len=50) :: low_dft_func
++      character(len=50) :: high_dft_func
++      logical :: print_forces
++   end type mts_t
++
++   type (mts_t),public ::  mts
++
++   public :: read_mts_input
++   public :: set_mts_functional
++
++   integer, parameter :: output_unit = 6
++
++contains
++
++
++   ! Purpose: Reads the section &MTS ... &END from file with unit IUNIT
++   ! Author: Pablo Baudin (based on dftin routine)
++   ! Date: May 2018
++   subroutine read_mts_input
++      ! format:
++      !
++      ! &MTS
++      !    TIMESTEP_FACTOR
++      !       mts%timestep_factor
++      !    PRINT_FORCES [OFF]
++      !    LOW_LEVEL_FORCES {DFT, EXTERNAL}
++      !    HIGH_LEVEL_FORCES {DFT, EXTERNAL}
++      ! &END
++      !
++      CHARACTER(*), PARAMETER                  :: procedureN = 'read_mts_input'
++      INTEGER, PARAMETER                       :: max_unknown_lines = 30 
++
++      CHARACTER(len=input_string_len)          :: line, previous_line
++      CHARACTER(len=input_string_len)          :: error_message, unknown(max_unknown_lines) 
++      INTEGER                                  :: i, first, last, ierr, iunit, nbr_unknown_lines
++      LOGICAL                                  :: something_went_wrong, go_on_reading
++
++      !
++      ! The read loop is only accessed by the io_parent, therefore, the
++      ! io_parent checks within the loop have been removed (redundancy).
++      !
++      IF (paral%io_parent) THEN
++         iunit = 5
++         !
++         ! Variables for reading
++         !
++         nbr_unknown_lines     = 0
++         line                  = ' '
++         previous_line         = ' '
++         error_message         = ' '
++         go_on_reading         = .true.
++         something_went_wrong  = .false.
++         !
++         ! Defaults
++         !
++         mts%timestep_factor = 1
++         mts%low_level = 'DFT'
++         mts%high_level = 'DFT'
++         mts%print_forces = .false.
++         mts%low_dft_func = ' '
++         mts%high_dft_func = ' '
++         !
++         ! If the MTS section is not there, we simply move on.
++         !
++         ierr = inscan(iunit,'&MTS')
++         !
++         IF (ierr == 0) THEN
++            !
++            ! Check that MTS is actually switched on
++            if (.not. cntl%use_mts) then
++               go_on_reading = .false.
++               write(output_unit,*) ' WARNING: MTS section will be ignored:', &
++                  ' USE_MTS keyword missing in CPMD section!'
++            end if
++            !
++            ! Main loop
++            !
++            DO WHILE(go_on_reading)
++               !
++               ! Read a line and store the old one
++               !
++               previous_line = line
++               READ(iunit,'(A80)',iostat=ierr) line
++               IF (ierr /= 0) THEN
++                  something_went_wrong = .TRUE.
++                  go_on_reading        = .FALSE.
++
++               ELSE IF (keyword_contains(line,'&END')) THEN
++                  go_on_reading = .FALSE.
++
++               ELSE IF ( keyword_contains(line,'TIMESTEP_FACTOR') ) THEN
++                  READ(iunit,*,iostat=ierr) mts%timestep_factor
++                  if (ierr /= 0) then
++                     something_went_wrong = .TRUE.
++                     go_on_reading = .FALSE.
++                     error_message = 'Could not read TIMESTEP_FACTOR'
++                  end if
++
++               ELSE IF ( keyword_contains(line,'PRINT_FORCES') ) THEN
++                  IF ( keyword_contains(line,'OFF') ) THEN
++                     mts%print_forces = .false.
++                  ELSE
++                     mts%print_forces = .true.
++                  ENDIF
++
++               ELSE IF ( keyword_contains(line,'LOW_LEVEL_FORCES') ) THEN
++
++                  mts%low_level = read_mts_input_level(line)
++
++                  if (mts%low_level == ' ') then
++                     something_went_wrong = .TRUE.
++                     go_on_reading = .FALSE.
++                     error_message = 'Unknown MTS model for low level forces'
++                  end if
++
++               ELSE IF ( keyword_contains(line,'HIGH_LEVEL_FORCES') ) THEN
++
++                  mts%high_level = read_mts_input_level(line)
++
++                  if (mts%high_level == ' ') then
++                     something_went_wrong = .TRUE.
++                     go_on_reading = .FALSE.
++                     error_message = 'Unknown MTS model for high level forces'
++                  end if
++
++               ELSE
++                  ! Unknown Keyword. store and continue
++                  IF (' ' /= line) THEN
++                     IF (nbr_unknown_lines < max_unknown_lines) THEN
++                        nbr_unknown_lines = nbr_unknown_lines+1
++                        unknown(nbr_unknown_lines) = line
++                     ELSE
++                        DO i=1,max_unknown_lines-1
++                           unknown(i) = unknown(i+1)
++                        ENDDO
++                        unknown(nbr_unknown_lines) = line
++                     ENDIF
++                  ENDIF
++
++               ENDIF
++            END DO ! reading
++
++         ENDIF
++
++
++         ! print error message
++         IF (something_went_wrong) THEN
++            WRITE(output_unit,'(/,1X,64("!"))')
++            WRITE(output_unit,'(1X, A, 1X, A)') 'ERROR:', 'PROBLEM WHILE READING &MTS SECTION:' 
++            WRITE(output_unit,'(8X, A)') TRIM(ADJUSTL(error_message))
++            IF (line /= ' ' .or. previous_line /= ' ') THEN
++               WRITE(output_unit,'(8X, A)') 'THE LAST TWO LINES READ WITHIN THE SECTION WERE:'
++               WRITE(output_unit,'(/,1X, A)') TRIM(ADJUSTL(previous_line))
++               WRITE(output_unit,'(1X, A)') TRIM(ADJUSTL(line))
++            END IF
++            WRITE(output_unit,'(1X,64("!"))')
++            CALL stopgm(procedureN,'Error while reading &MTS section, cf. output file',& 
++               __LINE__,__FILE__)
++         ENDIF
++
++
++         ! print list of unknown keywords
++         IF (nbr_unknown_lines /= 0) THEN
++            WRITE(output_unit,'(/,1X,64("="))')
++            WRITE(output_unit,'(1X,A,14X,A,15X,A)') '= ','UNKNOWN KEYWORDS IN SECTION &MTS','='
++            DO i=1,nbr_unknown_lines
++               previous_line = unknown(i)
++               CALL xstring(previous_line,first,last)
++               WRITE(output_unit,'(A,A)') ' = ',previous_line(first:last)
++            ENDDO
++            WRITE(output_unit,'(1X,64("="),/)')
++         ENDIF
++
++
++         ! check for consitency problems
++         IF(cntl%tdipd.AND.(mod(cnti%npdip,mts%timestep_factor).NE.0)) THEN
++            WRITE(6,'(1x,A,i5)') 'WARNING MTS: CHANGING DIPOLE SAMPLE VALUE:',cnti%npdip
++            cnti%npdip=mts%timestep_factor*(cnti%npdip/mts%timestep_factor+1)
++            WRITE(6,'(5x,A,T50,I10,A6)') 'NOW STORE DIPOLE MOMENTS EVERY ',cnti%npdip,' STEPS'
++         ENDIF
++
++
++         ! print MTS input information to CPMD output
++         if (cntl%use_mts) then
++            write(output_unit,'(/,1x,a)') 'MULTIPLE TIME STEP SCHEME:'
++            write(output_unit,'(4x,a,t40,i4)') 'TIMESTEP FACTOR:', mts%timestep_factor
++            write(output_unit,'(4x,a,t40,a)')  'LOW LEVEL FROM :', mts%low_level
++            write(output_unit,'(4x,a,t40,a)')  'HIGH LEVEL FROM:', mts%high_level
++            if (mts%print_forces) then
++               write(output_unit,'(4x,a)')  'HIGH AND LOW LEVEL FORCES WILL BE PRINTED TO FILE'
++            end if
++         end if
++
++
++      END IF ! select only master node
++
++      CALL mp_bcast(cnti%npdip,parai%io_source,parai%cp_grp)
++      CALL mp_bcast_byte(mts, size_in_bytes_of(mts),parai%io_source,parai%cp_grp)
++
++   end subroutine read_mts_input
++
++
++   function read_mts_input_level(line) result(level)
++      implicit none
++      character(len=input_string_len), intent(in) :: line
++      character(len=10) :: level 
++
++      ! This is the place to add new options for the calculation 
++      ! of the forces in the MTS scheme
++      if (keyword_contains(line,'DFT')) then
++         level = 'DFT'
++      else if (keyword_contains(line,'EXTERNAL')) then
++         level = 'EXTERNAL'
++      else
++         level = ' '
++      end if
++      
++   end function read_mts_input_level
++
++   ! Purpose: set functional to be high or low level depending on input
++   ! Author: Pablo Baudin
++   ! Date: May 2018
++   subroutine set_mts_functional(level)
++      implicit none
++      character(len=*), intent(in) :: level
++      character(len=*), parameter :: proceduren = 'set_mts_functional'
++
++      if (cntl%use_xc_driver) then
++
++         select case(level) 
++         case('HIGH')
++            ! set current functional to the high level one
++            cp_xc => cp_xc_functional
++
++         case('LOW')
++            ! set current functional to the low level one
++            cp_xc => cp_xc_mts_low_func
++
++         case default
++            call stopgm(proceduren,'Invalid level request options are HIGH or LOW',&
++               __LINE__,__FILE__)
++
++         end select
++
++         CALL cp_xc%get( tgc=cntl%tgc, tgcx=cntl%tgcx, tgcc=cntl%tgcc, ttau=cntl%ttau, &
++            thybrid=cntl%thybrid, mhfx=func1%mhfx, phfx=func3%phfx, &
++            msrx=func1%msrx, srxa=func2%srxa, cam_alpha=func2%cam_alpha, cam_beta=func2%cam_beta )
++      else
++
++         call stopgm(procedureN,' MTS: functionals have to be set up with XC_DRIVER',&
++            __LINE__,__FILE__)
++
++      end if
++
++   end subroutine set_mts_functional
++
++
++end module mts_utils
+Index: src/SOURCES
+===================================================================
+--- src/SOURCES	(revision 4597)
++++ src/SOURCES	(revision 4598)
+@@ -266,4 +266,4 @@
+            dcacp_utils.mod.F90 \
+            bicanonicalCpmd.mod.F90 bicanonicalConfig.mod.F90 bicanonicalInputReader.mod.F90 bicanonicalCalculationConfig.mod.F90 bicanonicalCalculation.mod.F90 \
+           pi_prpt_utils.mod.F90 pi_npt_cpmd_utils.mod.F90 pi_stress_utils.mod.F90 pi_npt_bomd_utils.mod.F90 \
+-          nvml_interfaces.mod.F90 nvml_types.mod.F90 nvml_utils.mod.F90
++          nvml_interfaces.mod.F90 nvml_types.mod.F90 nvml_utils.mod.F90 mts_utils.mod.F90 interface_utils.mod.F90
+Index: src/dftin_utils.mod.F90
+===================================================================
+--- src/dftin_utils.mod.F90	(revision 4597)
++++ src/dftin_utils.mod.F90	(revision 4598)
+@@ -7,6 +7,8 @@
+   USE cp_gga_correlation_utils,        ONLY: cp_gga_c_param
+   USE cp_gga_exchange_utils,           ONLY: cp_gga_x_param
+   USE cp_xc_utils,                     ONLY: cp_xc,&
++                                             cp_xc_mts_low_func_env,&
++                                             cp_xc_mts_low_func,&
+                                              cp_xc_functional_env,&
+                                              cp_xc_functional,&
+                                              cp_xc_kernel,&
+@@ -58,6 +60,8 @@
+   USE vdwcmod,                         ONLY: empvdwc
+   USE wann,                            ONLY: wannl
+   USE zeroing_utils,                   ONLY: zeroing
++  USE mts_utils,                       ONLY: mts
++
+ #include "sizeof.h"
+ 
+   IMPLICIT NONE
+@@ -94,6 +98,8 @@
+     ! ==                MODX3LYP,B1LYP,OLDB1LYP,MODB1LYP,             ==
+     ! ==                PBE0,PBE1W,PBES,REVPBE0}                      ==
+     ! ==    FUNCTIONAL {TPSS}                                         ==
++    ! ==    MTS_HIGH_FUNC (alias for FUNCTIONAL)                      ==
++    ! ==    MTS_LOW_FUNC (same as for FUNCTIONAL)                     ==
+     ! ==    HARTREE                                                   ==
+     ! ==    HARTREE-FOCK                                              ==
+     ! ==    ACM0                                                      ==
+@@ -131,19 +137,24 @@
+     CHARACTER(len=input_string_len)          :: line, previous_line, &
+                                                 next_words, error_message, &
+                                                 xc_functional, xc_kernel, &
+-                                                unknown(max_unknown_lines)
++                                                xc_mts_low_func, unknown(max_unknown_lines) 
+     INTEGER                                  :: ia, ie
+     INTEGER                                  :: i, first, last, ierr, iunit, nbr_unknown_lines, &
+                                                 j, tr_c, tr_gc, tr_gx, tr_x
+     INTEGER                                  :: cp_xc_functional_n_scale_control, cp_xc_functional_n_lib_control
+     INTEGER                                  :: cp_xc_kernel_n_scale_control, cp_xc_kernel_n_lib_control
++    INTEGER                                  :: cp_xc_mts_low_func_n_scale_control, cp_xc_mts_low_func_n_lib_control
+     LOGICAL                                  :: cp_xc_functional_has_scales, cp_xc_functional_has_library
+     LOGICAL                                  :: cp_xc_kernel_has_scales, cp_xc_kernel_has_library
+-    LOGICAL :: erread, force_cpfunc, &
+-      force_div_analytical, force_div_numerical, force_libxc, force_new_hfx, &
+-      overwrite_pcgc, overwrite_pclda, overwrite_phfx, overwrite_pxgc, overwrite_pxlda, &
+-      tr_code, treff, something_went_wrong, go_on_reading, get_functional, get_kernel, functional_is_defined, &
+-      set_via_gc_or_sx, set_via_acm_keyword
++    LOGICAL                                  :: cp_xc_mts_low_func_has_scales, cp_xc_mts_low_func_has_library
++    LOGICAL                                  :: erread, force_cpfunc, force_div_analytical
++    LOGICAL                                  :: force_div_numerical, force_libxc, force_new_hfx
++    LOGICAL                                  :: overwrite_pcgc, overwrite_pclda, overwrite_phfx 
++    LOGICAL                                  :: overwrite_pxgc, overwrite_pxlda
++    LOGICAL                                  :: tr_code, treff, something_went_wrong, go_on_reading
++    LOGICAL                                  :: get_functional, get_kernel, get_mts_low_func
++    LOGICAL                                  :: functional_is_defined
++    LOGICAL                                  :: set_via_gc_or_sx, set_via_acm_keyword, need_dft
+     REAL(real_8)                             :: a1par, a2par, a3par, &
+                                                 new_pcgc, new_pclda, &
+                                                 new_phfx, new_pxgc, &
+@@ -168,6 +179,10 @@
+        cp_xc_kernel_has_library     = .FALSE.
+        cp_xc_kernel_n_scale_control = 0
+        cp_xc_kernel_n_lib_control   = 0
++       cp_xc_mts_low_func_has_scales      = .FALSE.
++       cp_xc_mts_low_func_has_library     = .FALSE.
++       cp_xc_mts_low_func_n_scale_control = 0
++       cp_xc_mts_low_func_n_lib_control   = 0
+        force_div_analytical  = .FALSE.
+        force_div_numerical   = .FALSE.
+        force_cpfunc          = .FALSE.
+@@ -177,6 +192,8 @@
+        functional_is_defined = .FALSE.
+        xc_kernel             = ' '
+        get_kernel            = .FALSE.
++       xc_mts_low_func       = ' '
++       get_mts_low_func      = .FALSE.
+        set_via_gc_or_sx      = .FALSE.
+        set_via_acm_keyword   = .FALSE.
+        line                  = ' '
+@@ -266,9 +283,12 @@
+        tabx%rmaxxc=2.0_real_8
+        tabx%rmaxbx=100.0_real_8
+        !
++       need_dft = .true.
++       ! dft section is not always needed with the MTS scheme
++       if (cntl%use_mts) need_dft = mts%low_level=='DFT' .or. mts%high_level=='DFT'
++       !
+        ! If the DFT section is not there, we simply move on.
+        !
+-       !
+        ierr = inscan(iunit,'&DFT')
+        !
+        IF (ierr == 0) THEN
+@@ -386,6 +406,34 @@
+                 cp_xc_kernel_n_lib_control = i-1
+                 cp_xc_kernel_has_library   = .TRUE.
+ 
++             ELSEIF (keyword_contains(line,'MTS_LOW_FUNC_LIBRARY')) THEN
++                CALL xstring(line,first,last)
++                next_words = line(last+1:)
++                i = 1
++                mts_low_func_library_loop: DO
++                   CALL xstring(next_words,first,last)
++                   IF (last - first < 0) EXIT mts_low_func_library_loop
++                   IF (i > cp_xc_max_nbr_funcs) CALL stopgm(procedureN,' LIBRARY: Request exceeds cp_xc_max_nbr_funcs, &
++                                                                                  &increase its value in cp_xc_utils',&
++                                                             __LINE__,__FILE__)
++                   IF (keyword_contains(next_words(first:last),'CP',alias='INTERNAL')) THEN
++                      IF (force_libxc) CALL stopgm(procedureN,' You may not choose a CP MTS low functional when forcing libxc ',&
++                           __LINE__,__FILE__)
++                      cp_xc_mts_low_func_env%via_libxc(i) = .FALSE.
++                   ELSEIF (keyword_contains(next_words(first:last),'LXC',alias='LIBXC')) THEN
++                      IF (force_cpfunc) CALL stopgm(procedureN,' You may not choose a libxc MTS low functional when forcing CP/INTERNAL ',&
++                           __LINE__,__FILE__)
++                      cp_xc_mts_low_func_env%via_libxc(i) = .TRUE.
++                   ELSE
++                      CALL stopgm(procedureN,' Unknown xc library (CP (INTERNAL) or LIBXC): '//TRIM(ADJUSTL(next_words(ia:ie))) ,&
++                           __LINE__,__FILE__)
++                   ENDIF
++                   next_words = next_words(last+1:)
++                   i = i+1
++                ENDDO mts_low_func_library_loop
++                cp_xc_mts_low_func_n_lib_control = i-1
++                cp_xc_mts_low_func_has_library   = .TRUE.
++
+              ELSEIF (keyword_contains(line,'SCALES',alias='SCALE',but_not='HFX')) THEN
+                 CALL xstring(line,first,last)
+                 next_words = line(last+1:)
+@@ -422,6 +470,24 @@
+                 cp_xc_kernel_n_scale_control = i-1
+                 cp_xc_kernel_has_scales     = .TRUE.
+ 
++             ELSEIF (keyword_contains(line,'MTS_LOW_FUNC_SCALES',alias='MTS_LOW_FUNC_SCALE',but_not='HFX')) THEN
++                CALL xstring(line,first,last)
++                next_words = line(last+1:)
++                i=1
++                mts_low_func_scale_loop: DO 
++                   erread=.FALSE.
++                   CALL readsr(next_words,first,last,scalei,erread)
++                   IF (erread) EXIT mts_low_func_scale_loop
++                   IF (i > cp_xc_max_nbr_funcs) CALL stopgm(procedureN,' SCALES: Request exceeds cp_xc_max_nbr_funcs, &
++                                                                         &increase its value in cp_xc_utils',&
++                                                             __LINE__,__FILE__)
++                   cp_xc_mts_low_func_env%scales(i) = scalei
++                   first = last
++                   i = i+1
++                ENDDO mts_low_func_scale_loop
++                cp_xc_mts_low_func_n_scale_control = i-1
++                cp_xc_mts_low_func_has_scales     = .TRUE.
++
+              ELSEIF (keyword_contains(line,'COMPATIBILITY',alias='OLD_DEFINITIONS')) THEN
+                 cp_xc_functional_env%use_compatibility_mode = .TRUE.
+              ELSEIF(keyword_contains(line,'ANALYTICAL_DIV')) THEN
+@@ -614,6 +680,14 @@
+                 cp_xc_kernel_env%hfx_constant   = cp_xc_functional_env%hfx_constant  
+                 cp_xc_kernel_env%hfx_attenuated = cp_xc_functional_env%hfx_attenuated
+                 !
++                cp_xc_mts_low_func_env%overwrite_hfx  = cp_xc_functional_env%overwrite_hfx     
++                cp_xc_mts_low_func_env%get_hfx        = cp_xc_functional_env%get_hfx           
++                cp_xc_mts_low_func_env%hfx_operator   = cp_xc_functional_env%hfx_operator      
++                cp_xc_mts_low_func_env%get_CAM_GGA    = cp_xc_functional_env%get_CAM_GGA       
++                cp_xc_mts_low_func_env%hfx_screening  = cp_xc_functional_env%hfx_screening 
++                cp_xc_mts_low_func_env%hfx_constant   = cp_xc_functional_env%hfx_constant  
++                cp_xc_mts_low_func_env%hfx_attenuated = cp_xc_functional_env%hfx_attenuated
++                !
+                 ! Screening for HFX _ONLY_
+              ELSEIF(keyword_contains(line,'SCREENED',and='EXCHANGE')) THEN
+                 ! ..Short range exact exchange
+@@ -664,6 +738,7 @@
+                 func2%srxa      = cp_xc_functional_env%hfx_screening
+                 func2%cam_alpha = cp_xc_functional_env%hfx_constant
+                 func2%cam_beta  = cp_xc_functional_env%hfx_attenuated
++                !
+                 cp_xc_kernel_env%overwrite_hfx  = cp_xc_functional_env%overwrite_hfx     
+                 cp_xc_kernel_env%get_hfx        = cp_xc_functional_env%get_hfx           
+                 cp_xc_kernel_env%hfx_operator   = cp_xc_functional_env%hfx_operator      
+@@ -671,6 +746,14 @@
+                 cp_xc_kernel_env%hfx_screening  = cp_xc_functional_env%hfx_screening 
+                 cp_xc_kernel_env%hfx_constant   = cp_xc_functional_env%hfx_constant  
+                 cp_xc_kernel_env%hfx_attenuated = cp_xc_functional_env%hfx_attenuated
++                !
++                cp_xc_mts_low_func_env%overwrite_hfx  = cp_xc_functional_env%overwrite_hfx     
++                cp_xc_mts_low_func_env%get_hfx        = cp_xc_functional_env%get_hfx           
++                cp_xc_mts_low_func_env%hfx_operator   = cp_xc_functional_env%hfx_operator      
++                cp_xc_mts_low_func_env%get_CAM_GGA    = cp_xc_functional_env%get_CAM_GGA       
++                cp_xc_mts_low_func_env%hfx_screening  = cp_xc_functional_env%hfx_screening 
++                cp_xc_mts_low_func_env%hfx_constant   = cp_xc_functional_env%hfx_constant  
++                cp_xc_mts_low_func_env%hfx_attenuated = cp_xc_functional_env%hfx_attenuated
+              ELSEIF(keyword_contains(line,'BECKE',and='BETA')) THEN
+                 ! ..Parameter value for Becke exchange
+                 READ(iunit,*,iostat=ierr) func2%bbeta
+@@ -728,6 +811,17 @@
+                    something_went_wrong = .true.
+                    go_on_reading        = .false.
+                 ENDIF
++             ELSEIF (keyword_contains(line,'MTS_LOW_FUNC_HFX_SCALE',alias='MTS_LOW_FUNC_HFX_SCALES')) THEN
++                cp_xc_mts_low_func_env%overwrite_hfx = .TRUE.
++                cp_xc_mts_low_func_env%get_hfx       = .TRUE.
++                CALL xstring(line,first,last)
++                next_words = line(last+1:)
++                READ(next_words,*, iostat=ierr) cp_xc_mts_low_func_env%hfx_constant
++                IF (ierr /= 0) THEN
++                   error_message        = 'COULD NOT READ HFX SCALING VALUE'
++                   something_went_wrong = .true.
++                   go_on_reading        = .false.
++                ENDIF
+              ELSEIF (keyword_contains(line,'PHFX')) THEN
+                 ! ..For controlling only the amount of Hartree exchange
+                 cp_xc_functional_env%overwrite_hfx = .TRUE.
+@@ -811,10 +905,14 @@
+                 func3%pcgc   = 1.0_real_8-a3par
+                 func3%phfx   = a1par
+                 func1%mhfx   = mhfx_is_hfx
+-             ELSEIF (keyword_contains(line,'FUNCTIONAL')) THEN
++             ELSEIF (keyword_contains(line,'FUNCTIONAL',alias='MTS_HIGH_FUNC')) THEN
+                 functional_is_defined = .true.
+                 xc_functional  = line
+                 get_functional = .true.
++             ELSEIF (keyword_contains(line,'MTS_LOW_FUNC')) THEN
++                functional_is_defined = .true.
++                xc_mts_low_func  = line
++                get_mts_low_func = .true.
+              ELSEIF (keyword_contains(line,'REFUNCT')) THEN
+                 treff=.TRUE.
+                 tr_x=0
+@@ -997,7 +1095,7 @@
+              something_went_wrong = .true.
+              error_message        = 'XC_DRIVER: ACM HAS TO BE SET UP MANUALLY VIA KEYWORD "SCALES"'
+           END IF
+-       ELSE
++       ELSE IF (need_dft) then
+            something_went_wrong = .true.
+            error_message        = 'MISSING &DFT SECTION - SECTION MANDATORY'
+        ENDIF
+@@ -1020,7 +1118,15 @@
+        !
+        if (get_functional) CALL set_xc_functional(xc_functional)
+        if (get_kernel)     CALL set_xc_kernel(xc_kernel)
++       if (get_mts_low_func)  CALL set_xc_mts_low_func(xc_mts_low_func)
+ 
++       ! 
++       ! MTS: set names for high and low level functionals in mts structure
++       ! 
++       if (cntl%use_mts) then
++          if (mts%low_level=='DFT') mts%low_dft_func = xc_mts_low_func
++          if (mts%high_level=='DFT') mts%high_dft_func = xc_functional
++       end if
+        !
+        ! Check for conflicting options and do some variable magic
+        !
+@@ -1031,16 +1137,18 @@
+        !
+        IF (cntl%use_xc_driver) THEN
+ 
+-          ! Sanity check
+-          IF ((cp_xc_functional_has_scales) .and. &
+-              (cp_xc_functional_n_scale_control /= cp_xc_functional_env%n_funcs)) CALL stopgm(procedureN,'Number '&
+-              &//'of scaling values and functionals does not match',& 
+-              __LINE__,__FILE__)
+-          IF ((cp_xc_functional_has_library) .and. &
+-              (cp_xc_functional_n_lib_control /= cp_xc_functional_env%n_funcs)) CALL stopgm(procedureN,'Number ' &
+-              //'of library entries and functionals does not match',& 
+-              __LINE__,__FILE__)
+-          CALL cp_xc_functional_env%report( func2%salpha, cntr%gceps, output_unit )
++          ! Sanity checks
++          IF (cp_xc_functional_env%init) THEN
++             IF ((cp_xc_functional_has_scales) .and. &
++                (cp_xc_functional_n_scale_control /= cp_xc_functional_env%n_funcs)) CALL stopgm(procedureN,'Number '&
++                &//'of scaling values and functionals does not match',& 
++                __LINE__,__FILE__)
++             IF ((cp_xc_functional_has_library) .and. &
++                (cp_xc_functional_n_lib_control /= cp_xc_functional_env%n_funcs)) CALL stopgm(procedureN,'Number ' &
++                //'of library entries and functionals does not match',& 
++                __LINE__,__FILE__)
++             CALL cp_xc_functional_env%report( func2%salpha, cntr%gceps, output_unit )
++          ENDIF
+ 
+           IF (cp_xc_kernel_env%init) THEN
+              IF ((cp_xc_kernel_has_scales) .and. &
+@@ -1055,6 +1163,19 @@
+              CALL cp_xc_kernel_env%report( func2%salpha, cntr%gceps, output_unit ) 
+           ENDIF
+ 
++          IF (cp_xc_mts_low_func_env%init) THEN
++             IF ((cp_xc_mts_low_func_has_scales) .and. &
++                 (cp_xc_mts_low_func_n_scale_control /= cp_xc_mts_low_func_env%n_funcs)) CALL stopgm(procedureN,'Number '&
++                 &//'of scaling values and MTS low functionals does not match',& 
++                 __LINE__,__FILE__)
++             IF ((cp_xc_mts_low_func_has_library) .and. &
++                 (cp_xc_mts_low_func_n_lib_control /= cp_xc_mts_low_func_env%n_funcs)) CALL stopgm(procedureN,'Number ' &
++                 //'of library entries and MTS low functionals does not match',& 
++                 __LINE__,__FILE__)
++
++             CALL cp_xc_mts_low_func_env%report( func2%salpha, cntr%gceps, output_unit ) 
++          ENDIF
++
+        ELSE
+           CALL newcode_oldcode_report()
+        ENDIF
+@@ -1088,8 +1209,21 @@
+        IF (cp_xc_functional_env%init) THEN
+           CALL cp_xc_functional%create( cp_xc_functional_env )
+        ELSE
+-          CALL stopgm(procedureN,'cp_xc_functional_env has not been initialised',&
+-__LINE__,__FILE__)
++          IF (cntl%use_mts .and. mts%high_level/='DFT') THEN
++             !
++             ! If the functional environment is not set, we set functional = mts_low_func
++             !
++             IF (cp_xc_mts_low_func_env%init) THEN
++                CALL cp_xc_functional%create( cp_xc_mts_low_func_env )
++             ELSE
++                CALL stopgm(procedureN,'cp_xc_mts_low_func_env has not been initialised',&
++                   __LINE__,__FILE__)
++             ENDIF
++          ELSE
++
++             CALL stopgm(procedureN,'cp_xc_functional_env has not been initialised',&
++                __LINE__,__FILE__)
++          END IF
+        ENDIF
+        !
+        IF (cp_xc_kernel_env%init) THEN
+@@ -1101,6 +1235,15 @@
+           CALL cp_xc_kernel%create( cp_xc_functional_env )
+        ENDIF
+        !
++       if (cntl%use_mts .and. mts%low_level == 'DFT') then
++          IF (cp_xc_mts_low_func_env%init) THEN
++             CALL cp_xc_mts_low_func%create( cp_xc_mts_low_func_env )
++          ELSE
++             CALL stopgm(procedureN,'cp_xc_mts_low_func_env has not been initialised',&
++                __LINE__,__FILE__)
++          ENDIF
++       end if
++       !
+        ! Copy back values from cp_xc types into ex-COMMONs
+        !
+        cp_xc => cp_xc_functional
+@@ -1129,7 +1272,7 @@
+           DO
+              CALL xstring(next_words,first,last)
+              IF (last-first < 0) EXIT
+-             IF (i > cp_xc_max_nbr_funcs) CALL stopgm(procedureN,' FUNCTIONAL: Request exceeds cp_xc_functional_max_nbr_funcs, &
++             IF (i > cp_xc_max_nbr_funcs) CALL stopgm(procedureN,' FUNCTIONAL: Request exceeds cp_xc_max_nbr_funcs, &
+                                                                   &increase its value in cp_xc_utils',&
+                                                       __LINE__,__FILE__)
+              cp_xc_functional_env%funcs(i) = next_words(first:last)
+@@ -1672,6 +1815,84 @@
+ 
+     END SUBROUTINE set_xc_functional
+     ! ==--------------------------------------------------------------==
++    SUBROUTINE set_xc_mts_low_func(line)
++       !
++       ! TODO: Once we get rid of the old xc code, move to cp_xc_utils
++
++
++       CHARACTER(len=*), INTENT(in) :: line
++       
++       IF( cntl%use_xc_driver ) THEN
++
++          cp_xc_mts_low_func_env%set_name  = 'MTS LOW FUNCTIONAL EXCHANGE-CORRELATION'
++          cp_xc_mts_low_func_env%init = .TRUE.
++          cp_xc_mts_low_func_env%polarized = cntl%tlsd
++          CALL xstring(line,first,last)
++          next_words = line(last+1:)
++          i=1
++          DO
++             CALL xstring(next_words,first,last)
++             IF (last-first < 0) EXIT
++             IF (i > cp_xc_max_nbr_funcs) CALL stopgm(procedureN,' FUNCTIONAL: Request exceeds cp_xc_max_nbr_funcs, &
++                                                                  &increase its value in cp_xc_utils',&
++                                                      __LINE__,__FILE__)
++             cp_xc_mts_low_func_env%funcs(i) = next_words(first:last)
++             next_words = next_words(last+1:)
++             i = i+1
++          ENDDO
++          cp_xc_mts_low_func_env%n_funcs = i-1
++          !
++          ! these are always 0 for xc_driver functionals
++          !
++          func1%mfxcc = mfxcc_is_skipped
++          func1%mfxcx = mfxcx_is_skipped
++
++          !
++          ! Add HFX for hybrids
++          !
++          CALL cp_xc_mts_low_func_env%set_hybrid_defaults(default_divergence=cntl%div_analytical)
++
++          !
++          ! Postprocess the VDW string for Grimme
++          !
++          IF (cp_xc_mts_low_func_env%n_funcs == 1) THEN
++             IF     (cp_xc_mts_low_func_env%funcs(1) == 'GGA_XC_BLYP') THEN
++                empvdwc%dft_func='BLYP'
++             ELSEIF (cp_xc_mts_low_func_env%funcs(1) == 'HYB_GGA_XC_B3LYP') THEN
++                empvdwc%dft_func='B3LYP'
++             ELSEIF (cp_xc_mts_low_func_env%funcs(1) == 'GGA_XC_PBE') THEN
++                empvdwc%dft_func='PBE'
++             ELSEIF (cp_xc_mts_low_func_env%funcs(1) == 'HYB_GGA_XC_PBE0') THEN
++                empvdwc%dft_func='PBE0'
++             ELSEIF (cp_xc_mts_low_func_env%funcs(1) == 'GGA_XC_BP' .OR. &
++                     cp_xc_mts_low_func_env%funcs(1) == 'GGA_XC_BP86') THEN
++                empvdwc%dft_func='BP86'
++             ELSEIF (cp_xc_mts_low_func_env%funcs(1) == 'MGGA_XC_TPSS') THEN
++                empvdwc%dft_func='TPSS'
++             ENDIF
++          ELSEIF (cp_xc_mts_low_func_env%n_funcs == 2) THEN
++             IF     ( any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_X_B88') .AND. &
++                      any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_C_LYP') ) THEN
++                empvdwc%dft_func='BLYP'
++             ELSEIF ( any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_X_PBE') .AND. &
++                      any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_C_PBE') ) THEN
++                empvdwc%dft_func='PBE'
++             ELSEIF ( any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_X_B88') .AND. &
++                      any(cp_xc_mts_low_func_env%funcs(:) == 'GGA_C_P86') ) THEN
++                empvdwc%dft_func='BP86'
++             ELSEIF ( any(cp_xc_mts_low_func_env%funcs(:) == 'MGGA_X_TPSS') .AND. &
++                      any(cp_xc_mts_low_func_env%funcs(:) == 'MGGA_C_TPSS') ) THEN
++                empvdwc%dft_func='TPSS'
++             ENDIF
++          ENDIF
++
++       ELSE
++          CALL stopgm(procedureN,' MTS: low functional has to be set up with XC_DRIVER',&
++                                                      __LINE__,__FILE__)
++       ENDIF
++
++    END SUBROUTINE set_xc_mts_low_func
++    ! ==--------------------------------------------------------------==
+     SUBROUTINE set_xc_kernel(line)
+ 
+        CHARACTER(len=*), INTENT(in) :: line
+@@ -1855,7 +2076,27 @@
+                __LINE__,__FILE__)
+           cntl%div_analytical = .FALSE.
+        ENDIF
++       !
++       ! MTS check
++       if (cntl%use_mts) then
++          if (.not. cntl%use_xc_driver .and. need_dft) then
++             call stopgm(procedureN,'MTS only comptatible with XC_DRIVER in DFT section',&
++                __LINE__,__FILE__)
++          end if
+ 
++          if ( (mts%high_level=='DFT') .and. (.not. cp_xc_functional_env%init) ) then
++             write(output_unit,*) 'ERROR: add FUNCTIONAL or MTS_HIGH_FUNC keyword to DFT section'
++             call stopgm(procedureN,'MTS set up requires a functional for the high level forces',&
++                __LINE__,__FILE__)
++          end if
++
++          if ( (mts%low_level=='DFT') .and. (.not. cp_xc_mts_low_func_env%init) ) then
++             write(output_unit,*) 'ERROR: add MTS_LOW_FUNC keyword to DFT section'
++             call stopgm(procedureN,'MTS set up requires a functional for the low level forces',&
++                __LINE__,__FILE__)
++          end if
++       end if
++
+     END SUBROUTINE check_options
+     ! ==--------------------------------------------------------------==
+     SUBROUTINE hfx_report()
+@@ -2284,6 +2525,8 @@
+             parai%io_source,parai%cp_grp)
+        CALL mp_bcast_byte(cp_xc_kernel_env, size_in_bytes_of(cp_xc_kernel_env),&
+             parai%io_source,parai%cp_grp)
++       CALL mp_bcast_byte(cp_xc_mts_low_func_env, size_in_bytes_of(cp_xc_mts_low_func_env),&
++            parai%io_source,parai%cp_grp)
+        CALL mp_bcast_byte(cp_gga_x_param, size_in_bytes_of(cp_gga_x_param),parai%io_source,parai%cp_grp)
+        CALL mp_bcast_byte(cp_gga_c_param, size_in_bytes_of(cp_gga_c_param),parai%io_source,parai%cp_grp)
+ 
+Index: src/mm_mddiag_utils.mod.F90
+===================================================================
+--- src/mm_mddiag_utils.mod.F90	(revision 4597)
++++ src/mm_mddiag_utils.mod.F90	(revision 4598)
+@@ -67,7 +67,7 @@
+                                              mm_go_mm,&
+                                              mm_go_qm,&
+                                              mm_revert
+-  USE mm_extrap,                       ONLY: cold
++  USE mm_extrap,                       ONLY: cold, nnow, numcold
+   USE mm_forces_diag_utils,            ONLY: mm_forces_diag
+   USE mm_forces_prop_utils,            ONLY: mm_forces_prop
+   USE mm_input,                        ONLY: cgrest_i,&
+@@ -834,7 +834,7 @@
+           ropt_mod%calste=cntl%tpres.AND.MOD(infi,cnti%npres).EQ.0
+           IF (cntl%textrap) THEN
+              ! Extrapolate wavefunctions
+-             CALL extrapwf(infi,c0,scr,cold,crge%n,cnti%mextra)
++             CALL extrapwf(infi,c0,scr,cold,nnow,numcold,crge%n,cnti%mextra)
+           ENDIF
+           ! mb - Wannier stuff for vdW-WC
+           vdwwfl%twannup=vdwwfl%twannup.OR.(infi.EQ.1.AND..NOT.vdwwfl%trwannc)
+Index: src/prmdfile_utils.mod.F90
+===================================================================
+--- src/prmdfile_utils.mod.F90	(revision 4597)
++++ src/prmdfile_utils.mod.F90	(revision 4598)
+@@ -53,7 +53,7 @@
+                                              lr_tddft
+   USE machine,                         ONLY: m_walltime
+   USE metr,                            ONLY: metr_com
+-  USE mm_extrap,                       ONLY: cold
++  USE mm_extrap,                       ONLY: cold, nnow, numcold
+   USE moverho_utils,                   ONLY: give_scr_moverho,&
+                                              moverho
+   USE mp_interface,                    ONLY: mp_bcast,&
+@@ -508,7 +508,7 @@
+        ! CALCULATE THE FORCES
+        IF (cntl%textrap) THEN
+           ! Extrapolate wavefunctions
+-          CALL extrapwf(infi,c0,scr,cold,nstate,cnti%mextra)
++          CALL extrapwf(infi,c0,scr,cold,nnow,numcold,nstate,cnti%mextra)
+        ENDIF
+        IF (cntl%tlanc) nx=1
+        IF (cntl%tdavi) nx=cnti%ndavv*nkpt%nkpnt+1
+Index: src/mm_mdshop_bo_utils.mod.F90
+===================================================================
+--- src/mm_mdshop_bo_utils.mod.F90	(revision 4597)
++++ src/mm_mdshop_bo_utils.mod.F90	(revision 4598)
+@@ -66,7 +66,7 @@
+                                              mm_go_qm,&
+                                              mm_revert,&
+                                              mmdim
+-  USE mm_extrap,                       ONLY: cold
++  USE mm_extrap,                       ONLY: cold, nnow, numcold
+   USE mm_forces_diag_utils,            ONLY: mm_forces_diag
+   USE mm_input,                        ONLY: cgrest_i,&
+                                              clc,&
+@@ -854,7 +854,7 @@
+           ropt_mod%calste=cntl%tpres.AND.MOD(infi,cnti%npres).EQ.0
+           IF (cntl%textrap) THEN
+              ! Extrapolate wavefunctions
+-             CALL extrapwf(infi,c0,scr,cold,sh02%nsttot,cnti%mextra)
++             CALL extrapwf(infi,c0,scr,cold,nnow,numcold,sh02%nsttot,cnti%mextra)
+           ENDIF
+           CALL mm_dim(mm_go_mm,statusdummy)
+        ENDIF! (qmnode)

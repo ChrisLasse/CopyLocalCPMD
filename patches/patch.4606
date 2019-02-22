@@ -1,0 +1,529 @@
+Index: src/pw_hfx.mod.F90
+===================================================================
+--- src/pw_hfx.mod.F90	(revision 4605)
++++ src/pw_hfx.mod.F90	(revision 4606)
+@@ -50,6 +50,10 @@
+   USE ropt,                            ONLY: infi,&
+                                              infw,&
+                                              iteropt
++  USE scex_utils,                      ONLY: scex,&
++                                             scex_lambda,&
++                                             scex_ID_parent,&
++                                             scex_ID_scaled
+   USE spin,                            ONLY: lspin2,&
+                                              spin_mod
+   USE state_utils,                     ONLY: add_wfn,&
+@@ -90,6 +94,8 @@
+   INTEGER(int_8),PRIVATE :: nbr_rwfn_precomputed = 0
+   INTEGER(int_8),PRIVATE :: nbr_integrals = 0
+ 
++  REAL(real_8),PRIVATE :: ehfx_scale = 1.0_real_8
++
+   TYPE :: iterator_t
+      INTEGER :: blk_count,max_blk_count
+      INTEGER,DIMENSION(:),POINTER :: dist
+@@ -209,8 +215,18 @@
+ 
+     ! ==--------------------------------------------------------------==
+ 
+-    CALL setfftn(ipoolhfx)
++    IF (cntl%use_scaled_hfx) THEN
++       IF (.NOT. scex%init) CALL stopgm(procedureN,'ScEX requested, but not initialised',&
++                                        __LINE__,__FILE__)
++       CALL setfftn(scex_ID_parent)
++       ehfx_scale = 2.0_real_8
++    ELSE
++       CALL setfftn(ipoolhfx)
++       ehfx_scale = 1.0_real_8
++    ENDIF
+ 
++    ! ==--------------------------------------------------------------==
++
+     nbr_rwfn_precomputed = 0
+     nbr_integrals = 0
+ 
+@@ -294,7 +310,11 @@
+ 
+     t_outer_1=m_cputime()
+ 
+-    CALL process_blocks()
++    IF (cntl%use_scaled_hfx) THEN
++       CALL process_scaled_blocks()
++    ELSE
++       CALL process_blocks()
++    ENDIF
+ 
+     t_outer_2=m_cputime()
+     t_outer = t_outer_2 - t_outer_1
+@@ -339,10 +359,10 @@
+     CALL add_wfn(jgw,nstate,zone,C2_hfx,ncpw%ngw,c2,ncpw%ngw)
+ 
+ 
+-    ! ENERGY
++    ! Energy
+     ehfx = ehfx*parm%omega
+ 
+-    ! POTENTIAL
++    ! Potential
+     DO i = 1,nstate
+        vhfx = vhfx + dotp(ncpw%ngw,c0(:,i),c2(:,i))
+     ENDDO
+@@ -451,7 +471,133 @@
+ 
+       ! ==--------------------------------------------------------------==
+     END SUBROUTINE process_blocks
+-    ! ==--------------------------------------------------------------==
++    ! ================================================================== 
++    SUBROUTINE process_scaled_blocks()
++      ! ==--------------------------------------------------------------==
++      ! Iterator for coordinate-scaled exchange; with storage of real-space
++      ! pair potentials.
++
++      COMPLEX(real_8), DIMENSION(:,:), &
++                       ALLOCATABLE :: C2_in_real_space
++      COMPLEX(real_8), DIMENSION(:,:,:), &
++                       ALLOCATABLE :: scr_psic, scr_sent, scr_recv
++
++      INTEGER  :: istate, ig, ir
++      INTEGER  :: blk_state, blk_resid
++
++      COMPLEX(real_8) :: fp, fm
++
++      !
++      ! Allocate auxiliary quantities for scaled exact exchange
++      !
++      ALLOCATE(C2_in_real_space(maxfftn,nstate),&
++               stat=ierr)
++      IF (ierr /= 0) CALL stopgm(procedureN,'Allocation problem',&
++                                 __LINE__,__FILE__)
++      CALL zeroing(C2_in_real_space)
++
++      CALL scex%start_density_scaling()
++
++      DO ispin = 1,nspins
++
++         nst = nstates(ispin)
++         st_offst = 0
++         IF (ispin == 2) st_offst = nstates(1)
++
++         ! get the number of block pairs
++         nbr_blk = CEILING(REAL(nst,kind=real_8)/REAL(max_block_size,kind=real_8))
++         nblks = nbr_blk * ( nbr_blk + 1 ) / 2
++
++         CALL build_block_info(nst,nbr_blk,max_block_size,offsets,sizes)
++         CALL build_dist(dist,nblks,hfx_dist,tick_blks(:,ispin))
++
++         new_tick_blks(:) = 0
++         CALL iterator_start(iter,dist)
++         DO WHILE (iterator_blocks(iter))
++            CALL iterator_next_block(iter,blk)
++            CALL ind2sub(blk,row_blk,col_blk)
++            row_offset = offsets(row_blk) + st_offst
++            col_offset = offsets(col_blk) + st_offst
++            row_size = sizes(row_blk); col_size = sizes(col_blk)
++
++            tick_1 = get_ticks()
++
++            CALL block_filter(thresh,row_offset,row_size,col_offset,col_size,pp,r_list,c_list)
++
++            !
++            ! Perform batch of operations on full grid
++            !
++            CALL setfftn(scex_ID_parent)
++            CALL block_invfft(c0,psi_row,r_list)
++            CALL block_invfft(c0,psi_col,c_list)
++
++            !
++            ! Calculate pair potentials on auxiliary mesh
++            !
++            CALL setfftn(scex_ID_scaled)
++            CALL hfx_compute_block_new( C2_in_real_space, ehfx, f, vpotg, vpotr, psic, pp, &
++                 psi_row, psi_col, r_list, c_list, psi_row_pack, thresh )
++
++            tick_2 = get_ticks()
++
++            new_tick_blks(blk) = tick_2 - tick_1
++
++         ENDDO
++         CALL release_dist(dist)
++         tick_blks(:,ispin) = new_tick_blks(:)
++      ENDDO
++
++      !
++      ! Calculate C2 on the full wavefunction cutoff
++      !
++      CALL scex%switch_density_scaling()
++      CALL setfftn(scex_ID_parent)
++
++      blk_state = nstate / 2
++      blk_resid = nstate - 2*blk_state
++      !
++      ! Pack two states into the FFT if possible
++      !
++      DO istate=1,blk_state
++         DO ir=1,scex%llr1
++            C2_in_real_space(ir,istate) = REAL(C2_in_real_space(ir,istate)) &
++                                          + uimag*REAL(C2_in_real_space(ir,istate+blk_state))
++         ENDDO
++         CALL scex%undo_density_scaling(C2_in_real_space(:,istate))
++
++         CALL fwfftn(C2_in_real_space(:,istate),.TRUE.,parai%allgrp)
++         !$omp parallel do private(IG,FP,FM)
++         DO ig=1,jgw
++            fp = C2_in_real_space(nzfs(ig),istate) + C2_in_real_space(inzs(ig),istate)
++            fm = C2_in_real_space(nzfs(ig),istate) - C2_in_real_space(inzs(ig),istate)
++            C2_hfx(ig,istate)           = -CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
++            C2_hfx(ig,istate+blk_state) = -CMPLX(AIMAG(fp),-REAL(fm),kind=real_8)
++         ENDDO
++      ENDDO
++      !
++      ! Treat residue (HOMO) if number of orbitals is odd
++      !
++      IF (blk_resid > 0) THEN
++         CALL scex%undo_density_scaling(C2_in_real_space(:,nstate))
++
++         CALL fwfftn(C2_in_real_space(:,nstate),.TRUE.,parai%allgrp)
++         !$omp parallel do private(IG,FP,FM)
++         DO ig=1,jgw
++            fp = C2_in_real_space(nzfs(ig),nstate) + C2_in_real_space(inzs(ig),nstate)
++            fm = C2_in_real_space(nzfs(ig),nstate) - C2_in_real_space(inzs(ig),nstate)
++            C2_hfx(ig,nstate) = -CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
++         ENDDO
++      ENDIF
++      !
++      CALL scex%annihilate_density_scaling()
++
++      DEALLOCATE(C2_in_real_space,stat=ierr)
++      IF (ierr /= 0) CALL stopgm(procedureN,'Deallocation problem',&
++                                 __LINE__,__FILE__)
++
++      ! ==--------------------------------------------------------------==
++    END SUBROUTINE process_scaled_blocks
++    ! ================================================================== 
+   END SUBROUTINE hfx_new
+   ! ================================================================== 
+ 
+@@ -1146,8 +1292,8 @@
+   ! ================================================================== 
+   SUBROUTINE block_invfft(c0,psis,list)
+     ! ==--------------------------------------------------------------==
++    ! KPT replace NGW -> NGWK
+     ! ==--------------------------------------------------------------==
+-    ! KPT replace NGW -> NGWK
+ 
+     COMPLEX(real_8)                          :: c0(:,:), psis(:,:)
+     TYPE(list_t), INTENT(inout)              :: list
+@@ -1158,8 +1304,6 @@
+     INTEGER                                  :: i0_a, i0_r, i1_a, i1_r, isub, &
+                                                 l, nbr_ffts, ptr
+ 
+-! ==--------------------------------------------------------------==
+-! ==--------------------------------------------------------------==
+ 
+     CALL tiset(procedureN,isub)
+ 
+@@ -1196,6 +1340,7 @@
+     ! fft all
+     DO ptr=1,nbr_ffts
+        CALL invfftn(psis(:,ptr),.TRUE.,parai%allgrp)
++       IF (cntl%use_scaled_hfx) CALL scex%do_density_scaling(psis(:,ptr))
+     ENDDO
+ 
+     ! ==--------------------------------------------------------------==
+@@ -1349,7 +1494,7 @@
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_1,c,c,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1
+             CALL hfxab_new(EHFX_loc_1,EHFX_nothresh_1,pfx2,psi_col(:,c_pt),c_in_re,psi_row_pack,.FALSE.,&
+-                 vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c),C2_hfx(:,r2))
++                           vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c),C2_hfx(:,r2))
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_1,c,r2,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1
+          ELSEIF (c.EQ.r2) THEN
+@@ -1357,9 +1502,10 @@
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_1,c,c,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1
+             CALL hfxab_new(EHFX_loc_1,EHFX_nothresh_1,pfx1,psi_col(:,c_pt),c_in_re,psi_row_pack,.TRUE.,&
+-                 vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c),C2_hfx(:,r1))
++                           vpotg(:,1),vpotr(:,1),psic,C2_hfx(:,c),C2_hfx(:,r1))
+             IF(hfxc3%twscr) CALL add_int_to_list(EHFX_nothresh_1,c,r1,thresh%acc_vals,thresh%new_vals)
+             ehfx = ehfx + EHFX_loc_1
++
+          ELSE
+             CALL hfxab2_new(EHFX_loc_1,EHFX_loc_2,EHFX_nothresh_1,EHFX_nothresh_2,&
+                  pfx1,pfx2,psi_col(:,c_pt),c_in_re,psi_row_pack,vpotg,vpotr,&
+@@ -1403,19 +1549,20 @@
+       ! ==--------------------------------------------------------------==
+     END SUBROUTINE evaluate_pair
+     ! ================================================================== 
+-
+     SUBROUTINE add_int_to_list(v,i,j,avs,nvs)
+-    REAL(real_8), INTENT(in)                 :: v
+-    INTEGER, INTENT(in)                      :: i, j
+-    REAL(real_8), DIMENSION(:), &
+-      INTENT(inout)                          :: avs
+-    INTEGER, DIMENSION(:), INTENT(inout)     :: nvs
++      ! ==--------------------------------------------------------------==
++      REAL(real_8), INTENT(in)                 :: v
++      INTEGER, INTENT(in)                      :: i, j
++      REAL(real_8), DIMENSION(:), &
++        INTENT(inout)                          :: avs
++      INTEGER, DIMENSION(:), INTENT(inout)     :: nvs
+ 
+-    INTEGER                                  :: ij
++      INTEGER                                  :: ij
+ 
+-      CALL sub2ind(i,j,ij)
+-      avs( ij ) = v
+-      nvs( ij ) = 1
++        CALL sub2ind(i,j,ij)
++        avs( ij ) = v
++        nvs( ij ) = 1
++      ! ==--------------------------------------------------------------==
+     END SUBROUTINE add_int_to_list
+     ! ==--------------------------------------------------------------==
+   END SUBROUTINE hfx_compute_block_new
+@@ -1820,9 +1967,11 @@
+   END SUBROUTINE hfxab2
+ 
+ 
++  ! ==================================================================
+   SUBROUTINE hfxab2_new(ehfx_1,ehfx_2,ehfx_nothresh_1,ehfx_nothresh_2,&
+        pf1,pf2,psia,a_stored_in_real,psib,vpotg,vpotr,psic,c2a,c2b1,c2b2)
+-    ! ==================================================================
++    ! ==--------------------------------------------------------------==
++
+     REAL(real_8), INTENT(out)                :: ehfx_1, ehfx_2, &
+                                                 ehfx_nothresh_1, &
+                                                 ehfx_nothresh_2
+@@ -1870,8 +2019,13 @@
+        ELSE
+           ehfx_1 = ehfx_nothresh_1
+           CALL hfx_get_potential(psia,psib,psic,vpotr(:,1),a_stored_in_real,b_stored_in_real=b_stored_in_real_1)
+-          CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-          CALL hfx_get_c2(psic,c2b1,c2_2=c2a)
++          IF (cntl%use_scaled_hfx) THEN
++             CALL hfx_get_c2_real_space(psic,c2b1,c2_2=c2a)
++             ehfx_1 = scex_lambda*ehfx_1
++          ELSE
++             CALL fwfftn(psic,.TRUE.,parai%allgrp)
++             CALL hfx_get_c2(psic,c2b1,c2_2=c2a)
++          ENDIF
+        ENDIF
+ 
+        IF(too_small_int_2) THEN
+@@ -1879,8 +2033,13 @@
+        ELSE
+           ehfx_2 = ehfx_nothresh_2
+           CALL hfx_get_potential(psia,psib,psic,vpotr(:,2),a_stored_in_real,b_stored_in_real=b_stored_in_real_2)
+-          CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-          CALL hfx_get_c2(psic,c2b2,c2_2=c2a)
++          IF (cntl%use_scaled_hfx) THEN
++             CALL hfx_get_c2_real_space(psic,c2b2,c2_2=c2a)
++             ehfx_2 = scex_lambda*ehfx_2
++          ELSE
++             CALL fwfftn(psic,.TRUE.,parai%allgrp)
++             CALL hfx_get_c2(psic,c2b2,c2_2=c2a)
++          ENDIF
+        ENDIF
+     ENDIF
+ 
+@@ -1887,11 +2046,11 @@
+     CALL tihalt(procedureN,isub)
+     ! ==--------------------------------------------------------------==
+   END SUBROUTINE hfxab2_new
+-
+-
++  ! ==================================================================
+   SUBROUTINE hfxaa_new(ehfx,ehfx_nothresh,pf,psia,a_stored_in_real,&
+        vpotg,vpotr,psic,c2a)
+-    ! ==================================================================
++    ! ==--------------------------------------------------------------==
++
+     REAL(real_8), INTENT(out)                :: ehfx, ehfx_nothresh
+     REAL(real_8), INTENT(in)                 :: pf
+     COMPLEX(real_8)                          :: psia(:)
+@@ -1924,18 +2083,23 @@
+        CALL invfftn(psic,.FALSE.,parai%allgrp)
+        CALL hfx_set_vpotr(psic,vpotr)
+        CALL hfx_get_potential(psia,psia,psic,vpotr,a_stored_in_real)
+-       CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-       CALL hfx_get_c2(psic,c2a)
++       IF (cntl%use_scaled_hfx) THEN
++          CALL hfx_get_c2_real_space(psic,c2a)
++          ehfx = scex_lambda*ehfx
++       ELSE
++          CALL fwfftn(psic,.TRUE.,parai%allgrp)
++          CALL hfx_get_c2(psic,c2a)
++       ENDIF
+     ENDIF
+ 
+     CALL tihalt(procedureN,isub)
+     ! ==--------------------------------------------------------------==
+   END SUBROUTINE hfxaa_new
+-
+-
++  ! ==================================================================
+   SUBROUTINE hfxab_new(ehfx,ehfx_nothresh,pf,psia,a_stored_in_real,psib,b_stored_in_real,&
+        vpotg,vpotr,psic,c2a,c2b)
+-    ! ==================================================================
++    ! ==--------------------------------------------------------------==
++
+     REAL(real_8), INTENT(out)                :: ehfx, ehfx_nothresh
+     REAL(real_8), INTENT(in)                 :: pf
+     COMPLEX(real_8)                          :: psia(:)
+@@ -1974,15 +2138,18 @@
+        CALL invfftn(psic,.FALSE.,parai%allgrp)
+        CALL hfx_set_vpotr(psic,vpotr)
+        CALL hfx_get_potential(psia,psib,psic,vpotr,a_stored_in_real,b_stored_in_real=b_stored_in_real)
+-       CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-       CALL hfx_get_c2(psic,c2b,c2_2=c2a)
++       IF (cntl%use_scaled_hfx) THEN
++          CALL hfx_get_c2_real_space(psic,c2b,c2_2=c2a)
++          ehfx = scex_lambda*ehfx
++       ELSE
++          CALL fwfftn(psic,.TRUE.,parai%allgrp)
++          CALL hfx_get_c2(psic,c2b,c2_2=c2a)
++       ENDIF
+     ENDIF
+ 
+     CALL tihalt(procedureN,isub)
+     ! ==--------------------------------------------------------------==
+   END SUBROUTINE hfxab_new
+-
+-
+   ! ==================================================================
+   SUBROUTINE hfxaa(ehfx,pf,psia,a_stored_in_real,&
+        vpotg,vpotr,psic,c2a)
+@@ -2058,6 +2225,7 @@
+   END SUBROUTINE hfxaa
+   ! ==================================================================
+ 
++
+   ! Generic routines for hfxaa, hfxab, hfxab2
+ 
+   ! ==================================================================
+@@ -2237,6 +2405,34 @@
+     ! ==--------------------------------------------------------------==
+   END SUBROUTINE hfx_get_potential
+   ! ==================================================================
++  PURE SUBROUTINE hfx_get_c2_real_space(psic,c2,c2_2)
++    ! ==--------------------------------------------------------------==
++          
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(in)       :: psic
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(inout)    :: c2
++    COMPLEX(real_8), DIMENSION(:), OPTIONAL, &
++                     INTENT(inout)    :: c2_2
++
++    INTEGER         :: ir
++
++    IF (present(c2_2)) THEN
++       !$omp parallel do private(IG)
++       DO ir=1,llr1
++          c2(ir)   = c2(ir)   + REAL(psic(ir)) 
++          c2_2(ir) = c2_2(ir) + AIMAG(psic(ir)) 
++       ENDDO
++    ELSE
++       !$omp parallel do private(IG)
++       DO ir=1,llr1
++          c2(ir)   = c2(ir) + REAL(psic(ir))
++       ENDDO
++    ENDIF
++
++    ! ==--------------------------------------------------------------==
++  END SUBROUTINE hfx_get_c2_real_space
++  ! ================================================================== 
+   PURE SUBROUTINE hfx_get_c2(psic,c2,c2_2)
+     ! ==--------------------------------------------------------------==
+           
+Index: src/initclust_utils.mod.F90
+===================================================================
+--- src/initclust_utils.mod.F90	(revision 4605)
++++ src/initclust_utils.mod.F90	(revision 4606)
+@@ -19,6 +19,7 @@
+   USE func,                            ONLY: ashcroft_coulomb_rcut,&
+                                              func1,&
+                                              func2,&
++                                             msrx_is_skipped,&
+                                              msrx_is_CAM,&
+                                              msrx_is_ashcroft,&
+                                              msrx_is_erfc,&
+@@ -40,6 +41,7 @@
+   USE rswfmod,                         ONLY: lwdimx,&
+                                              maxstatesx,&
+                                              rswfx
++  USE scex_utils,                      ONLY: scex
+   USE spin,                            ONLY: lspin2
+   USE system,                          ONLY: cntl,&
+                                              cntr,&
+@@ -106,7 +108,7 @@
+     IF (geq0) ig1=2
+     DO ig=ig1,ncpw%nhg
+        g2=parm%tpiba2*hg(ig)
+-       scg(ig)=CMPLX(fpi/g2,0._real_8,kind=real_8)
++       scg(ig)=CMPLX(fpi/g2,0.0_real_8,kind=real_8)
+     ENDDO
+     IF (geq0) scg(1)=0.0_real_8
+ 
+@@ -233,7 +235,12 @@
+           CALL stopgm("HF_INIT", "HFX not implemented for HOCKNEY.",& 
+                __LINE__,__FILE__)
+        ENDIF
+-       IF (hfxc2%hfxwfe > 0._real_8 .AND. hfxc2%hfxdee > 0._real_8) THEN
++       IF (cntl%use_scaled_hfx) THEN
++          IF (msrx /= msrx_is_skipped) CALL stopgm(procedureN,'ScEX: Matrix elements for screened '// &
++                                                   'exchange not yet available',&
++                                                   __LINE__,__FILE__)
++          CALL scex%grid_init()
++       ELSEIF (hfxc2%hfxwfe > 0._real_8 .AND. hfxc2%hfxdee > 0._real_8) THEN
+           IF (paral%io_parent) THEN
+              WRITE(6,'(/,A,T56,F10.0)')&
+                   ' Wavefunction Cutoff for HFX [Ry] ',hfxc2%hfxwfe
+Index: src/SOURCES
+===================================================================
+--- src/SOURCES	(revision 4605)
++++ src/SOURCES	(revision 4606)
+@@ -263,6 +263,7 @@
+            cpfunc_types.mod.F90 cp_lda_exchange_utils.mod.F90 cp_lda_correlation_utils.mod.F90 cp_gga_exchange_utils.mod.F90 cp_gga_correlation_utils.mod.F90 \
+            cp_mgga_exchange_utils.mod.F90 cp_mgga_correlation_utils.mod.F90 \
+            cp_dxc_driver.mod.F90 cp_dgga_exchange_utils.mod.F90 cp_dgga_correlation_utils.mod.F90 switch_functionals_utils.mod.F90 \
++           scex_utils.mod.F90 \
+            dcacp_utils.mod.F90 \
+            bicanonicalCpmd.mod.F90 bicanonicalConfig.mod.F90 bicanonicalInputReader.mod.F90 bicanonicalCalculationConfig.mod.F90 bicanonicalCalculation.mod.F90 \
+           pi_prpt_utils.mod.F90 pi_npt_cpmd_utils.mod.F90 pi_stress_utils.mod.F90 pi_npt_bomd_utils.mod.F90 \
+Index: src/system.mod.F90
+===================================================================
+--- src/system.mod.F90	(revision 4605)
++++ src/system.mod.F90	(revision 4606)
+@@ -561,7 +561,8 @@
+      LOGICAL :: use_xc_driver = .FALSE.
+      LOGICAL :: div_analytical = .FALSE.
+      LOGICAL :: thubb  = .FALSE.
+-     LOGICAL :: use_mts = .false.
++     LOGICAL :: use_mts = .FALSE.
++     LOGICAL :: use_scaled_hfx = .FALSE.
+   END TYPE cntl_t
+   TYPE(cntl_t), SAVE, PUBLIC :: cntl
+   ! ==================================================================
+Index: src/dftin_utils.mod.F90
+===================================================================
+--- src/dftin_utils.mod.F90	(revision 4605)
++++ src/dftin_utils.mod.F90	(revision 4606)
+@@ -232,6 +232,7 @@
+        cntl%thybrid        = .FALSE.
+        cntl%tsmooth        = .FALSE.
+        cntl%div_analytical = .TRUE.
++       cntl%use_scaled_hfx = .FALSE.
+        cntl%thubb          = .FALSE.
+        cntr%gceps          = 1.0e-8_real_8
+        toldcode            = .FALSE.
+@@ -648,6 +649,8 @@
+                    something_went_wrong = .true.
+                    go_on_reading        = .false.
+                 ENDIF
++             ELSEIF (keyword_contains(line,'SCALED',and='EXCHANGE',alias='SCEX')) THEN
++                cntl%use_scaled_hfx = .true.
+              ELSEIF (keyword_contains(line,'HFX_DISTRIBUTION')) THEN
+                 IF (keyword_contains(line,'BLOCK_CYCLIC')) THEN
+                    hfxc5%hfx_distribution=hfx_dist_block_cyclic

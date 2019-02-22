@@ -1,0 +1,234 @@
+Index: configure/LINUX-HASWELL-INTEL-MPI17
+===================================================================
+--- configure/LINUX-HASWELL-INTEL-MPI17	(revision 4612)
++++ configure/LINUX-HASWELL-INTEL-MPI17	(revision 4613)
+@@ -1,39 +0,0 @@
+-#INFO#
+-#INFO# Configuration for Haswell Linux Supercluster
+-#INFO# Haswell is the codename for the Intel processor 
+-#INFO# successor to the Ivy Bridge microarchitecture. 
+-#INFO# See http://ark.intel.com/products/codename/42174/Haswell
+-#INFO# Intel Composer v.15 or later - BullMPI/OpenMPI + OMP 3.0 (or later)
+-#INFO# Processor Intel Haswell 12-Core E5-2690 (e.g. Occigen@CINES)
+-#INFO# Cluster IB 4x FDR Fat Tree / 9 blades socket
+-#INFO# (University of Strasbourg-University of Tokyo, January 2018). 
+-#INFO#
+-     IRAT=2
+-     FC='mpif90'
+-     CC='mpicc'
+-     LD='mpif90'
+-     CPP='/lib/cpp -P -C -traditional'
+-     CPPFLAGS='-D__HAS_FFT_DEFAULT -D__ALPHALINUX -D__HPC -D__HASNT_OMP_45 \
+-         -D__PARALLEL -D__HAS_SIZEOF -D__HAS_BF_STREAM_IO -D__HASNT_F08_ISO_FORTRAN_ENV'
+-     CPPFLAGS_GROMOS='-DEWALD -DEWATCUT -DHAT_SHAPE -DUNPACKED_GRID \
+-             -D__HAS_FFT_DEFAULT -D__ALPHALINUX -D__HPC -D__HASNT_OMP_45 \
+-             -D__PARALLEL -D__HAS_SIZEOF -D__HAS_BF_STREAM_IO -D__HASNT_F08_ISO_FORTRAN_ENV'
+-     FFLAGS_GROMOS='-fixed $(FFLAGS)'
+-     FFLAGS_GROMOS_MODULES='$(FFLAGS)'
+-     AR='/usr/bin/ar -r'
+-     RANLIB='/usr/bin/ranlib'
+-     if [ $debug ]; then
+-       FFLAGS='-g'
+-       CFLAGS='-g -Wall -m64'
+-     else
+-       FFLAGS='-O3 -xHost -pc64 -funroll-loops -fpp -heap-arrays 64 -no-prec-div'
+-       CFLAGS='-O2 -Wall  '
+-     fi
+-     if [ $omp ]; then
+-       FFLAGS=${FFLAGS}' -qopenmp'
+-       OMP3_DISABLED='false'
+-       LIBS='-mkl=parallel -lm'
+-     else
+-       LIBS='-static-intel -mkl=serial -lm -lpthread -liomp5'
+-     fi
+-     LFLAGS=${LIBS}
+Index: configure/LINUX-HASWELL-INTEL-MPI-FFTW3
+===================================================================
+--- configure/LINUX-HASWELL-INTEL-MPI-FFTW3	(revision 4612)
++++ configure/LINUX-HASWELL-INTEL-MPI-FFTW3	(revision 4613)
+@@ -34,14 +34,14 @@
+        FFLAGS='-g -O0 -I${MKLROOT}/include/fftw -traceback -O0 -no-prec-div -pc64 -fpp -heap-arrays 64'
+        CFLAGS='-g -O0 -Wall -m64'
+      else
+-       FFLAGS='-ipo -O3 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64 -I${MKLROOT}/include/fftw -axAVX'
+-       CFLAGS='-O2 -Wall  '
++       FFLAGS='-ipo -O2 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64 -I${MKLROOT}/include/fftw -xHost'
++       CFLAGS='-O2 -Wall -xHost'
+      fi
+      if [ $omp ]; then
+        FFLAGS=${FFLAGS}' -qopenmp -fpp'
+        OMP3_DISABLED='false'
+-       LIBS='-mkl=parallel -axAVX'
++       LIBS='-mkl=parallel'
+      else
+-       LIBS='-static-intel -mkl=serial -lm -lpthread -liomp5'
++       LIBS='-static-intel -mkl=cluster -lm -lpthread -liomp5'
+      fi
+      LFLAGS=${LIBS}
+Index: configure/LINUX-HASWELL-INTEL-MPI18
+===================================================================
+--- configure/LINUX-HASWELL-INTEL-MPI18	(revision 0)
++++ configure/LINUX-HASWELL-INTEL-MPI18	(revision 4613)
+@@ -0,0 +1,45 @@
++#INFO#
++#INFO# Configuration for Haswell/Broadwell Linux Supercluster
++#INFO# Haswell is the codename for the Intel processor 
++#INFO# successor to the Ivy Bridge microarchitecture. 
++#INFO# Broadwell is the 14 nanometer die shrink of Haswell.
++#INFO# See http://ark.intel.com/products/codename/42174/Haswell
++#INFO# Intel Composer v.18 or later - OpenMPI + OMP 3.0/4.5/5,0 (or later)
++#INFO# Processor Intel Haswell 12-Core E5-2690 (e.g. Occigen@CINES)
++#INFO# Cluster IB 4x FDR Fat Tree / 9 blades socket
++#INFO# WARNING: A bug in the IntelMPI from version 2017.0.098 until 2018.1.163
++#INFO# WARNING: is responsible for a memory overflow during parallel execution
++#INFO# WARNING: under MPI / OMP or hybrid MPI-OMP. The recommended combination
++#INFO# WARNING: tested and verified by CINES is to switch to OpenMPI
++#INFO# WARNING: i.e. modules intel/18.1 openmpi/intel/2.0.1
++#INFO# (University of Strasbourg-University of Nagoya, January 2019). 
++#INFO#
++     IRAT=2
++     FC='mpif90'
++     CC='mpicc'
++     LD='mpif90'
++     CPP='/lib/cpp -P -C -traditional'
++     CPPFLAGS='-D__HAS_FFT_DEFAULT -D__ALPHALINUX -D__HPC -D__HASNT_OMP_45 \
++         -D__PARALLEL -D__HAS_SIZEOF -D__HAS_BF_STREAM_IO -D__HASNT_F08_ISO_FORTRAN_ENV'
++     CPPFLAGS_GROMOS='-DEWALD -DEWATCUT -DHAT_SHAPE -DUNPACKED_GRID \
++             -D__HAS_FFT_DEFAULT -D__ALPHALINUX -D__HPC -D__HASNT_OMP_45 \
++             -D__PARALLEL -D__HAS_SIZEOF -D__HAS_BF_STREAM_IO -D__HASNT_F08_ISO_FORTRAN_ENV'
++     FFLAGS_GROMOS='-fixed $(FFLAGS)'
++     FFLAGS_GROMOS_MODULES='$(FFLAGS)'
++     AR='/usr/bin/ar -r'
++     RANLIB='/usr/bin/ranlib'
++     if [ $debug ]; then
++       FFLAGS='-g -traceback -O0 -no-prec-div -pc64 -fpp -heap-arrays 64 -xHost'
++       CFLAGS='-g -Wall -m64'
++     else
++       FFLAGS='-O2 -pc64 -funroll-loops -fpp -heap-arrays 64 -xHost'
++       CFLAGS='-O2 -Wall -xhost'
++     fi
++     if [ $omp ]; then
++       FFLAGS=${FFLAGS}' -qopenmp'
++       OMP3_DISABLED='false'
++       LIBS='-mkl=parallel -lm'
++     else
++       LIBS='-static-intel -mkl=cluster -lm -lpthread -liomp5'
++     fi
++     LFLAGS=${LIBS}
+Index: configure/LINUX-HASWELL-INTEL-MPI
+===================================================================
+--- configure/LINUX-HASWELL-INTEL-MPI	(revision 4612)
++++ configure/LINUX-HASWELL-INTEL-MPI	(revision 4613)
+@@ -29,11 +29,11 @@
+      AR='/usr/bin/ar -r'
+      RANLIB='/usr/bin/ranlib'
+      if [ $debug ]; then
+-       FFLAGS='-g -traceback -O0 -no-prec-div -pc64 -fpp -heap-arrays 64'
++       FFLAGS='-g -traceback -O0 -no-prec-div -pc64 -fpp -heap-arrays 64 -xHost'
+        CFLAGS='-g -Wall -m64'
+      else
+-       FFLAGS='-ipo -O3 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64'
+-       CFLAGS='-O2 -Wall  '
++       FFLAGS='-ipo -O2 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64'
++       CFLAGS='-O2 -Wall -xhost'
+      fi
+      if [ $omp ]; then
+        FFLAGS=${FFLAGS}' -qopenmp'
+@@ -40,6 +40,6 @@
+        OMP3_DISABLED='false'
+        LIBS='-mkl=parallel -lm'
+      else
+-       LIBS='-static-intel -mkl=serial -lm -lpthread -liomp5'
++       LIBS='-static-intel -mkl=cluster -lm -lpthread -liomp5'
+      fi
+      LFLAGS=${LIBS}
+Index: configure/IBM-x3750-MPI
+===================================================================
+--- configure/IBM-x3750-MPI	(revision 4612)
++++ configure/IBM-x3750-MPI	(revision 4613)
+@@ -5,28 +5,27 @@
+ #INFO# NOTE: Recent versions of the cpp pre-compiler require to omit 
+ #INFO# the deprecated option -C
+ #INFO# See https://software.intel.com/en-us/forums/topic/330003
+-#INFO# In these cases the syntax you have to use is
+-#INFO# cpp -P -traditional
++#INFO# (IPCMS/Nagoya University, January 2019).
+ #INFO#
+      IRAT=2
+      FC='mpiifort'
+      CC='mpiicc'
+      LD='mpiifort'
+-     CPP='/usr/bin/cpp -P -C -traditional'
+-     CPPFLAGS='-D__Linux  -DLINUX_IFC -D__HAS_FFT_DEFAULT  \
++     CPP='/usr/bin/cpp -P -traditional'
++     CPPFLAGS='-D__Linux -DLINUX_IFC -D__HAS_FFT_DEFAULT -D__HAS_BF_STREAM_IO \
+                -D__PARALLEL -D__HASNT_F03_EXECUTE_COMMAND_LINE \
+                -D__HASNT_F08_ISO_FORTRAN_ENV -D__HASNT_OMP_45'
+      CPPFLAGS_GROMOS='-DEWALD -DEWATCUT -DHAT_SHAPE -DUNPACKED_GRID \
+-                      -D__Linux  -DLINUX_IFC -D__HAS_FFT_DEFAULT \
++                      -D__Linux  -DLINUX_IFC -D__HAS_FFT_DEFAULT -D__HAS_BF_STREAM_IO\
+                       -D__PARALLEL -D__HASNT_F03_EXECUTE_COMMAND_LINE \
+                       -D__HASNT_F08_ISO_FORTRAN_ENV -D__HASNT_OMP_45'
+      FFLAGS_GROMOS='-fixed $(FFLAGS)'
+      FFLAGS_GROMOS_MODULES=' $(FFLAGS)'
+      if [ $debug ]; then
+-       FFLAGS='-g  -pc64  -unroll -heap-arrays 64 '
++       FFLAGS='-g -pc64 -funroll-loops -heap-arrays 64'
+        CFLAGS='-g -Wall -m64  -Wall -m64'
+      else
+-       FFLAGS=' -pc64  -O2 -unroll -heap-arrays 64 '
++       FFLAGS='-O2 -pc64 -funroll-loops -heap-arrays 64'
+        CFLAGS='-O2 -Wall -m64'
+      fi
+      if [ $omp ]; then
+@@ -34,6 +33,6 @@
+        OMP3_DISABLED=`{ ${FC} -v; } 2>&1 | ${AWK} '{ print ( $2 < "12.0.4" ) ? "true" : "false" }'`
+        LIBS='-mkl=parallel -lm'
+      else
+-       LIBS='-lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lm -lpthread'
++       LIBS='-lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lm -lpthread -liomp5'
+      fi
+      LFLAGS='-static-intel '${LIBS}
+Index: configure/SPECIFIC-EQUIPMESO-LINUX-IA64I_INTEL-MPI
+===================================================================
+--- configure/SPECIFIC-EQUIPMESO-LINUX-IA64I_INTEL-MPI	(revision 4612)
++++ configure/SPECIFIC-EQUIPMESO-LINUX-IA64I_INTEL-MPI	(revision 4613)
+@@ -1,16 +1,7 @@
+ #INFO#
+-#INFO# Configuration for Linux HPC (NEC) cluster Equip@Meso
+-#INFO# Intel Composer v.16 or later - OpenMPI + OMP 3.0 (or later)
+-#INFO# WARNING: The clause "collapse(n)" may not work in old compilers and
+-#INFO#          is known to have troubles on the Fujitsu compiler (K-computer
+-#INFO#          and Fujitsu FX10 machine) and Intel Fortran Compiler version
+-#INFO#          11 and former ones. Since ifort v.12.0.3 bugs have been fixed.
+-#INFO#          Please, refer to the discussion in
+-#INFO#          http://openmp.org/forum/viewtopic.php?f=3&t=1023&start=10
+-#INFO#          and check carefully your compiler and OS.
+-#INFO# For optimal performance you should use a specifically tuned BLAS/LAPACK
+-#INFO# library as in this specific configuration file 
+-#INFO# (IPCMS-University of Tokyo/Nagoya University, September 2018). 
++#INFO# Configuration for Linux HPC (NEC) cluster Equip@Meso / CPER AlsaCalcul
++#INFO# Intel Composer v.16 or later - OpenMPI/IntelMPI + OMP 3.0 (or later)
++#INFO# (IPCMS/Nagoya University, January 2019)
+ #INFO#
+      IRAT=2
+      FC='mpiifort'
+@@ -30,16 +21,15 @@
+        FFLAGS='-g'
+        CFLAGS='-g -Wall -m64'
+      else
+-       FFLAGS='-ipo -O2 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64'
++       FFLAGS='-O2 -pc64 -funroll-loops -fpp -heap-arrays 64'
+        CFLAGS='-O2 -Wall  '
+      fi
+-     MKLPATH='/opt/intel/compilers_and_libraries_2016.0.109/linux/mkl/lib/intel64_lin'
+      if [ $omp ]; then
+        FFLAGS=${FFLAGS}' -qopenmp'
+        OMP3_DISABLED='false'
+        LIBS='-mkl=parallel -lm'
+      else
+-       LIBS='-static-intel -L$(MKLPATH) -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core \
++       LIBS='-static-intel -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core \
+              -lm -lpthread -liomp5 '
+      fi
+      LFLAGS=${LIBS}

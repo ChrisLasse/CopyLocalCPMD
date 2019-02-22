@@ -1,0 +1,848 @@
+Index: src/pw_hfx.mod.F90
+===================================================================
+--- src/pw_hfx.mod.F90	(revision 4603)
++++ src/pw_hfx.mod.F90	(revision 4604)
+@@ -1556,14 +1556,14 @@
+ 
+ 
+   ! ==================================================================
+-  SUBROUTINE hfxab(ehfx,pf,psia,a_strored_in_real,&
+-       psib,b_strored_in_real,vpotg,vpotr,psic,c2a,c2b)
++  SUBROUTINE hfxab(ehfx,pf,psia,a_stored_in_real,&
++       psib,b_stored_in_real,vpotg,vpotr,psic,c2a,c2b)
+     ! ==================================================================
+     REAL(real_8)                             :: ehfx, pf
+     COMPLEX(real_8)                          :: psia(:)
+-    LOGICAL                                  :: a_strored_in_real
++    LOGICAL                                  :: a_stored_in_real
+     COMPLEX(real_8)                          :: psib(:)
+-    LOGICAL                                  :: b_strored_in_real
++    LOGICAL                                  :: b_stored_in_real
+     COMPLEX(real_8)                          :: vpotg(:)
+     REAL(real_8)                             :: vpotr(:)
+     COMPLEX(real_8)                          :: psic(:), c2a(:), c2b(:)
+@@ -1579,8 +1579,8 @@
+ 
+     CALL tiset(procedureN,isub)
+     ehfx=0.0_real_8
+-    IF (a_strored_in_real) THEN
+-       IF (b_strored_in_real) THEN
++    IF (a_stored_in_real) THEN
++       IF (b_stored_in_real) THEN
+           !$omp parallel do private(IR)
+           DO ir=1,llr1
+              psic(ir)=REAL(psia(ir))*REAL(psib(ir))
+@@ -1592,7 +1592,7 @@
+           ENDDO
+        ENDIF
+     ELSE
+-       IF (b_strored_in_real) THEN
++       IF (b_stored_in_real) THEN
+           !$omp parallel do private(IR)
+           DO ir=1,llr1
+              psic(ir)=AIMAG(psia(ir))*REAL(psib(ir))
+@@ -1634,8 +1634,8 @@
+        vpotr(ir)=REAL(psic(ir))
+     ENDDO
+ 
+-    IF (a_strored_in_real) THEN
+-       IF (b_strored_in_real) THEN
++    IF (a_stored_in_real) THEN
++       IF (b_stored_in_real) THEN
+           !$omp parallel do private(IR)
+           DO ir=1,llr1
+              psic(ir)=vpotr(ir)*(REAL(psia(ir))&
+@@ -1649,7 +1649,7 @@
+           ENDDO
+        ENDIF
+     ELSE
+-       IF (b_strored_in_real) THEN
++       IF (b_stored_in_real) THEN
+           !$omp parallel do private(IR)
+           DO ir=1,llr1
+              psic(ir)=vpotr(ir)*(AIMAG(psia(ir))&
+@@ -1680,12 +1680,12 @@
+     ! ==--------------------------------------------------------------==
+   END SUBROUTINE hfxab
+   ! ==================================================================
+-  SUBROUTINE hfxab2(ehfx_1,ehfx_2,pf1,pf2,psia,a_strored_in_real,&
++  SUBROUTINE hfxab2(ehfx_1,ehfx_2,pf1,pf2,psia,a_stored_in_real,&
+        psib,vpotg,vpotr,psic,c2a,c2b1,c2b2)
+     ! ==================================================================
+     REAL(real_8)                             :: ehfx_1, ehfx_2, pf1, pf2
+     COMPLEX(real_8)                          :: psia(:)
+-    LOGICAL                                  :: a_strored_in_real
++    LOGICAL                                  :: a_stored_in_real
+     COMPLEX(real_8)                          :: psib(:), vpotg(:,:)
+     REAL(real_8)                             :: vpotr(llr1,2)
+     COMPLEX(real_8)                          :: psic(:), c2a(:), c2b1(:), &
+@@ -1699,7 +1699,7 @@
+     CALL tiset(procedureN,isub)
+     ehfx_1=0.0_real_8
+     ehfx_2=0.0_real_8
+-    IF (a_strored_in_real) THEN
++    IF (a_stored_in_real) THEN
+        !$omp parallel do private(IR)
+        DO ir=1,llr1
+           psic(ir)=REAL(psia(ir))*psib(ir)
+@@ -1753,7 +1753,7 @@
+ 
+ 
+ 
+-    IF (a_strored_in_real) THEN
++    IF (a_stored_in_real) THEN
+        !$omp parallel do private(IR)
+        DO ir=1,llr1
+           psic(ir)=vpotr(ir,1)*(REAL(psia(ir))&
+@@ -1779,7 +1779,7 @@
+     ENDDO
+ 
+ 
+-    IF (a_strored_in_real) THEN
++    IF (a_stored_in_real) THEN
+        !$omp parallel do private(IR)
+        DO ir=1,llr1
+           psic(ir)=vpotr(ir,2)*(REAL(psia(ir))&
+@@ -1809,7 +1809,7 @@
+ 
+ 
+   SUBROUTINE hfxab2_new(ehfx_1,ehfx_2,ehfx_nothresh_1,ehfx_nothresh_2,&
+-       pf1,pf2,psia,a_strored_in_real,psib,vpotg,vpotr,psic,c2a,c2b1,c2b2)
++       pf1,pf2,psia,a_stored_in_real,psib,vpotg,vpotr,psic,c2a,c2b1,c2b2)
+     ! ==================================================================
+     REAL(real_8), INTENT(out)                :: ehfx_1, ehfx_2, &
+                                                 ehfx_nothresh_1, &
+@@ -1816,7 +1816,7 @@
+                                                 ehfx_nothresh_2
+     REAL(real_8), INTENT(in)                 :: pf1, pf2
+     COMPLEX(real_8)                          :: psia(:)
+-    LOGICAL                                  :: a_strored_in_real
++    LOGICAL                                  :: a_stored_in_real
+     COMPLEX(real_8)                          :: psib(:), vpotg(:,:)
+     REAL(real_8)                             :: vpotr(:,:)
+     COMPLEX(real_8)                          :: psic(:), c2a(:), c2b1(:), &
+@@ -1823,6 +1823,8 @@
+                                                 c2b2(:)
+ 
+     CHARACTER(*), PARAMETER                  :: procedureN = 'hfxab2_new'
++    LOGICAL, PARAMETER                       :: b_stored_in_real_1 = .TRUE.
++    LOGICAL, PARAMETER                       :: b_stored_in_real_2 = .FALSE.
+ 
+     COMPLEX(real_8)                          :: fm, fp
+     INTEGER                                  :: ig, ir, isub
+@@ -1835,91 +1837,29 @@
+     ehfx_nothresh_2 = 0.0_real_8
+     too_small_int_1 = .FALSE.
+     too_small_int_2 = .FALSE.
+-    IF (a_strored_in_real) THEN
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          psic(ir)=REAL(psia(ir))*psib(ir)
+-       ENDDO
+-    ELSE
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          psic(ir)=AIMAG(psia(ir))*psib(ir)
+-       ENDDO
+-    ENDIF
+-    CALL dscal(2*llr1,1._real_8/parm%omega,psic,1)
++
++    CALL hfx_get_pair_density(psia,psib,psic,a_stored_in_real)
+     CALL fwfftn(psic,.FALSE.,parai%allgrp)
++    CALL hfxab2_get_ehfx(psic,vpotg,pf1,pf2,ehfx_nothresh_1,ehfx_nothresh_2)
+ 
+-    !$omp parallel do private(IG,FP,FM) &
+-    !$omp  reduction(+:ehfx_nothresh_1,ehfx_nothresh_2)
+-    DO ig=1,jhg
+-       fp=psic(nzff(ig))+psic(inzf(ig))
+-       fm=psic(nzff(ig))-psic(inzf(ig))
+-       vpotg(ig,1)=-pf1*scgx(ig)*0.5_real_8*CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+-       vpotg(ig,2)=-pf2*scgx(ig)*0.5_real_8*CMPLX(AIMAG(fp),-REAL(fm),kind=real_8)
+-       ehfx_nothresh_1=ehfx_nothresh_1+2._real_8*REAL(vpotg(ig,1)*CMPLX(REAL(fp),-AIMAG(fm),kind=real_8))
+-       ehfx_nothresh_2=ehfx_nothresh_2+2._real_8*REAL(vpotg(ig,2)*CMPLX(AIMAG(fp),REAL(fm),kind=real_8))
+-    ENDDO
+-    IF (geq0) THEN
+-       fp=psic(nzff(1))+psic(inzf(1))
+-       fm=psic(nzff(1))-psic(inzf(1))
+-       ehfx_nothresh_1=ehfx_nothresh_1-REAL(vpotg(1,1)*CMPLX(REAL(fp),-AIMAG(fm),kind=real_8))
+-       ehfx_nothresh_2=ehfx_nothresh_2-REAL(vpotg(1,2)*CMPLX(AIMAG(fp),REAL(fm),kind=real_8))
+-    ENDIF
++    too_small_int_1 = check_int(ehfx_nothresh_1)
++    too_small_int_2 = check_int(ehfx_nothresh_2)
+ 
+-    IF (hfxc3%twscr) THEN
+-       ehfx_sum(1) = ehfx_nothresh_1
+-       ehfx_sum(2) = ehfx_nothresh_2
+-       CALL mp_sum(ehfx_sum,2,parai%allgrp)
+-       too_small_int_1 = ABS(ehfx_sum(1)) < hfxc4%dwf_integral_thresh
+-       too_small_int_2 = ABS(ehfx_sum(2)) < hfxc4%dwf_integral_thresh
+-    ENDIF
+-
+-
+-    IF(too_small_int_1.AND.too_small_int_2) THEN
++    IF (too_small_int_1 .AND. too_small_int_2) THEN
+        ehfx_1 = 0.0_real_8
+        ehfx_2 = 0.0_real_8
+     ELSE
+-       CALL zeroing(psic)
+-       !$omp parallel do private(IG)
+-       DO ig=1,jhg
+-          psic(nzff(ig))=vpotg(ig,1)+uimag*vpotg(ig,2)
+-          psic(inzf(ig))=CONJG(vpotg(ig,1))+uimag*CONJG(vpotg(ig,2))
+-       ENDDO
+-       IF (geq0) psic(nzff(1))=vpotg(1,1)+uimag*vpotg(1,2)
+-
++       CALL hfx_set_vpotg(psic,vpotg(:,1),vpotg_2=vpotg(:,2))
+        CALL invfftn(psic,.FALSE.,parai%allgrp)
++       CALL hfx_set_vpotr(psic,vpotr(:,1),vpotr_2=vpotr(:,2))
+ 
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          vpotr(ir,1)=REAL(psic(ir))
+-          vpotr(ir,2)=AIMAG(psic(ir))
+-       ENDDO
+-
+        IF(too_small_int_1) THEN
+           ehfx_1 = 0.0_real_8
+        ELSE
+           ehfx_1 = ehfx_nothresh_1
+-          IF (a_strored_in_real) THEN
+-             !$omp parallel do private(IR)
+-             DO ir=1,llr1
+-                psic(ir)=vpotr(ir,1)*(REAL(psia(ir))+uimag*REAL(psib(ir)))
+-             ENDDO
+-          ELSE
+-             !$omp parallel do private(IR)
+-             DO ir=1,llr1
+-                psic(ir)=vpotr(ir,1)*(AIMAG(psia(ir))+uimag*REAL(psib(ir)))
+-             ENDDO
+-          ENDIF
+-
++          CALL hfx_get_potential(psia,psib,psic,vpotr(:,1),a_stored_in_real,b_stored_in_real=b_stored_in_real_1)
+           CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-
+-          !$omp parallel do private(IG,FP,FM)
+-          DO ig=1,jgw
+-             fp=psic(nzfs(ig))+psic(inzs(ig))
+-             fm=psic(nzfs(ig))-psic(inzs(ig))
+-             c2b1(ig)=c2b1(ig)-CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+-             c2a(ig)=c2a(ig)-CMPLX(AIMAG(fp),-REAL(fm),kind=real_8)
+-          ENDDO
++          CALL hfx_get_c2(psic,c2b1,c2_2=c2a)
+        ENDIF
+ 
+        IF(too_small_int_2) THEN
+@@ -1926,28 +1866,9 @@
+           ehfx_2 = 0.0_real_8
+        ELSE
+           ehfx_2 = ehfx_nothresh_2
+-          IF (a_strored_in_real) THEN
+-             !$omp parallel do private(IR)
+-             DO ir=1,llr1
+-                psic(ir)=vpotr(ir,2)*(REAL(psia(ir))+uimag*AIMAG(psib(ir)))
+-             ENDDO
+-          ELSE
+-             !$omp parallel do private(IR)
+-             DO ir=1,llr1
+-                psic(ir)=vpotr(ir,2)*(AIMAG(psia(ir))+uimag*AIMAG(psib(ir)))
+-             ENDDO
+-          ENDIF
+-
++          CALL hfx_get_potential(psia,psib,psic,vpotr(:,2),a_stored_in_real,b_stored_in_real=b_stored_in_real_2)
+           CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-
+-          !$omp parallel do private(IG,FP,FM)
+-          DO ig=1,jgw
+-             fp=psic(nzfs(ig))+psic(inzs(ig))
+-             fm=psic(nzfs(ig))-psic(inzs(ig))
+-             c2b2(ig)=c2b2(ig)-CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+-             c2a(ig)=c2a(ig)-CMPLX(AIMAG(fp),-REAL(fm),kind=real_8)
+-          ENDDO
+-
++          CALL hfx_get_c2(psic,c2b2,c2_2=c2a)
+        ENDIF
+     ENDIF
+ 
+@@ -1956,21 +1877,21 @@
+   END SUBROUTINE hfxab2_new
+ 
+ 
+-  SUBROUTINE hfxaa_new(ehfx,ehfx_nothresh,pf,psia,a_strored_in_real,&
++  SUBROUTINE hfxaa_new(ehfx,ehfx_nothresh,pf,psia,a_stored_in_real,&
+        vpotg,vpotr,psic,c2a)
+     ! ==================================================================
+     REAL(real_8), INTENT(out)                :: ehfx, ehfx_nothresh
+     REAL(real_8), INTENT(in)                 :: pf
+     COMPLEX(real_8)                          :: psia(:)
+-    LOGICAL, INTENT(in)                      :: a_strored_in_real
++    LOGICAL, INTENT(in)                      :: a_stored_in_real
+     COMPLEX(real_8)                          :: vpotg(:)
+     REAL(real_8)                             :: vpotr(:)
+     COMPLEX(real_8)                          :: psic(:), c2a(:)
+ 
+     CHARACTER(*), PARAMETER                  :: procedureN = 'hfxaa_new'
++    REAL(real_8), PARAMETER                  :: ef = 1.0_real_8
+ 
+-    COMPLEX(real_8)                          :: fm, fp
+-    INTEGER                                  :: ig, ir, isub
++    INTEGER                                  :: isub
+     LOGICAL                                  :: too_small_int
+     REAL(real_8)                             :: ehfx_sum
+ 
+@@ -1977,94 +1898,46 @@
+     CALL tiset(procedureN,isub)
+     ehfx_nothresh = 0.0_real_8
+     too_small_int = .FALSE.
+-    IF (a_strored_in_real) THEN
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          psic(ir)=REAL(psia(ir))*REAL(psia(ir))
+-       ENDDO
+-    ELSE
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          psic(ir)=AIMAG(psia(ir))*AIMAG(psia(ir))
+-       ENDDO
+-    ENDIF
+-    CALL dscal(2*llr1,1._real_8/parm%omega,psic,1)
++   
++    CALL hfx_get_pair_density(psia,psia,psic,a_stored_in_real,b_stored_in_real=a_stored_in_real)
+     CALL fwfftn(psic,.FALSE.,parai%allgrp)
+-    !$omp parallel do private(IG,FP) &
+-    !$omp  reduction(+:ehfx_nothresh)
+-    DO ig=1,jhg
+-       fp=psic(nzff(ig))
+-       vpotg(ig)=-pf*scgx(ig)*fp
+-       ehfx_nothresh=ehfx_nothresh+REAL(2._real_8*vpotg(ig)*CONJG(fp))
+-    ENDDO
+-    IF (geq0) ehfx_nothresh=ehfx_nothresh-REAL(vpotg(1)*CONJG(psic(nzff(1))))
++    CALL hfxaa_ab_get_ehfx(psic,vpotg,pf,ef,ehfx_nothresh)
++    IF (hfxc3%twscr) too_small_int = check_int(ehfx_nothresh)
+ 
+-    IF (hfxc3%twscr) THEN
+-       ehfx_sum = ehfx_nothresh
+-       CALL mp_sum(ehfx_sum,parai%allgrp)
+-       too_small_int = ABS(ehfx_sum) < hfxc4%dwf_integral_thresh
+-    ENDIF
+-
+     IF(too_small_int) THEN
+        ehfx = 0.0_real_8
+     ELSE
+        ehfx = ehfx_nothresh
+-       CALL zeroing(psic)
+-       !$omp parallel do private(IG)
+-       DO ig=1,jhg
+-          psic(nzff(ig))=vpotg(ig)
+-          psic(inzf(ig))=CONJG(vpotg(ig))
+-       ENDDO
+-       IF (geq0) psic(nzff(1))=vpotg(1)
++       CALL hfx_set_vpotg(psic,vpotg)
+        CALL invfftn(psic,.FALSE.,parai%allgrp)
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          vpotr(ir)=REAL(psic(ir))
+-       ENDDO
+-       IF (a_strored_in_real) THEN
+-          !$omp parallel do private(IR)
+-          DO ir=1,llr1
+-             psic(ir)=vpotr(ir)*REAL(psia(ir))
+-          ENDDO
+-       ELSE
+-          !$omp parallel do private(IR)
+-          DO ir=1,llr1
+-             psic(ir)=vpotr(ir)*AIMAG(psia(ir))
+-          ENDDO
+-       ENDIF
++       CALL hfx_set_vpotr(psic,vpotr)
++       CALL hfx_get_potential(psia,psia,psic,vpotr,a_stored_in_real)
+        CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-       !$omp parallel do private(IG,FP,FM)
+-       DO ig=1,jgw
+-          fp=psic(nzfs(ig))+psic(inzs(ig))
+-          fm=psic(nzfs(ig))-psic(inzs(ig))
+-          c2a(ig)=c2a(ig)-CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+-       ENDDO
+-
++       CALL hfx_get_c2(psic,c2a)
+     ENDIF
+ 
+     CALL tihalt(procedureN,isub)
+     ! ==--------------------------------------------------------------==
+-    RETURN
+   END SUBROUTINE hfxaa_new
+ 
+ 
+-  SUBROUTINE hfxab_new(ehfx,ehfx_nothresh,pf,psia,a_strored_in_real,psib,b_strored_in_real,&
++  SUBROUTINE hfxab_new(ehfx,ehfx_nothresh,pf,psia,a_stored_in_real,psib,b_stored_in_real,&
+        vpotg,vpotr,psic,c2a,c2b)
+     ! ==================================================================
+     REAL(real_8), INTENT(out)                :: ehfx, ehfx_nothresh
+     REAL(real_8), INTENT(in)                 :: pf
+     COMPLEX(real_8)                          :: psia(:)
+-    LOGICAL                                  :: a_strored_in_real
++    LOGICAL                                  :: a_stored_in_real
+     COMPLEX(real_8)                          :: psib(:)
+-    LOGICAL                                  :: b_strored_in_real
++    LOGICAL                                  :: b_stored_in_real
+     COMPLEX(real_8)                          :: vpotg(:)
+     REAL(real_8)                             :: vpotr(:)
+     COMPLEX(real_8)                          :: psic(:), c2a(:), c2b(:)
+ 
+     CHARACTER(*), PARAMETER                  :: procedureN = 'hfxab_new'
++    REAL(real_8), PARAMETER                  :: ef = 2.0_real_8
+ 
+-    COMPLEX(real_8)                          :: fm, fp
+-    INTEGER                                  :: ig, ir, isub
++    INTEGER                                  :: isub
+     LOGICAL                                  :: too_small_int
+     REAL(real_8)                             :: ehfx_sum
+ 
+@@ -2075,106 +1948,22 @@
+     CALL tiset(procedureN,isub)
+     ehfx_nothresh = 0.0_real_8
+     too_small_int = .FALSE.
+-    IF (a_strored_in_real) THEN
+-       IF (b_strored_in_real) THEN
+-          !$omp parallel do private(IR)
+-          DO ir=1,llr1
+-             psic(ir)=REAL(psia(ir))*REAL(psib(ir))
+-          ENDDO
+-       ELSE
+-          !$omp parallel do private(IR)
+-          DO ir=1,llr1
+-             psic(ir)=REAL(psia(ir))*AIMAG(psib(ir))
+-          ENDDO
+-       ENDIF
+-    ELSE
+-       IF (b_strored_in_real) THEN
+-          !$omp parallel do private(IR)
+-          DO ir=1,llr1
+-             psic(ir)=AIMAG(psia(ir))*REAL(psib(ir))
+-          ENDDO
+-       ELSE
+-          !$omp parallel do private(IR)
+-          DO ir=1,llr1
+-             psic(ir)=AIMAG(psia(ir))*AIMAG(psib(ir))
+-          ENDDO
+-       ENDIF
+-    ENDIF
+-    CALL dscal(2*llr1,1._real_8/parm%omega,psic,1)
++
++    CALL hfx_get_pair_density(psia,psib,psic,a_stored_in_real,b_stored_in_real=b_stored_in_real)
+     CALL fwfftn(psic,.FALSE.,parai%allgrp)
+-    !$omp parallel do private(IG) &
+-    !$omp  reduction(+:ehfx_nothresh)
+-    DO ig=1,jhg
+-       vpotg(ig)=-pf*scgx(ig)*psic(nzff(ig))
+-       ehfx_nothresh=ehfx_nothresh+4._real_8*REAL(vpotg(ig)*CONJG(psic(nzff(ig))))
+-    ENDDO
+-    IF (geq0) ehfx_nothresh=ehfx_nothresh-2._real_8*REAL(vpotg(1)*CONJG(psic(nzff(1))))
++    CALL hfxaa_ab_get_ehfx(psic,vpotg,pf,ef,ehfx_nothresh)
++    IF (hfxc3%twscr) too_small_int = check_int(ehfx_nothresh)
+ 
+-    IF (hfxc3%twscr) THEN
+-       ehfx_sum = ehfx_nothresh
+-       CALL mp_sum(ehfx_sum,parai%allgrp)
+-       too_small_int = ABS(ehfx_sum) < hfxc4%dwf_integral_thresh
+-    ENDIF
+-
+     IF(too_small_int) THEN
+        ehfx = 0.0_real_8
+     ELSE
+        ehfx = ehfx_nothresh
+-       CALL zeroing(psic)
+-       !$omp parallel do private(IG)
+-       DO ig=1,jhg
+-          psic(nzff(ig))=vpotg(ig)
+-          psic(inzf(ig))=CONJG(vpotg(ig))
+-       ENDDO
+-       IF (geq0) psic(nzff(1))=vpotg(1)
+-
++       CALL hfx_set_vpotg(psic,vpotg)
+        CALL invfftn(psic,.FALSE.,parai%allgrp)
+-
+-       !$omp parallel do private(IR)
+-       DO ir=1,llr1
+-          vpotr(ir)=REAL(psic(ir))
+-       ENDDO
+-
+-       IF (a_strored_in_real) THEN
+-          IF (b_strored_in_real) THEN
+-             !$omp parallel do private(IR)
+-             DO ir=1,llr1
+-                psic(ir)=vpotr(ir)*(REAL(psia(ir))&
+-                     +uimag*REAL(psib(ir)))
+-             ENDDO
+-          ELSE
+-             !$omp parallel do private(IR)
+-             DO ir=1,llr1
+-                psic(ir)=vpotr(ir)*(REAL(psia(ir))&
+-                     +uimag*AIMAG(psib(ir)))
+-             ENDDO
+-          ENDIF
+-       ELSE
+-          IF (b_strored_in_real) THEN
+-             !$omp parallel do private(IR)
+-             DO ir=1,llr1
+-                psic(ir)=vpotr(ir)*(AIMAG(psia(ir))&
+-                     +uimag*REAL(psib(ir)))
+-             ENDDO
+-          ELSE
+-             !$omp parallel do private(IR)
+-             DO ir=1,llr1
+-                psic(ir)=vpotr(ir)*(AIMAG(psia(ir))&
+-                     +uimag*AIMAG(psib(ir)))
+-             ENDDO
+-          ENDIF
+-       ENDIF
+-
++       CALL hfx_set_vpotr(psic,vpotr)
++       CALL hfx_get_potential(psia,psib,psic,vpotr,a_stored_in_real,b_stored_in_real=b_stored_in_real)
+        CALL fwfftn(psic,.TRUE.,parai%allgrp)
+-
+-       !$omp parallel do private(IG,FP,FM)
+-       DO ig=1,jgw
+-          fp=psic(nzfs(ig))+psic(inzs(ig))
+-          fm=psic(nzfs(ig))-psic(inzs(ig))
+-          c2b(ig)=c2b(ig)-CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+-          c2a(ig)=c2a(ig)-CMPLX(AIMAG(fp),-REAL(fm),kind=real_8)
+-       ENDDO
+-
++       CALL hfx_get_c2(psic,c2b,c2_2=c2a)
+     ENDIF
+ 
+     CALL tihalt(procedureN,isub)
+@@ -2183,12 +1972,12 @@
+ 
+ 
+   ! ==================================================================
+-  SUBROUTINE hfxaa(ehfx,pf,psia,a_strored_in_real,&
++  SUBROUTINE hfxaa(ehfx,pf,psia,a_stored_in_real,&
+        vpotg,vpotr,psic,c2a)
+     ! ==================================================================
+     REAL(real_8)                             :: ehfx, pf
+     COMPLEX(real_8)                          :: psia(:)
+-    LOGICAL                                  :: a_strored_in_real
++    LOGICAL                                  :: a_stored_in_real
+     COMPLEX(real_8)                          :: vpotg(:)
+     REAL(real_8)                             :: vpotr(:)
+     COMPLEX(real_8)                          :: psic(:), c2a(:)
+@@ -2200,7 +1989,7 @@
+ 
+     CALL tiset(procedureN,isub)
+     ehfx=0.0_real_8
+-    IF (a_strored_in_real) THEN
++    IF (a_stored_in_real) THEN
+        !$omp parallel do private(IR)
+        DO ir=1,llr1
+           psic(ir)=REAL(psia(ir))*REAL(psia(ir))
+@@ -2233,7 +2022,7 @@
+     DO ir=1,llr1
+        vpotr(ir)=REAL(psic(ir))
+     ENDDO
+-    IF (a_strored_in_real) THEN
++    IF (a_stored_in_real) THEN
+        !$omp parallel do private(IR)
+        DO ir=1,llr1
+           psic(ir)=vpotr(ir)*REAL(psia(ir))
+@@ -2257,8 +2046,300 @@
+   END SUBROUTINE hfxaa
+   ! ==================================================================
+ 
++  ! Generic routines for hfxaa, hfxab, hfxab2
+ 
++  ! ==================================================================
++  SUBROUTINE hfx_set_vpotg(psic,vpotg,vpotg_2)
++    ! ==--------------------------------------------------------------==
++
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(inout)  :: psic, vpotg
++    COMPLEX(real_8), DIMENSION(:), OPTIONAL, &
++                     INTENT(inout)  :: vpotg_2
++
++    INTEGER                         :: ig
++
++    CALL zeroing(psic)
++
++    IF (present(vpotg_2)) THEN
++       !$omp parallel do private(IG)
++       DO ig=1,jhg
++          psic(nzff(ig))=vpotg(ig)+uimag*vpotg_2(ig)
++          psic(inzf(ig))=CONJG(vpotg(ig))+uimag*CONJG(vpotg_2(ig))
++       ENDDO
++       IF (geq0) psic(nzff(1))=vpotg(1)+uimag*vpotg_2(1)
++    ELSE
++       !$omp parallel do private(IG)
++       DO ig=1,jhg
++          psic(nzff(ig))=vpotg(ig)
++          psic(inzf(ig))=CONJG(vpotg(ig))
++       ENDDO
++       IF (geq0) psic(nzff(1))=vpotg(1)
++    ENDIF
++
++    ! ==--------------------------------------------------------------==
++  END SUBROUTINE hfx_set_vpotg
++  ! ==================================================================
++  SUBROUTINE hfx_get_pair_density(psia,psib,psic,a_stored_in_real,b_stored_in_real)
++    ! ==--------------------------------------------------------------==
++
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(in)     :: psia, psib
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(inout)  :: psic
++    LOGICAL, INTENT(in)             :: a_stored_in_real
++    LOGICAL, INTENT(in), OPTIONAL   :: b_stored_in_real
++
++    INTEGER                         :: ir
++
++    IF (a_stored_in_real) THEN
++       IF (present(b_stored_in_real)) THEN
++          IF (b_stored_in_real) THEN
++             !$omp parallel do private(IR)
++             DO ir=1,llr1
++                psic(ir)=REAL(psia(ir))*REAL(psib(ir))
++             ENDDO
++          ELSE
++             !$omp parallel do private(IR)
++             DO ir=1,llr1
++                psic(ir)=REAL(psia(ir))*AIMAG(psib(ir))
++             ENDDO
++          ENDIF
++       ELSE
++          !$omp parallel do private(IR)
++          DO ir=1,llr1
++             psic(ir)=REAL(psia(ir))*psib(ir)
++          ENDDO
++       ENDIF
++    ELSE
++       IF (present(b_stored_in_real)) THEN
++          IF (b_stored_in_real) THEN
++             !$omp parallel do private(IR)
++             DO ir=1,llr1
++                psic(ir)=AIMAG(psia(ir))*REAL(psib(ir))
++             ENDDO
++          ELSE
++             !$omp parallel do private(IR)
++             DO ir=1,llr1
++                psic(ir)=AIMAG(psia(ir))*AIMAG(psib(ir))
++             ENDDO
++          ENDIF
++       ELSE
++          !$omp parallel do private(IR)
++          DO ir=1,llr1
++             psic(ir)=AIMAG(psia(ir))*psib(ir)
++          ENDDO
++       ENDIF
++    ENDIF
++    CALL dscal(2*llr1,1._real_8/parm%omega,psic,1)
++
++    ! ==--------------------------------------------------------------==
++  END SUBROUTINE hfx_get_pair_density
++  ! ==================================================================
++  PURE SUBROUTINE hfx_set_vpotr(psic,vpotr,vpotr_2)
++    ! ==--------------------------------------------------------------==
++
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(in)     :: psic
++    REAL(real_8), DIMENSION(:), &
++                  INTENT(inout)     :: vpotr
++    REAL(real_8), DIMENSION(:), OPTIONAL, &
++                  INTENT(inout)     :: vpotr_2
++
++    INTEGER                         :: ir
++
++    IF (present(vpotr_2)) THEN
++       !$omp parallel do private(IR)
++       DO ir=1,llr1
++          vpotr(ir)   = REAL(psic(ir))
++          vpotr_2(ir) = AIMAG(psic(ir))
++       ENDDO
++    ELSE
++       !$omp parallel do private(IR)
++       DO ir=1,llr1
++          vpotr(ir) = REAL(psic(ir))
++       ENDDO
++    ENDIF
++
++    ! ==--------------------------------------------------------------==
++  END SUBROUTINE hfx_set_vpotr
++  ! ==================================================================
++  PURE SUBROUTINE hfx_get_potential(psia,psib,psic,vpotr,a_stored_in_real,b_stored_in_real)
++    ! ==--------------------------------------------------------------==
++
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(in)     :: psia, psib
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(inout)  :: psic
++    REAL(real_8), DIMENSION(:), &
++                  INTENT(in)        :: vpotr
++    LOGICAL, INTENT(in)             :: a_stored_in_real
++    LOGICAL, INTENT(in), OPTIONAL   :: b_stored_in_real
++
++    INTEGER                         :: ir
++
++    IF (a_stored_in_real) THEN
++       IF (present(b_stored_in_real)) THEN
++          IF (b_stored_in_real) THEN
++             !$omp parallel do private(IR)
++             DO ir=1,llr1
++                psic(ir)=vpotr(ir)*(REAL(psia(ir))&
++                     +uimag*REAL(psib(ir)))
++             ENDDO
++          ELSE
++             !$omp parallel do private(IR)
++             DO ir=1,llr1
++                psic(ir)=vpotr(ir)*(REAL(psia(ir))&
++                     +uimag*AIMAG(psib(ir)))
++             ENDDO
++          ENDIF
++       ELSE
++          !$omp parallel do private(IR)
++          DO ir=1,llr1
++             psic(ir)=vpotr(ir)*REAL(psia(ir))
++          ENDDO
++       ENDIF
++    ELSE
++       IF (present(b_stored_in_real)) THEN
++          IF (b_stored_in_real) THEN
++             !$omp parallel do private(IR)
++             DO ir=1,llr1
++                psic(ir)=vpotr(ir)*(AIMAG(psia(ir))&
++                     +uimag*REAL(psib(ir)))
++             ENDDO
++          ELSE
++             !$omp parallel do private(IR)
++             DO ir=1,llr1
++                psic(ir)=vpotr(ir)*(AIMAG(psia(ir))&
++                     +uimag*AIMAG(psib(ir)))
++             ENDDO
++          ENDIF
++       ELSE
++          !$omp parallel do private(IR)
++          DO ir=1,llr1
++             psic(ir)=vpotr(ir)*AIMAG(psia(ir))
++          ENDDO
++       ENDIF
++    ENDIF
++
++    ! ==--------------------------------------------------------------==
++  END SUBROUTINE hfx_get_potential
++  ! ==================================================================
++  PURE SUBROUTINE hfx_get_c2(psic,c2,c2_2)
++    ! ==--------------------------------------------------------------==
++          
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(in)       :: psic
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(inout)    :: c2
++    COMPLEX(real_8), DIMENSION(:), OPTIONAL, &
++                     INTENT(inout)    :: c2_2
++
++    COMPLEX(real_8) :: fp, fm
++    INTEGER         :: ig
++
++    IF (present(c2_2)) THEN
++       !$omp parallel do private(IG,FP,FM)
++       DO ig=1,jgw
++          fp = psic(nzfs(ig)) + psic(inzs(ig))
++          fm = psic(nzfs(ig)) - psic(inzs(ig))
++          c2(ig)   = c2(ig)   - CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
++          c2_2(ig) = c2_2(ig) - CMPLX(AIMAG(fp),-REAL(fm),kind=real_8)
++       ENDDO
++    ELSE
++       !$omp parallel do private(IG,FP,FM)
++       DO ig=1,jgw
++          fp = psic(nzfs(ig)) + psic(inzs(ig))
++          fm = psic(nzfs(ig)) - psic(inzs(ig))
++          c2(ig)   = c2(ig)   - CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
++       ENDDO
++    ENDIF
++
++    ! ==--------------------------------------------------------------==
++  END SUBROUTINE hfx_get_c2
+   ! ================================================================== 
++  LOGICAL FUNCTION check_int(ehfx_nothresh) RESULT(too_small_int)
++    ! ==--------------------------------------------------------------==
++
++    REAL(real_8), INTENT(in) :: ehfx_nothresh
++    REAL(real_8)             :: ehfx_sum
++
++    ehfx_sum = ehfx_nothresh
++    CALL mp_sum(ehfx_sum,parai%allgrp)
++    too_small_int = ABS(ehfx_sum) < hfxc4%dwf_integral_thresh
++
++    ! ==--------------------------------------------------------------==
++  END FUNCTION
++  ! ================================================================== 
++
++  ! Routines that are not generalised
++
++  ! ==================================================================
++  PURE SUBROUTINE hfxaa_ab_get_ehfx(psic,vpotg,pf,ef,ehfx_nothresh)
++    ! ==--------------------------------------------------------------==
++
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(in)     :: psic
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(inout)  :: vpotg
++    REAL(real_8), INTENT(inout)     :: ehfx_nothresh
++    REAL(real_8), INTENT(in)        :: pf, ef
++
++    INTEGER                         :: ig
++    REAL(real_8)                    :: ef_2
++    COMPLEX(real_8)                 :: fp
++
++    ef_2 = ef + ef
++
++    !$omp parallel do private(IG,FP) &
++    !$omp  reduction(+:ehfx_nothresh)
++    DO ig=1,jhg
++       fp=psic(nzff(ig))
++       vpotg(ig)=-pf*scgx(ig)*fp
++       ehfx_nothresh=ehfx_nothresh+REAL(vpotg(ig)*CONJG(fp))
++    ENDDO
++    ehfx_nothresh = ehfx_nothresh*ef_2
++    IF (geq0) ehfx_nothresh=ehfx_nothresh-ef*REAL(vpotg(1)*CONJG(psic(nzff(1))))
++
++    ! ==--------------------------------------------------------------==
++  END SUBROUTINE hfxaa_ab_get_ehfx
++  ! ==================================================================
++  PURE SUBROUTINE hfxab2_get_ehfx(psic,vpotg,pf1,pf2,ehfx_nothresh_1,ehfx_nothresh_2)
++    ! ==--------------------------------------------------------------==
++
++    COMPLEX(real_8), DIMENSION(:), &
++                     INTENT(in)     :: psic
++    COMPLEX(real_8), DIMENSION(:,:), &
++                     INTENT(inout)  :: vpotg
++    REAL(real_8), INTENT(inout)     :: ehfx_nothresh_1, ehfx_nothresh_2
++    REAL(real_8), INTENT(in)        :: pf1,pf2
++
++    INTEGER                         :: ig
++    COMPLEX(real_8)                 :: fp,fm
++
++    !$omp parallel do private(IG,FP,FM) &
++    !$omp  reduction(+:ehfx_nothresh_1,ehfx_nothresh_2)
++    DO ig=1,jhg
++       fp=psic(nzff(ig))+psic(inzf(ig))
++       fm=psic(nzff(ig))-psic(inzf(ig))
++       vpotg(ig,1)=-pf1*scgx(ig)*0.5_real_8*CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
++       vpotg(ig,2)=-pf2*scgx(ig)*0.5_real_8*CMPLX(AIMAG(fp),-REAL(fm),kind=real_8)
++       ehfx_nothresh_1=ehfx_nothresh_1+2._real_8*REAL(vpotg(ig,1)*CMPLX(REAL(fp),-AIMAG(fm),kind=real_8))
++       ehfx_nothresh_2=ehfx_nothresh_2+2._real_8*REAL(vpotg(ig,2)*CMPLX(AIMAG(fp),REAL(fm),kind=real_8))
++    ENDDO
++    IF (geq0) THEN
++       fp=psic(nzff(1))+psic(inzf(1))
++       fm=psic(nzff(1))-psic(inzf(1))
++       ehfx_nothresh_1=ehfx_nothresh_1-REAL(vpotg(1,1)*CMPLX(REAL(fp),-AIMAG(fm),kind=real_8))
++       ehfx_nothresh_2=ehfx_nothresh_2-REAL(vpotg(1,2)*CMPLX(AIMAG(fp),REAL(fm),kind=real_8))
++    ENDIF
++
++    ! ==--------------------------------------------------------------==
++  END SUBROUTINE hfxab2_get_ehfx
++  ! ==================================================================
++
++
++  ! ================================================================== 
+   PURE SUBROUTINE sub2ind(r,c,ij)
+     ! ==--------------------------------------------------------------==
+     INTEGER, INTENT(in)                      :: r, c

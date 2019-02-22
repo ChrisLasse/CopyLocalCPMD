@@ -1,0 +1,73 @@
+Index: configure/SPECIFIC-EQUIPMESO-LINUX-IA64I_INTEL-MPI
+===================================================================
+--- configure/SPECIFIC-EQUIPMESO-LINUX-IA64I_INTEL-MPI	(revision 4599)
++++ configure/SPECIFIC-EQUIPMESO-LINUX-IA64I_INTEL-MPI	(revision 4600)
+@@ -10,7 +10,7 @@
+ #INFO#          and check carefully your compiler and OS.
+ #INFO# For optimal performance you should use a specifically tuned BLAS/LAPACK
+ #INFO# library as in this specific configuration file 
+-#INFO# (IPCMS-University of Tokyo, January 2018). 
++#INFO# (IPCMS-University of Tokyo/Nagoya University, September 2018). 
+ #INFO#
+      IRAT=2
+      FC='mpiifort'
+@@ -30,8 +30,8 @@
+        FFLAGS='-g'
+        CFLAGS='-g -Wall -m64'
+      else
+-       FFLAGS='-ipo -O3 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64'
+-       CFLAGS='-O3 -Wall  '
++       FFLAGS='-ipo -O2 -no-prec-div -pc64 -funroll-loops -fpp -heap-arrays 64'
++       CFLAGS='-O2 -Wall  '
+      fi
+      MKLPATH='/opt/intel/compilers_and_libraries_2016.0.109/linux/mkl/lib/intel64_lin'
+      if [ $omp ]; then
+Index: configure/LINUX-AMD64-GFORTRAN-MPI
+===================================================================
+--- configure/LINUX-AMD64-GFORTRAN-MPI	(revision 4599)
++++ configure/LINUX-AMD64-GFORTRAN-MPI	(revision 4600)
+@@ -5,7 +5,7 @@
+ #INFO# Note:The options "-ffast-math"i and "-fstrength-reduce" might allow the code
+ #INFO#      to run faster, or die trying (especially the last one !).
+ #INFO# More information at https://gcc.gnu.org/onlinedocs/gcc-3.4.6/g77/Optimize-Options.html
+-#INFO# Strasbourg/Tokyo - January 2018
++#INFO# Strasbourg/Tokyo - Spetember 2018
+ #INFO#
+ 
+      IRAT=2
+@@ -21,8 +21,8 @@
+        FFLAGS='-g -O0 -fcheck=all -Wuninitialized -Wall'
+        CFLAGS='-g -O0 -Wall'
+      else
+-       FFLAGS='-O2 -Wall -falign-commons -funroll-loops'
+-       CFLAGS='-O2 -Wall -falign-commons -funroll-loops'
++       FFLAGS='-O2 -Wall -ffree-line-length-none -falign-commons -funroll-loops'
++       CFLAGS='-O2 -Wall -ffree-line-length-none -falign-commons -funroll-loops'
+      fi
+      if [ $omp ]; then
+        FFLAGS=${FFLAGS}' -fopenmp'
+Index: configure/LINUX-GFORTRAN
+===================================================================
+--- configure/LINUX-GFORTRAN	(revision 4599)
++++ configure/LINUX-GFORTRAN	(revision 4600)
+@@ -2,6 +2,7 @@
+ #INFO# Configuration to build a serial cpmd executable for a linux pc using 
+ #INFO# the GNU Fortran compiler.
+ #INFO# contributed by FX Coudert <fxcoudert@gmail.com>
++#INFO# updated on 20 Spet. 2018 - M. Boero
+ #INFO#
+ 
+      IRAT=2
+@@ -13,10 +14,10 @@
+      FFLAGS_GROMOS='$(FFLAGS) -ffixed-form' 
+      FFLAGS_GROMOS_MODULES='$(FFLAGS)'
+      if [ $debug ]; then
+-       FFLAGS='-g -fdefault-real-8 -O0  '
++       FFLAGS='-g -O0 -Wall -ffree-line-length-none -falign-commons'
+        CFLAGS='-g -O0 -Wall'
+      else
+-       FFLAGS=' -fdefault-real-8 -O2  '
++       FFLAGS=' -O2 -Wall -ffree-line-length-none -falign-commons  '
+        CFLAGS=' -O2 -Wall'
+      fi
+      if [ $omp ]; then

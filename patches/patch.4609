@@ -1,0 +1,30 @@
+Index: src/dftin_utils.mod.F90
+===================================================================
+--- src/dftin_utils.mod.F90	(revision 4608)
++++ src/dftin_utils.mod.F90	(revision 4609)
+@@ -366,11 +366,13 @@
+                            __LINE__,__FILE__)
+                       cp_xc_functional_env%via_libxc(i) = .FALSE.
+                    ELSEIF (keyword_contains(next_words(first:last),'LXC',alias='LIBXC')) THEN
+-                      IF (force_cpfunc) CALL stopgm(procedureN,' You may not choose a libxc functional when forcing CP/INTERNAL ',&
++                      IF (force_cpfunc) CALL stopgm(procedureN,&
++                           ' You may not choose a libxc functional when forcing CP/INTERNAL ',&
+                            __LINE__,__FILE__)
+                       cp_xc_functional_env%via_libxc(i) = .TRUE.
+                    ELSE
+-                      CALL stopgm(procedureN,' Unknown xc library (CP (INTERNAL) or LIBXC): '//TRIM(ADJUSTL(next_words(ia:ie))) ,&
++                      CALL stopgm(procedureN,&
++                           ' Unknown xc library (CP (INTERNAL) or LIBXC): '//TRIM(ADJUSTL(next_words(ia:ie))) ,&
+                            __LINE__,__FILE__)
+                    ENDIF
+                    next_words = next_words(last+1:)
+@@ -422,7 +424,8 @@
+                            __LINE__,__FILE__)
+                       cp_xc_mts_low_func_env%via_libxc(i) = .FALSE.
+                    ELSEIF (keyword_contains(next_words(first:last),'LXC',alias='LIBXC')) THEN
+-                      IF (force_cpfunc) CALL stopgm(procedureN,' You may not choose a libxc MTS low functional when forcing CP/INTERNAL ',&
++                      IF (force_cpfunc) CALL stopgm(procedureN,&
++                           ' You may not choose a libxc MTS low functional when forcing CP/INTERNAL ',&
+                            __LINE__,__FILE__)
+                       cp_xc_mts_low_func_env%via_libxc(i) = .TRUE.
+                    ELSE

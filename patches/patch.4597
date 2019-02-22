@@ -1,0 +1,34 @@
+Index: configure/IBM-INTEL-GFORTRAN
+===================================================================
+--- configure/IBM-INTEL-GFORTRAN	(revision 4596)
++++ configure/IBM-INTEL-GFORTRAN	(revision 4597)
+@@ -17,10 +17,10 @@
+      FFLAGS_GROMOS='-ffixed-form  $(FFLAGS) -std=gnu'
+      FFLAGS_GROMOS_MODULES=' $(FFLAGS)' 
+      if [ $debug ]; then
+-       FFLAGS='-Wall -fmax-errors=0 -g -fbacktrace -O0 -fcheck=all -Wuninitialized -finit-character=0 -finit-integer=1234567890 -finit-logical=false -finit-real=snan -std=f2008ts -fall-intrinsics'
++       FFLAGS='-Wall -fmax-errors=0 -g -fbacktrace -O0 -fcheck=all -Wuninitialized -finit-character=0 -finit-integer=1234567890 -finit-logical=false -finit-real=snan -std=f2008ts -fall-intrinsics -ffree-line-length-none'
+        CFLAGS='-O0'
+      else
+-       FFLAGS='-O2 -Wall -std=f2008ts -fall-intrinsics'
++       FFLAGS='-O2 -Wall -std=f2008ts -fall-intrinsics -ffree-line-length-none'
+        CFLAGS='-O2 -Wall'
+      fi
+      if [ $omp ]; then
+Index: configure/IBM-INTEL-GFORTRAN-MPI
+===================================================================
+--- configure/IBM-INTEL-GFORTRAN-MPI	(revision 4596)
++++ configure/IBM-INTEL-GFORTRAN-MPI	(revision 4597)
+@@ -22,10 +22,10 @@
+      FFLAGS_GROMOS='-ffixed-form  $(FFLAGS) -std=gnu' 
+      FFLAGS_GROMOS_MODULES=' $(FFLAGS)' 
+      if [ $debug ]; then
+-       FFLAGS=' -fmax-errors=0 -g -O0 -fcheck=all -Wuninitialized -std=f2008ts -fall-intrinsics'
++       FFLAGS=' -fmax-errors=0 -g -O0 -fcheck=all -Wuninitialized -std=f2008ts -fall-intrinsics -ffree-line-length-none'
+        CFLAGS='-g -O0'
+      else
+-       FFLAGS='-Wall -O2 -std=f2008ts -fall-intrinsics'
++       FFLAGS='-Wall -O2 -std=f2008ts -fall-intrinsics -ffree-line-length-none'
+        CFLAGS='-O2 -Wall'
+      fi
+      if [ $omp ]; then

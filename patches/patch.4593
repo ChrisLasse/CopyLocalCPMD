@@ -1,0 +1,28 @@
+Index: configure/TRIEST-GCC
+===================================================================
+--- configure/TRIEST-GCC	(revision 4592)
++++ configure/TRIEST-GCC	(revision 4593)
+@@ -5,11 +5,9 @@
+ #INFO# V. Weber
+ #INFO#
+ #INFO#
+-
+-     IRAT=2
+-     FC='gfortran-trunk'
+-     CC='gcc-trunk'
+-     LD='gfortran-trunk'
++     FC='gfortran-8.1.0'
++     CC='gcc-8.1.0'
++     LD='gfortran-8.1.0'
+      CPP=''
+      CPPFLAGS='-D__Linux  -D__HAS_FFT_DEFAULT -D__HAS_LIBXC'
+      FFLAGS_GROMOS='-ffixed-form  $(FFLAGS)' 
+@@ -32,6 +30,6 @@
+        FFLAGS=${FFLAGS}' --coverage'
+        LFLAGS='--coverage '${LFLAGS}
+      fi
+-     LIBS=${LIBS}' /home/vwe/libs/libxc/3.0.0-gnu-7.1.0/lib/libxcf03.a /home/vwe/libs/libxc/3.0.0-gnu-7.1.0/lib/libxc.a'
+-     FFLAGS=${FFLAGS}' -I/home/vwe/libs/libxc/3.0.0-gnu-7.1.0/include'
++     LIBS=${LIBS}' /home/vwe/libs/libxc/4.0.4-gnu-8.1.0/lib/libxcf03.a /home/vwe/libs/libxc/4.0.4-gnu-8.1.0/lib/libxc.a'
++     FFLAGS=${FFLAGS}' -I/home/vwe/libs/libxc/4.0.4-gnu-8.1.0/include'
+      LFLAGS=' '${LIBS}

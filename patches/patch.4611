@@ -1,0 +1,47 @@
+Index: doc/manual/manual.tex
+===================================================================
+--- doc/manual/manual.tex	(revision 4610)
++++ doc/manual/manual.tex	(revision 4611)
+@@ -6,7 +6,7 @@
+ \usepackage{multicol}
+ \sloppy%\nonstopmode
+ %Version CPMD
+-\newcommand{\cpmdversion}{4.1.0}
++\newcommand{\cpmdversion}{4.3.0}
+ \newcommand{\cpmd}{CPMD \cpmdversion}
+ \newcommand{\sgn}{\mathrm{sgn}}
+ 
+@@ -226,7 +226,7 @@
+ 
+ \noindent
+ \textit{CPMD, http://www.cpmd.org/,\\
+- Copyright IBM Corp 1990-2015,\\
++ Copyright IBM Corp 1990-2019,\\
+  Copyright MPI f\"ur Festk\"orperforschung Stuttgart 1997-2001}.
+ %
+ 
+@@ -599,6 +599,7 @@
+ refer to the discussion in
+ http://openmp.org/forum/viewtopic.php?f=3\&t=1023\&start=10.
+ 
++\subsection{CPMD Version 4}
+ 
+ \subsubsection{Version 4.0}
+ %
+@@ -636,7 +637,16 @@
+ optimisation and different updates for various architectures. The work
+ initiated with version 4.0 will continue tirelessly on the forthcoming version.
+ 
++\subsubsection{Version 4.3} 
++%
++With the version 4.3, we have ported some of the core-procedures to gpu. The XC procedures
++have been refactored and it was added the possibility to link to libxc.
++A new development for Eherenfest dynamics with ionized states is deployed.
++Few novel implementation: a multiple time step scheme for MD and the stress tensor LSD and UltraSoft Vanderbilt pseudopotentials and NPT
++Also a new bicanonical ensemble method is made available with version 4.3.
++Extensive cleanup and bug fixes and strenghten of the regression test suite.
+ 
++
+ % XXX tutorial added.
+ \clearpage
+ %---------------------------------------------------------------------
