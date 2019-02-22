@@ -1,5 +1,5 @@
-root='/home/hpc/pr28fa/lu64bag3/src/cpmd/CPMD.ORG/'
-arch='build/smuc'
+root='/dss/dsshome1/07/lu64bag3/src/cpmd/CPMD.ORG/'
+arch='build/sng'
 version='x'
 nproc=
 bin='${root}/${arch}/bin/cpmd.${version}'
@@ -9,6 +9,6 @@ make='make -j${nproc}'
 makedir='${root}/${arch}/'
 #cvs_update='cvs update -dP'
 nproc_mpi=2
-mpi_prefix='mpiexec -n %i'
-#mpi_suffix='-hostfile /sp/fd/teo/Hosts'
+mpi_prefix='mpirun -n %i'
+mpi_suffix='-hostfile localhost'
 mpi_suffix=''
