@@ -1,0 +1,24 @@
+C hello emacs, this is -*- fortran -*-
+C lattice sum block
+C  used if EWALD defined
+      INTEGER NLATSM,KXMAX,KYMAX,KZMAX,K2MAX,NGHTUP
+      real*8 ALPHA,PBETA
+      COMMON /LATSUM/ALPHA,PBETA,NLATSM,KXMAX,KYMAX,KZMAX,K2MAX,
+     $     NGHTUP
+      INTEGER NCTOFF,NEWALD,NPPPM
+      PARAMETER (NCTOFF=0,NEWALD=1,NPPPM=2)
+C
+      real*8 EKWALD
+      LOGICAL LGHOPT,LGHUPD,LGHWRT
+      COMMON /LATVAR/EKWALD,LGHOPT,LGHUPD,LGHWRT
+C
+C  write block - ultimately add to /MWRITE/
+C  used if WRITE_FORCES defined
+      INTEGER NTWFOR
+      COMMON /MWRITE2/ NTWFOR
+C
+C  start block - ultimately add to /MSTART/
+      INTEGER NRDCOR,NSTCOR,NSTINC
+      LOGICAL LFORMR
+      COMMON /MSTART2/ NRDCOR,NSTCOR,NSTINC,LFORMR
+C
