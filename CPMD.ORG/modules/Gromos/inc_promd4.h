@@ -1,0 +1,9 @@
+C hello emacs, this is -*- fortran -*-
+#ifdef READ_COORD
+      INTEGER IURDCO
+      INTEGER  ITITID
+      PARAMETER (ITITID = 3)
+      INTEGER NRECR,IDBLKR,NRDCTI
+      CHARACTER*(MAXTIT) RDCTIT
+      DIMENSION RDCTIT(MAXLNS)
+#endif

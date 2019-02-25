@@ -1,0 +1,13 @@
+C hello emacs, this is -*- fortran -*-
+#ifdef WRITE_FORCES
+      INTEGER IUTRJF
+#endif
+#ifdef READ_COORD
+      INTEGER IURDCO
+      LOGICAL LGTCRD,LGTTIM
+      INTEGER IDBLKR,NRECR,NSTEPR
+      INTEGER IDERR,IPORID,ITIMID
+      PARAMETER (IDERR=0,IPORID=6,ITIMID=21)
+      real*8 TIMER
+      INTEGER NRECRD
+#endif
