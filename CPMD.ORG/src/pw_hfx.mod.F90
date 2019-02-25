@@ -94,8 +94,6 @@ MODULE pw_hfx
   INTEGER(int_8),PRIVATE :: nbr_rwfn_precomputed = 0
   INTEGER(int_8),PRIVATE :: nbr_integrals = 0
 
-  REAL(real_8),PRIVATE :: ehfx_scale = 1.0_real_8
-
   TYPE :: iterator_t
      INTEGER :: blk_count,max_blk_count
      INTEGER,DIMENSION(:),POINTER :: dist
@@ -222,10 +220,8 @@ CONTAINS
        IF (cntl%tlsd) CALL stopgm(procedureN,'ScEX for LSD NYI',&
                                   __LINE__,__FILE__)
        CALL setfftn(scex_ID_parent)
-       ehfx_scale = 2.0_real_8
     ELSE
        CALL setfftn(ipoolhfx)
-       ehfx_scale = 1.0_real_8
     ENDIF
 
     ! ==--------------------------------------------------------------==
@@ -483,8 +479,6 @@ CONTAINS
 
       COMPLEX(real_8), DIMENSION(:,:), &
                        ALLOCATABLE :: C2_in_real_space
-      COMPLEX(real_8), DIMENSION(:,:,:), &
-                       ALLOCATABLE :: scr_psic, scr_sent, scr_recv
 
       CHARACTER(len=*), PARAMETER  :: subprocedureN = procedureN//'_process_scaled_blocks'
 
@@ -1318,6 +1312,7 @@ CONTAINS
     ! fft all
     DO ptr=1,nbr_ffts
        CALL invfftn(psis(:,ptr),.TRUE.,parai%allgrp)
+       IF (cntl%use_scaled_hfx) CALL scex%do_density_scaling(psis(:,ptr))
     ENDDO
 
     ! ==--------------------------------------------------------------==

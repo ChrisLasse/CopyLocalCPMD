@@ -37,7 +37,10 @@ MODULE pw_hfx_resp
                                              hfx_resp_env
   USE pw_hfx_resp_utils,               ONLY: pw_hfx_resp_create,&
                                              pw_hfx_resp_destroy
-! ==================================================================
+  USE scex_utils,                      ONLY: scex,&
+                                             scex_lambda,&
+                                             scex_ID_parent,&
+                                             scex_ID_scaled
   USE spin,                            ONLY: lspin2,&
                                              spin_mod
   USE state_utils,                     ONLY: add_wfn
@@ -63,6 +66,7 @@ MODULE pw_hfx_resp
   PUBLIC :: hfx_resp_finalize
 
 CONTAINS
+
   ! ==================================================================
   SUBROUTINE hfx_resp_init
     INTEGER                                  :: nstate
@@ -78,11 +82,13 @@ CONTAINS
   ! ==================================================================
   SUBROUTINE hfxpsi_new(c0,cpsi,c2,f,sign,psic,nstate,norb)
     ! ==--------------------------------------------------------------==
-    ! == HARTREE-FOCK EXCHANGE                                        ==
+    ! Hartree-Fock exchange
+    ! Refactored to include coordinate-scaling on 12.02.2019
+    !                                           M.P. Bircher @ LCBC/EPFL
     ! ==--------------------------------------------------------------==
-    ! == c0   : ground state orbitals (1,nstate+nvir) 
-    ! == cpsi : LR-orbitals (1,nstate=occ states)
-    ! == c2   : Potential applied to cpsi
+    ! c0   : ground state orbitals (1,nstate+nvir) 
+    ! cpsi : LR-orbitals (1,nstate=occ states)
+    ! c2   : Potential applied to cpsi
     ! ==--------------------------------------------------------------==
 
     COMPLEX(real_8)                          :: c0(:,:), cpsi(:,:), c2(:,:)
@@ -127,12 +133,15 @@ CONTAINS
     IF (func1%mhfx.EQ.0) RETURN
 
     nvir=crge%n-nstate
-    IF (paral%io_parent) THEN
-       WRITE(*,*) 'nstate', nstate
-       WRITE(*,*) 'nvir',   nvir
-       WRITE(*,*) 'norb',   norb
-       WRITE(*,*) 'icall', icall
-    ENDIF
+    !
+    ! Commented by Martin, keep output compact for release
+    !
+    ! IF (paral%io_parent) THEN
+    !    WRITE(*,*) 'nstate', nstate
+    !    WRITE(*,*) 'nvir',   nvir
+    !    WRITE(*,*) 'norb',   norb
+    !    WRITE(*,*) 'icall', icall
+    ! ENDIF
 
     icall=icall+1
     IF (MOD(icall,hfx_resp_env%interval_restart_lin2).EQ.0)  &
@@ -154,7 +163,15 @@ CONTAINS
          'OLD TASK GROUPS NOT IMPLEMENTED',& 
          __LINE__,__FILE__)
     !
-    CALL setfftn(ipoolhfx)
+    IF (cntl%use_scaled_hfx) THEN
+       IF (.NOT. scex%init) CALL stopgm(procedureN,'ScEX requested, but not initialised',&
+                                        __LINE__,__FILE__)
+       IF (cntl%tlsd) CALL stopgm(procedureN,'ScEX for LSD NYI',&
+                                  __LINE__,__FILE__)
+       CALL setfftn(scex_ID_parent)
+    ELSE
+       CALL setfftn(ipoolhfx)
+    ENDIF
 
     ! ==--------------------------------------------------------------==
 
@@ -255,76 +272,18 @@ CONTAINS
        ENDDO
 
     ELSE
-
+       !
+       ! Conventional iterators over states
+       !
        IF (hfx_resp_env%use_lin_lin .AND. paral%io_parent) &
             WRITE(6,*) 'LIN_LIN: restart the Xi vectors'
 
-       DO WHILE (iterator_blocks(iter))
-          CALL iterator_next_block(iter,blk)
-          CALL ind2sub_rect(nbr_blk_state,blk,row_blk,col_blk)
-          row_offset = offsets_state(row_blk)
-          col_offset = offsets_orb(col_blk)
-          row_size = sizes_state(row_blk)
-          col_size = sizes_orb(col_blk)
+       IF (cntl%use_scaled_hfx) THEN
+          CALL process_scaled_blocks()
+       ELSE
+          CALL process_blocks()
+       ENDIF
 
-          CALL block_invfft_old(c0  ,psi_row,row_offset,row_size)
-          CALL block_invfft_old(cpsi,psi_col,col_offset,col_size)
-
-
-          c = 0
-          DO ia = col_offset,col_offset+col_size-1,2
-             c = c + 1
-             ia1=ia
-             ia2=ia+1
-             IF (ia2.GT.norb) ia2=0
-
-             r = 0
-             DO ib = row_offset,row_offset+row_size-1,2
-                r = r + 1
-                ib1=ib
-                ib2=ib+1
-                IF (f(ib1).LT.1.e-6_real_8) ib1=0
-                IF (ib2.GT.nstate) THEN
-                   ib2=0
-                ELSEIF (f(ib2).LT.1.e-6_real_8) THEN
-                   ib2=0
-                ENDIF
-
-                pfl = 0.5_real_8
-                IF (cntl%thybrid) pfl=pfl*func3%phfx
-                pfl = pfl*sign
-
-                IF (ib1.NE.0 .OR. ib2.NE.0) THEN
-                   IF (ib1.NE.0) THEN
-                      pfx=pfl*f(ib1)
-                      CALL hfxpb(pfx,psi_col(:,c),.TRUE.,&
-                           psi_row(:,r),.TRUE.,vpotg,vpotr,psic,&
-                           C2_hfx(:,ia1))
-                   ENDIF
-                   IF (ib2.NE.0) THEN
-                      pfx=pfl*f(ib2)
-                      CALL hfxpb(pfx,psi_col(:,c),.TRUE.,&
-                           psi_row(:,r),.FALSE.,vpotg,vpotr,psic,&
-                           C2_hfx(:,ia1))
-                   ENDIF
-                   IF (ia2.GT.0) THEN
-                      IF (ib1.NE.0) THEN
-                         pfx=pfl*f(ib1)
-                         CALL hfxpb(pfx,psi_col(:,c),.FALSE.,&
-                              psi_row(:,r),.TRUE.,vpotg,vpotr,psic,&
-                              C2_hfx(:,ia2))
-                      ENDIF
-                      IF (ib2.NE.0) THEN
-                         pfx=pfl*f(ib2)
-                         CALL hfxpb(pfx,psi_col(:,c),.FALSE.,&
-                              psi_row(:,r),.FALSE.,vpotg,vpotr,psic,&
-                              C2_hfx(:,ia2))
-                      ENDIF
-                   ENDIF
-                ENDIF
-             ENDDO
-          ENDDO
-       ENDDO ! iter
     ENDIF
     ! 
     ! redistribute C2_hfx over the groups if needed
@@ -507,15 +466,232 @@ CONTAINS
 
     CALL tihalt(procedureN,isub)
 
-    ! ==--------------------------------------------------------------==
 
+    CONTAINS
+
+    ! ==================================================================
+    SUBROUTINE process_blocks()
+       ! ==--------------------------------------------------------------==
+       ! Conventional loop for full HFX, no storage of real-space quantities
+
+       DO WHILE (iterator_blocks(iter))
+          CALL iterator_next_block(iter,blk)
+          CALL ind2sub_rect(nbr_blk_state,blk,row_blk,col_blk)
+          row_offset = offsets_state(row_blk)
+          col_offset = offsets_orb(col_blk)
+          row_size = sizes_state(row_blk)
+          col_size = sizes_orb(col_blk)
+
+          CALL block_invfft_old(c0  ,psi_row,row_offset,row_size)
+          CALL block_invfft_old(cpsi,psi_col,col_offset,col_size)
+
+
+          c = 0
+          DO ia = col_offset,col_offset+col_size-1,2
+             c = c + 1
+             ia1=ia
+             ia2=ia+1
+             IF (ia2.GT.norb) ia2=0
+
+             r = 0
+             DO ib = row_offset,row_offset+row_size-1,2
+                r = r + 1
+                ib1=ib
+                ib2=ib+1
+                IF (f(ib1).LT.1.e-6_real_8) ib1=0
+                IF (ib2.GT.nstate) THEN
+                   ib2=0
+                ELSEIF (f(ib2).LT.1.e-6_real_8) THEN
+                   ib2=0
+                ENDIF
+
+                pfl = 0.5_real_8
+                IF (cntl%thybrid) pfl=pfl*func3%phfx
+                pfl = pfl*sign
+
+                IF (ib1.NE.0 .OR. ib2.NE.0) THEN
+                   IF (ib1.NE.0) THEN
+                      pfx=pfl*f(ib1)
+                      CALL hfxpb(pfx,psi_col(:,c),.TRUE.,&
+                           psi_row(:,r),.TRUE.,vpotg,vpotr,psic,&
+                           C2_hfx(:,ia1))
+                   ENDIF
+                   IF (ib2.NE.0) THEN
+                      pfx=pfl*f(ib2)
+                      CALL hfxpb(pfx,psi_col(:,c),.TRUE.,&
+                           psi_row(:,r),.FALSE.,vpotg,vpotr,psic,&
+                           C2_hfx(:,ia1))
+                   ENDIF
+                   IF (ia2.GT.0) THEN
+                      IF (ib1.NE.0) THEN
+                         pfx=pfl*f(ib1)
+                         CALL hfxpb(pfx,psi_col(:,c),.FALSE.,&
+                              psi_row(:,r),.TRUE.,vpotg,vpotr,psic,&
+                              C2_hfx(:,ia2))
+                      ENDIF
+                      IF (ib2.NE.0) THEN
+                         pfx=pfl*f(ib2)
+                         CALL hfxpb(pfx,psi_col(:,c),.FALSE.,&
+                              psi_row(:,r),.FALSE.,vpotg,vpotr,psic,&
+                              C2_hfx(:,ia2))
+                      ENDIF
+                   ENDIF
+                ENDIF
+             ENDDO
+          ENDDO
+       ENDDO ! iter
+
+       ! ==--------------------------------------------------------------==
+    END SUBROUTINE process_blocks
+    ! ==================================================================
+    SUBROUTINE process_scaled_blocks()
+       ! ==--------------------------------------------------------------==
+       ! Loop for scaled exchange, including storage.
+
+       COMPLEX(real_8), DIMENSION(:,:), &
+                        ALLOCATABLE :: C2_in_real_space
+ 
+       CHARACTER(len=*), PARAMETER  :: subprocedureN = procedureN//'_process_scaled_blocks'
+ 
+       INTEGER         :: iorb, ig, ir
+       INTEGER         :: blk_orb, blk_resid
+       
+       COMPLEX(real_8) :: fp, fm
+
+       ALLOCATE(C2_in_real_space(maxfftn,norb),&
+                stat=ierr)
+       IF (ierr /= 0) CALL stopgm(subprocedureN,'Allocation problem',&
+                                 __LINE__,__FILE__)
+       CALL zeroing(C2_in_real_space)
+
+       CALL scex%start_density_scaling()
+
+       DO WHILE (iterator_blocks(iter))
+          CALL iterator_next_block(iter,blk)
+          CALL ind2sub_rect(nbr_blk_state,blk,row_blk,col_blk)
+          row_offset = offsets_state(row_blk)
+          col_offset = offsets_orb(col_blk)
+          row_size = sizes_state(row_blk)
+          col_size = sizes_orb(col_blk)
+
+          !
+          ! See comments in pw_hfx.mod.F90
+          !
+          CALL block_invfft_old(c0  ,psi_row,row_offset,row_size)
+          CALL block_invfft_old(cpsi,psi_col,col_offset,col_size)
+          
+          !
+          ! Scaled orbitals
+          !
+          CALL setfftn(scex_ID_scaled)
+          c = 0
+          DO ia = col_offset,col_offset+col_size-1,2
+             c = c + 1
+             ia1=ia
+             ia2=ia+1
+             IF (ia2.GT.norb) ia2=0
+
+             r = 0
+             DO ib = row_offset,row_offset+row_size-1,2
+                r = r + 1
+                ib1=ib
+                ib2=ib+1
+                IF (f(ib1).LT.1.e-6_real_8) ib1=0
+                IF (ib2.GT.nstate) THEN
+                   ib2=0
+                ELSEIF (f(ib2).LT.1.e-6_real_8) THEN
+                   ib2=0
+                ENDIF
+
+                pfl = 0.5_real_8
+                IF (cntl%thybrid) pfl=pfl*func3%phfx
+                pfl = pfl*sign
+
+                IF (ib1.NE.0 .OR. ib2.NE.0) THEN
+                   IF (ib1.NE.0) THEN
+                      pfx=pfl*f(ib1)
+                      CALL hfxpb(pfx,psi_col(:,c),.TRUE.,&
+                           psi_row(:,r),.TRUE.,vpotg,vpotr,psic,&
+                           C2_in_real_space(:,ia1))
+                   ENDIF
+                   IF (ib2.NE.0) THEN
+                      pfx=pfl*f(ib2)
+                      CALL hfxpb(pfx,psi_col(:,c),.TRUE.,&
+                           psi_row(:,r),.FALSE.,vpotg,vpotr,psic,&
+                           C2_in_real_space(:,ia1))
+                   ENDIF
+                   IF (ia2.GT.0) THEN
+                      IF (ib1.NE.0) THEN
+                         pfx=pfl*f(ib1)
+                         CALL hfxpb(pfx,psi_col(:,c),.FALSE.,&
+                              psi_row(:,r),.TRUE.,vpotg,vpotr,psic,&
+                              C2_in_real_space(:,ia2))
+                      ENDIF
+                      IF (ib2.NE.0) THEN
+                         pfx=pfl*f(ib2)
+                         CALL hfxpb(pfx,psi_col(:,c),.FALSE.,&
+                              psi_row(:,r),.FALSE.,vpotg,vpotr,psic,&
+                              C2_in_real_space(:,ia2))
+                      ENDIF
+                   ENDIF
+                ENDIF
+             ENDDO
+          ENDDO
+          !
+          ! Conventional orbitals
+          !
+          CALL setfftn(scex_ID_parent)
+          !
+       ENDDO ! iter
+
+       CALL scex%switch_density_scaling()
+
+       blk_orb   = norb / 2
+       blk_resid = norb - blk_orb*2
+
+       DO iorb=1,blk_orb
+          DO ir=1,scex%llr1
+            C2_in_real_space(ir,iorb) = REAL(C2_in_real_space(ir,iorb))&
+                                        + uimag*REAL(C2_in_real_space(ir,iorb+blk_orb))
+          ENDDO
+          CALL scex%undo_density_scaling(C2_in_real_space(:,iorb))
+          CALL fwfftn(C2_in_real_space(:,iorb),.TRUE.,parai%allgrp)
+          !$omp parallel do private(IG,FP,FM)
+          DO ig=1,jgw
+             fp = C2_in_real_space(nzfs(ig),iorb) + C2_in_real_space(inzs(ig),iorb)
+             fm = C2_in_real_space(nzfs(ig),iorb) - C2_in_real_space(inzs(ig),iorb)
+             C2_hfx(ig,iorb)         = 0.5_real_8*CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+             C2_hfx(ig,iorb+blk_orb) = 0.5_real_8*CMPLX(AIMAG(fp),-REAL(fm),kind=real_8)
+          ENDDO
+ 
+       ENDDO
+       IF (blk_resid > 0) THEN
+          CALL scex%undo_density_scaling(C2_in_real_space(:,norb))
+          CALL fwfftn(C2_in_real_space(:,norb),.TRUE.,parai%allgrp)
+          !$omp parallel do private(IG,FP,FM)
+          DO ig = 1,jgw
+             fp = C2_in_real_space(nzfs(ig),norb) + C2_in_real_space(inzs(ig),norb)
+             fm = C2_in_real_space(nzfs(ig),norb) - C2_in_real_space(inzs(ig),norb)
+             C2_hfx(ig,norb) = 0.5_real_8*CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+          ENDDO
+       ENDIF
+
+       CALL scex%annihilate_density_scaling()
+
+       DEALLOCATE(C2_in_real_space,stat=ierr)
+       IF (ierr /= 0) CALL stopgm(subprocedureN,'Deallocation problem',&
+                                  __LINE__,__FILE__)
+
+       ! ==--------------------------------------------------------------==
+    END SUBROUTINE process_scaled_blocks
+    ! ==================================================================
   END SUBROUTINE hfxpsi_new
-
   ! ==================================================================
   SUBROUTINE hfxpb(pf,psia,a_stored_in_real,psib,b_stored_in_real,&
        vpotg,vpotr,psic,c2a)
     ! ==================================================================
-
+    ! Simplifications as in pw_hfx; density scaling
+    !                                 12.02.2019 M.P.Bircher @ LCBC/EPFL
     ! ==--------------------------------------------------------------==
 
     REAL(real_8)                             :: pf
@@ -527,64 +703,25 @@ CONTAINS
     REAL(real_8)                             :: vpotr(:)
     COMPLEX(real_8)                          :: psic(:), c2a(:)
 
-    COMPLEX(real_8)                          :: fm, fp
     INTEGER                                  :: ig, ir
 
-    IF (a_stored_in_real) THEN
-       IF (b_stored_in_real) THEN
-          DO ir=1,llr1
-             psic(ir)=REAL(psia(ir))*REAL(psib(ir))
-          ENDDO
-       ELSE
-          DO ir=1,llr1
-             psic(ir)=REAL(psia(ir))*AIMAG(psib(ir))
-          ENDDO
-       ENDIF
-    ELSE
-       IF (b_stored_in_real) THEN
-          DO ir=1,llr1
-             psic(ir)=AIMAG(psia(ir))*REAL(psib(ir))
-          ENDDO
-       ELSE
-          DO ir=1,llr1
-             psic(ir)=AIMAG(psia(ir))*AIMAG(psib(ir))
-          ENDDO
-       ENDIF
-    ENDIF
-    CALL dscal(2*llr1,1._real_8/parm%omega,psic,1)
+    CALL hfxresp_get_pair_density(psia,psib,psic,a_stored_in_real,b_stored_in_real)
     CALL fwfftn(psic,.FALSE.,parai%allgrp)
-    DO ig=1,jhg
-       vpotg(ig)=-pf*scgx(ig)*psic(nzff(ig))
-    ENDDO
-    CALL zeroing(psic)!,maxfftn)
-    DO ig=1,jhg
-       psic(nzff(ig))=vpotg(ig)
-       psic(inzf(ig))=CONJG(vpotg(ig))
-    ENDDO
-    IF (geq0) psic(nzff(1))=vpotg(1)
+    CALL hfxresp_get_coulomb(psic,vpotg,pf)
+    CALL hfxresp_set_vpotg(psic,vpotg)
     CALL invfftn(psic,.FALSE.,parai%allgrp)
-    DO ir=1,llr1
-       vpotr(ir)=REAL(psic(ir))
-    ENDDO
-    IF (b_stored_in_real) THEN
-       DO ir=1,llr1
-          psic(ir)=vpotr(ir)*REAL(psib(ir))
-       ENDDO
+    CALL hfxresp_set_vpotr(psic,vpotr)
+    CALL hfxresp_get_potential(psib,psic,vpotr,b_stored_in_real)
+
+    IF (cntl%use_scaled_hfx) THEN
+       CALL hfxresp_get_c2_real_space(psic,c2a)
     ELSE
-       DO ir=1,llr1
-          psic(ir)=vpotr(ir)*AIMAG(psib(ir))
-       ENDDO
+       CALL fwfftn(psic,.TRUE.,parai%allgrp)
+       CALL hfxpb_get_c2(psic,c2a)
     ENDIF
-    CALL fwfftn(psic,.TRUE.,parai%allgrp)
-    DO ig=1,jgw
-       fp=psic(nzfs(ig))+psic(inzs(ig))
-       fm=psic(nzfs(ig))-psic(inzs(ig))
-       c2a(ig)=c2a(ig)+0.5_real_8*CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
-    ENDDO
 
     ! ==--------------------------------------------------------------==
   END SUBROUTINE hfxpb
-
   ! ==================================================================
   SUBROUTINE hfxpb_lin2(pf,psia,psib,c2a)
     ! ==================================================================
@@ -606,11 +743,18 @@ CONTAINS
 
     ! ==--------------------------------------------------------------==
   END SUBROUTINE hfxpb_lin2
+  ! ==================================================================
+
+  ! ==================================================================
+  ! RPA
+  ! ==================================================================
 
   ! ==================================================================
   SUBROUTINE hfxrpa_new(c0,c1,c2,psia,nstate,tcis)
     ! ==================================================================
-    ! == HARTREE-FOCK EXCHANGE CONTRIBUTION TO RPA                    ==
+    ! Hartree-Fock exchange contribution to RPA
+    ! Updated with coordinate-scaling and refactored on 12.02.2019
+    !                                           M.P. Bircher @ LCBC/EPFL
     ! ==--------------------------------------------------------------==
     COMPLEX(real_8)                          :: c0(:,:), c1(:,:), c2(:,:), &
                                                 psia(:)
@@ -655,7 +799,15 @@ CONTAINS
          'OLD TASK GROUPS NOT IMPLEMENTED',& 
          __LINE__,__FILE__)
     ! 
-    CALL setfftn(ipoolhfx)
+    IF (cntl%use_scaled_hfx) THEN
+       IF (.NOT. scex%init) CALL stopgm(procedureN,'ScEX requested, but not initialised',&
+                                        __LINE__,__FILE__)
+       IF (cntl%tlsd) CALL stopgm(procedureN,'ScEX for LSD NYI',&
+                                  __LINE__,__FILE__)
+       CALL setfftn(scex_ID_parent)
+    ELSE
+       CALL setfftn(ipoolhfx)
+    ENDIF
 
     ! ==--------------------------------------------------------------==
 
@@ -727,65 +879,15 @@ CONTAINS
        REWIND(2000+parai%mepos)
     ENDIF
 
-    DO ispin = 1,nspins
+    !
+    ! Main loop
+    !
+    IF (cntl%use_scaled_hfx) THEN
+       CALL process_scaled_blocks() 
+    ELSE
+       CALL process_blocks()
+    ENDIF
 
-       nst = nstates(ispin)
-       st_offst = 0
-       IF (ispin.EQ.2) st_offst = nstates(1)
-
-       ! get the number of block pairs
-
-       nbr_blk = CEILING(REAL(nst,kind=real_8)/REAL(max_block_size,kind=real_8))
-       nblks = nbr_blk**2
-
-       CALL build_block_info(nst,nbr_blk,max_block_size,&
-            offsets,sizes)
-       CALL build_dist(dist,nblks,hfx_dist,tick_blks(:))
-
-       CALL iterator_start(iter,dist)
-       DO WHILE (iterator_blocks(iter))
-          CALL iterator_next_block(iter,blk)
-          CALL ind2sub_rect(nbr_blk,blk,row_blk,col_blk)
-          row_offset = offsets(row_blk) + st_offst
-          col_offset = offsets(col_blk) + st_offst
-          row_size = sizes(row_blk); col_size = sizes(col_blk)
-
-          CALL block_invfft_old(c0,psi_row,row_offset,row_size)
-
-          DO ia = col_offset,col_offset+col_size-1
-             ! >>>>
-             CALL zeroing(psia)!,maxfftn)
-             DO ig=1,jgw
-                psia(nzfs(ig))=c1(ig,ia)+uimag*c0(ig,ia)
-                psia(inzs(ig))=CONJG(c1(ig,ia))+&
-                     uimag*CONJG(c0(ig,ia))
-             ENDDO
-             IF (geq0) psia(nzfs(1))=c1(1,ia)+uimag*c0(1,ia)
-
-             ! Transform the wavefunctions to real space
-             CALL invfftn(psia,.TRUE.,parai%allgrp)
-             ! <<<< need a block_invfft for this operation
-
-             r = 0
-             DO ib = row_offset,row_offset+row_size-1,2
-                r = r + 1
-
-                ib1=ib
-                ib2=ib+1
-                IF (ib2.GT.nst+st_offst) ib2=0
-
-                CALL hfxrpav(pfl,ia,ib1,psia,psi_row(:,r),1,vpotg,vpotr,&
-                     psic,C2_hfx(:,ib1))
-
-                IF (ib2.NE.0) THEN
-                   CALL hfxrpav(pfl,ia,ib2,psia,psi_row(:,r),2,vpotg,vpotr,&
-                        psic,C2_hfx(:,ib2))
-                ENDIF
-
-             ENDDO! IB
-          ENDDO! IA
-       ENDDO! iter
-    ENDDO ! ispin
 
     IF (hfx_resp_env%write_v_ab)  CLOSE(2000+parai%mepos)
     ! 
@@ -821,14 +923,217 @@ CONTAINS
 
     CALL tihalt(procedureN,isub)
 
-    ! ==--------------------------------------------------------------==
 
+    CONTAINS
+
+    ! ==================================================================
+    SUBROUTINE process_blocks()
+       ! ==--------------------------------------------------------------==
+       ! Conventional loop for full HFX, no storage of real-space quantities
+
+       DO ispin = 1,nspins
+
+          nst = nstates(ispin)
+          st_offst = 0
+          IF (ispin.EQ.2) st_offst = nstates(1)
+
+          ! get the number of block pairs
+
+          nbr_blk = CEILING(REAL(nst,kind=real_8)/REAL(max_block_size,kind=real_8))
+          nblks = nbr_blk**2
+
+          CALL build_block_info(nst,nbr_blk,max_block_size,&
+               offsets,sizes)
+          CALL build_dist(dist,nblks,hfx_dist,tick_blks(:))
+
+          CALL iterator_start(iter,dist)
+          DO WHILE (iterator_blocks(iter))
+             CALL iterator_next_block(iter,blk)
+             CALL ind2sub_rect(nbr_blk,blk,row_blk,col_blk)
+             row_offset = offsets(row_blk) + st_offst
+             col_offset = offsets(col_blk) + st_offst
+             row_size = sizes(row_blk); col_size = sizes(col_blk)
+
+             CALL block_invfft_old(c0,psi_row,row_offset,row_size)
+
+             DO ia = col_offset,col_offset+col_size-1
+                ! >>>>
+                CALL zeroing(psia)!,maxfftn)
+                DO ig=1,jgw
+                   psia(nzfs(ig))=c1(ig,ia)+uimag*c0(ig,ia)
+                   psia(inzs(ig))=CONJG(c1(ig,ia))+&
+                        uimag*CONJG(c0(ig,ia))
+                ENDDO
+                IF (geq0) psia(nzfs(1))=c1(1,ia)+uimag*c0(1,ia)
+
+                ! Transform the wavefunctions to real space
+                CALL invfftn(psia,.TRUE.,parai%allgrp)
+                ! <<<< need a block_invfft for this operation
+
+                r = 0
+                DO ib = row_offset,row_offset+row_size-1,2
+                   r = r + 1
+
+                   ib1=ib
+                   ib2=ib+1
+                   IF (ib2.GT.nst+st_offst) ib2=0
+
+                   CALL hfxrpav(pfl,ia,ib1,psia,psi_row(:,r),1,vpotg,vpotr,&
+                        psic,C2_hfx(:,ib1))
+
+                   IF (ib2.NE.0) THEN
+                      CALL hfxrpav(pfl,ia,ib2,psia,psi_row(:,r),2,vpotg,vpotr,&
+                           psic,C2_hfx(:,ib2))
+                   ENDIF
+
+                ENDDO! IB
+             ENDDO! IA
+          ENDDO! iter
+       ENDDO ! ispin
+
+
+       ! ==--------------------------------------------------------------==
+    END SUBROUTINE process_blocks
+    ! ==================================================================
+    SUBROUTINE process_scaled_blocks()
+       ! ==--------------------------------------------------------------==
+       ! Loop for scaled exchange, including storage.
+
+       COMPLEX(real_8), DIMENSION(:,:), &
+                        ALLOCATABLE :: C2_in_real_space
+ 
+       CHARACTER(len=*), PARAMETER  :: subprocedureN = procedureN//'_process_scaled_blocks'
+ 
+       INTEGER         :: istate, ig, ir
+       INTEGER         :: blk_state, blk_resid
+       
+       COMPLEX(real_8) :: fp, fm
+
+       ALLOCATE(C2_in_real_space(maxfftn,nstate),&
+                stat=ierr)
+       IF (ierr /= 0) CALL stopgm(subprocedureN,'Allocation problem',&
+                                 __LINE__,__FILE__)
+       CALL zeroing(C2_in_real_space)
+
+       CALL scex%start_density_scaling()
+
+       DO ispin = 1,nspins
+
+          nst = nstates(ispin)
+          st_offst = 0
+          IF (ispin.EQ.2) st_offst = nstates(1)
+
+          ! get the number of block pairs
+
+          nbr_blk = CEILING(REAL(nst,kind=real_8)/REAL(max_block_size,kind=real_8))
+          nblks = nbr_blk**2
+
+          CALL build_block_info(nst,nbr_blk,max_block_size,&
+               offsets,sizes)
+          CALL build_dist(dist,nblks,hfx_dist,tick_blks(:))
+
+          CALL iterator_start(iter,dist)
+          DO WHILE (iterator_blocks(iter))
+             CALL iterator_next_block(iter,blk)
+             CALL ind2sub_rect(nbr_blk,blk,row_blk,col_blk)
+             row_offset = offsets(row_blk) + st_offst
+             col_offset = offsets(col_blk) + st_offst
+             row_size = sizes(row_blk); col_size = sizes(col_blk)
+        
+             CALL block_invfft_old(c0,psi_row,row_offset,row_size)
+
+             DO ia = col_offset,col_offset+col_size-1
+                ! >>>>
+                CALL zeroing(psia)!,maxfftn)
+                DO ig=1,jgw
+                   psia(nzfs(ig))=c1(ig,ia)+uimag*c0(ig,ia)
+                   psia(inzs(ig))=CONJG(c1(ig,ia))+&
+                        uimag*CONJG(c0(ig,ia))
+                ENDDO
+                IF (geq0) psia(nzfs(1))=c1(1,ia)+uimag*c0(1,ia)
+
+                ! Transform the wavefunctions to real space
+                CALL invfftn(psia,.TRUE.,parai%allgrp)
+                ! <<<< need a block_invfft for this operation
+
+                CALL scex%do_density_scaling(psia)
+
+                !
+                ! Scaled orbitals
+                !
+                CALL setfftn(scex_ID_scaled)
+                r = 0
+                DO ib = row_offset,row_offset+row_size-1,2
+                   r = r + 1
+
+                   ib1=ib
+                   ib2=ib+1
+                   IF (ib2.GT.nst+st_offst) ib2=0
+
+                   CALL hfxrpav(pfl,ia,ib1,psia,psi_row(:,r),1,vpotg,vpotr,&
+                        psic,C2_in_real_space(:,ib1))
+
+                   IF (ib2.NE.0) THEN
+                      CALL hfxrpav(pfl,ia,ib2,psia,psi_row(:,r),2,vpotg,vpotr,&
+                           psic,C2_in_real_space(:,ib2))
+                   ENDIF
+
+                ENDDO! IB
+                !
+                ! Conventional orbitals
+                !
+                CALL setfftn(scex_ID_parent)
+                !
+             ENDDO! IA
+          ENDDO! iter
+       ENDDO ! ispin
+
+       CALL scex%switch_density_scaling()
+
+       blk_state = nstate / 2
+       blk_resid = nstate - blk_state*2
+
+       DO istate=1,blk_state
+          DO ir=1,scex%llr1
+            C2_in_real_space(ir,istate) = REAL(C2_in_real_space(ir,istate))&
+                                        + uimag*REAL(C2_in_real_space(ir,istate+blk_state))
+          ENDDO
+          CALL scex%undo_density_scaling(C2_in_real_space(:,istate))
+          CALL fwfftn(C2_in_real_space(:,istate),.TRUE.,parai%allgrp)
+          !$omp parallel do private(IG,FP,FM)
+          DO ig=1,jgw
+             fp = C2_in_real_space(nzfs(ig),istate) + C2_in_real_space(inzs(ig),istate)
+             fm = C2_in_real_space(nzfs(ig),istate) - C2_in_real_space(inzs(ig),istate)
+             C2_hfx(ig,istate)           = -0.5_real_8*CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+             C2_hfx(ig,istate+blk_state) = -0.5_real_8*CMPLX(AIMAG(fp),-REAL(fm),kind=real_8)
+          ENDDO
+ 
+       ENDDO
+       IF (blk_resid > 0) THEN
+          CALL scex%undo_density_scaling(C2_in_real_space(:,nstate))
+          CALL fwfftn(C2_in_real_space(:,nstate),.TRUE.,parai%allgrp)
+          !$omp parallel do private(IG,FP,FM)
+          DO ig = 1,jgw
+             fp = C2_in_real_space(nzfs(ig),nstate) + C2_in_real_space(inzs(ig),nstate)
+             fm = C2_in_real_space(nzfs(ig),nstate) - C2_in_real_space(inzs(ig),nstate)
+             C2_hfx(ig,nstate) = -0.5_real_8*CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+          ENDDO
+       ENDIF
+
+       CALL scex%annihilate_density_scaling()
+
+       DEALLOCATE(C2_in_real_space,stat=ierr)
+       IF (ierr /= 0) CALL stopgm(subprocedureN,'Deallocation problem',&
+                                  __LINE__,__FILE__)
+
+       ! ==--------------------------------------------------------------==
+    END SUBROUTINE process_scaled_blocks
+    ! ==================================================================
   END SUBROUTINE hfxrpa_new
-
   ! ==================================================================
   SUBROUTINE hfxrpa_incore(c0,c1,c2,psia,nstate,tcis)
     ! ==================================================================
-    ! == HARTREE-FOCK EXCHANGE CONTRIBUTION TO RPA                    ==
+    ! == Hartree-Fock exchange contribution to RPA                    ==
     ! ==--------------------------------------------------------------==
     COMPLEX(real_8)                          :: c0(:,:), c1(:,:), c2(:,:), &
                                                 psia(:)
@@ -1039,8 +1344,9 @@ CONTAINS
 
     ! ==--------------------------------------------------------------==
 
+    ! ==================================================================
   END SUBROUTINE hfxrpa_incore
-
+  ! ==================================================================
   SUBROUTINE hfxrpav(pf,ia,ib,psia,psib,iran,vpotg,vpotr,psic,c2a)
     ! ==================================================================
     REAL(real_8)                             :: pf
@@ -1051,33 +1357,22 @@ CONTAINS
     REAL(real_8)                             :: vpotr(:)
     COMPLEX(real_8)                          :: psic(:), c2a(:)
 
+    LOGICAL, PARAMETER                       :: a_stored_in_real = .FALSE.
+
     COMPLEX(real_8)                          :: fm, fp
     INTEGER                                  :: ig, ir
+    LOGICAL                                  :: b_stored_in_real
 
-    IF (iran.EQ.1) THEN
-       DO ir=1,llr1
-          psic(ir)=AIMAG(psia(ir))*REAL(psib(ir))
-       ENDDO
-    ELSE
-       DO ir=1,llr1
-          psic(ir)=AIMAG(psia(ir))*AIMAG(psib(ir))
-       ENDDO
-    ENDIF
-    CALL dscal(2*llr1,1._real_8/parm%omega,psic,1)
+    b_stored_in_real = (iran == 1)
+
+    CALL hfxresp_get_pair_density(psia,psib,psic,a_stored_in_real,b_stored_in_real)
+
     CALL fwfftn(psic,.FALSE.,parai%allgrp)
-    DO ig=1,jhg
-       vpotg(ig)=-pf*scgx(ig)*psic(nzff(ig))
-    ENDDO
-    CALL zeroing(psic)!,maxfftn)
-    DO ig=1,jhg
-       psic(nzff(ig))=vpotg(ig)
-       psic(inzf(ig))=CONJG(vpotg(ig))
-    ENDDO
-    IF (geq0) psic(nzff(1))=vpotg(1)
+    CALL hfxresp_get_coulomb(psic,vpotg,pf)
+    CALL hfxresp_set_vpotg(psic,vpotg)
     CALL invfftn(psic,.FALSE.,parai%allgrp)
-    DO ir=1,llr1
-       vpotr(ir)=REAL(psic(ir))
-    ENDDO
+    CALL hfxresp_set_vpotr(psic,vpotr)
+
     IF (hfx_resp_env%store_v_ab) THEN
        IF (hfx_resp_env%write_v_ab) THEN
           DO ir=1,llr1
@@ -1090,19 +1385,17 @@ CONTAINS
        ENDIF
        hfx_resp%is_set=.TRUE.
     ENDIF
-    DO ir=1,llr1
-       psic(ir)=vpotr(ir)*REAL(psia(ir))
-    ENDDO
-    CALL fwfftn(psic,.TRUE.,parai%allgrp)
-    DO ig=1,jgw
-       fp=psic(nzfs(ig))+psic(inzs(ig))
-       fm=psic(nzfs(ig))-psic(inzs(ig))
-       c2a(ig)=c2a(ig)-0.5_real_8*CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
-    ENDDO
+
+    CALL hfxresp_get_potential(psia,psic,vpotr,(.NOT. a_stored_in_real))
+    IF (cntl%use_scaled_hfx) THEN
+       CALL hfxresp_get_c2_real_space(psic,c2a)
+    ELSE
+       CALL fwfftn(psic,.TRUE.,parai%allgrp)
+       CALL hfxrpav_get_c2(psic,c2a) 
+    ENDIF
+
     ! ==--------------------------------------------------------------==
-
   END SUBROUTINE hfxrpav
-
   ! ==================================================================
   SUBROUTINE hfxrpav_incore(pf,ia,ib,psia,psib,iran,vpotg,vpotr,psic,c2a)
     ! ==================================================================
@@ -1136,7 +1429,201 @@ CONTAINS
     ! ==--------------------------------------------------------------==
 
   END SUBROUTINE hfxrpav_incore
-  ! ==--------------------------------------------------------------==
+  ! ==================================================================
 
+  ! ==================================================================
+  ! Routines for hfxrpa and hfxpsi
+  ! ==================================================================
+
+  ! ==================================================================
+  SUBROUTINE hfxresp_get_pair_density(psia,psib,psic,a_stored_in_real,b_stored_in_real)
+    ! ==--------------------------------------------------------------==
+ 
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(in)     :: psia, psib
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(inout)  :: psic
+    LOGICAL, INTENT(in)             :: a_stored_in_real
+    LOGICAL, INTENT(in)             :: b_stored_in_real
+ 
+    INTEGER                         :: ir
+
+    CALL zeroing(psic)
+    IF (a_stored_in_real) THEN
+       IF (b_stored_in_real) THEN
+          !$omp parallel do private(ir)
+          DO ir=1,llr1
+             psic(ir)=REAL(psia(ir))*REAL(psib(ir))
+          ENDDO
+       ELSE
+          !$omp parallel do private(ir)
+          DO ir=1,llr1
+             psic(ir)=REAL(psia(ir))*AIMAG(psib(ir))
+          ENDDO
+       ENDIF
+    ELSE
+       IF (b_stored_in_real) THEN
+          !$omp parallel do private(ir)
+          DO ir=1,llr1
+             psic(ir)=AIMAG(psia(ir))*REAL(psib(ir))
+          ENDDO
+       ELSE
+          !$omp parallel do private(ir)
+          DO ir=1,llr1
+             psic(ir)=AIMAG(psia(ir))*AIMAG(psib(ir))
+          ENDDO
+       ENDIF
+    ENDIF
+    CALL dscal(2*llr1,1._real_8/parm%omega,psic,1)
+ 
+    ! ==--------------------------------------------------------------==
+  END SUBROUTINE hfxresp_get_pair_density
+  ! ==================================================================
+  SUBROUTINE hfxresp_get_coulomb(psic,vpotg,pf)
+    ! ==--------------------------------------------------------------==
+
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(inout)  :: psic, vpotg
+
+    REAL(real_8), INTENT(in)        :: pf
+
+    INTEGER                         :: ig
+
+    !$omp parallel do private(IG)
+    DO ig=1,jhg
+       vpotg(ig)=-pf*scgx(ig)*psic(nzff(ig))
+    ENDDO
+
+    ! ==--------------------------------------------------------------==
+  END SUBROUTINE hfxresp_get_coulomb
+  ! ==================================================================
+  SUBROUTINE hfxresp_set_vpotg(psic,vpotg)
+    ! ==--------------------------------------------------------------==
+
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(inout)  :: psic, vpotg
+
+    INTEGER                         :: ig
+
+    CALL zeroing(psic)
+
+    !$omp parallel do private(IG)
+    DO ig=1,jhg
+       psic(nzff(ig))=vpotg(ig)
+       psic(inzf(ig))=CONJG(vpotg(ig))
+    ENDDO
+    IF (geq0) psic(nzff(1))=vpotg(1)
+
+    ! ==--------------------------------------------------------------==
+  END SUBROUTINE hfxresp_set_vpotg
+  ! ==================================================================
+  SUBROUTINE hfxresp_set_vpotr(psic,vpotr)
+    ! ==--------------------------------------------------------------==
+
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(in)     :: psic
+    REAL(real_8), DIMENSION(:), &
+                  INTENT(inout)     :: vpotr
+
+    INTEGER                         :: ir
+
+    !$omp parallel do private(IR)
+    DO ir=1,llr1
+       vpotr(ir) = REAL(psic(ir))
+    ENDDO
+
+    ! ==--------------------------------------------------------------==
+  END SUBROUTINE hfxresp_set_vpotr
+  ! ==================================================================
+  SUBROUTINE hfxresp_get_potential(psi,psic,vpotr,stored_in_real)
+    ! ==--------------------------------------------------------------==
+
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(in)     :: psi
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(inout)  :: psic
+    REAL(real_8), DIMENSION(:), &
+                  INTENT(in)        :: vpotr
+    LOGICAL, INTENT(in)             :: stored_in_real
+
+    INTEGER                         :: ir
+
+    CALL zeroing(psic)
+
+    IF (stored_in_real) THEN
+       !$omp parallel do private(ir)
+       DO ir=1,llr1
+          psic(ir) = vpotr(ir)*REAL(psi(ir))
+       ENDDO
+    ELSE
+       !$omp parallel do private(ir)
+       DO ir=1,llr1
+          psic(ir) = vpotr(ir)*AIMAG(psi(ir))
+       ENDDO
+    ENDIF
+
+    ! ==--------------------------------------------------------------==
+  END SUBROUTINE hfxresp_get_potential
+  ! ==================================================================
+  SUBROUTINE hfxresp_get_c2_real_space(psic,c2)
+    ! ==--------------------------------------------------------------==
+
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(in)       :: psic
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(inout)    :: c2
+
+    INTEGER         :: ir
+
+    !$omp parallel do private(ir)
+    DO ir=1,llr1
+       c2(ir) = c2(ir) + REAL(psic(ir))
+    ENDDO
+
+    ! ==--------------------------------------------------------------==
+  END SUBROUTINE hfxresp_get_c2_real_space
+  ! ================================================================== 
+  SUBROUTINE hfxpb_get_c2(psic,c2)
+    ! ==--------------------------------------------------------------==
+
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(in)       :: psic
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(inout)    :: c2
+
+    COMPLEX(real_8) :: fp, fm
+    INTEGER         :: ig
+
+    !$omp parallel do private(ig,fp,fm)
+    DO ig=1,jgw
+       fp     = psic(nzfs(ig))+psic(inzs(ig))
+       fm     = psic(nzfs(ig))-psic(inzs(ig))
+       c2(ig) = c2(ig)+0.5_real_8*CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+    ENDDO
+
+    ! ==--------------------------------------------------------------==
+  END SUBROUTINE hfxpb_get_c2
+  ! ==================================================================
+  SUBROUTINE hfxrpav_get_c2(psic,c2)
+    ! ==--------------------------------------------------------------==
+
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(in)       :: psic
+    COMPLEX(real_8), DIMENSION(:), &
+                     INTENT(inout)    :: c2
+
+    COMPLEX(real_8) :: fp, fm
+    INTEGER         :: ig
+
+    !$omp parallel do private(ig,fp,fm)
+    DO ig=1,jgw
+       fp     = psic(nzfs(ig))+psic(inzs(ig))
+       fm     = psic(nzfs(ig))-psic(inzs(ig))
+       c2(ig) = c2(ig)-0.5_real_8*CMPLX(REAL(fp),AIMAG(fm),kind=real_8)
+    ENDDO
+
+    ! ==--------------------------------------------------------------==
+  END SUBROUTINE hfxrpav_get_c2
+  ! ==================================================================
 END MODULE pw_hfx_resp
 ! ==================================================================
