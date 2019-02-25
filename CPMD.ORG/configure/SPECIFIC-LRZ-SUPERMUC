@@ -13,7 +13,7 @@
      FC='mpif90'
      CC='mpicc'
      LD='mpif90'
-     CPP='/lib/cpp -P -C -traditional'
+     CPP='/lib/cpp -P -traditional'
      CPPFLAGS='-D__HAS_BF_STREAM_IO -D__Linux  -D__PARALLEL -DLINUX_IFC -D__NO_MEMSIZE -D__HASNT_F08_ISO_FORTRAN_ENV -D__HASNT_OMP_45'
 
      FFLAGS_GROMOS='$(FFLAGS) -ffixed-form' 

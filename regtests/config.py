@@ -1,5 +1,5 @@
-root='/dss/dsshome1/07/lu64bag3/src/cpmd/CPMD.ORG/'
-arch='build/sng'
+root='/dss/dsshome1/07/lu64bag3/src/cpmd/uspp_xc/CPMD.ORG/'
+arch='../build/sng'
 version='x'
 nproc=
 bin='${root}/${arch}/bin/cpmd.${version}'
