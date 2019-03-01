@@ -1,4 +1,5 @@
 MODULE vofrhos_utils
+  USE cp_xc_utils,                     ONLY: cp_xc
   USE cnst,                            ONLY: fpi
   USE cofor_utils,                     ONLY: cofor
   USE corec_utils,                     ONLY: corec
@@ -192,6 +193,7 @@ CONTAINS
     vgc1  = 0.0_real_8
     IF (ABS(lspin1%lsea) .GT. 1.e-6_real_8) THEN
        cntl%tlsd=.TRUE.
+       IF (ASSOCIATED(cp_xc)) cp_xc%polarized = .NOT. cp_xc%polarized
        CALL xcener(sxc1,vxc1,rhoval,rhoe(:,1:2),v)
        cntl%tlsd=.FALSE.
        IF (cntl%tgc) THEN
@@ -208,6 +210,7 @@ CONTAINS
           ! GRADIENT CORRECTION TO THE EXCHANGE ENERGY (EGCX)
           CALL gclsd(sgcx1,sgcc1,rhoe,v,vtemp,rvtmp,grad,.FALSE.)
        ENDIF
+       IF (ASSOCIATED(cp_xc)) cp_xc%polarized = .NOT. cp_xc%polarized
     ENDIF
     ! V CONTAINS THE MIXED STATE VXC IN R-SPACE, MOVE IT TO RHOE
     !$omp parallel do private(IR)
@@ -228,6 +231,7 @@ CONTAINS
     vgc2  = 0.0_real_8
     IF (ABS(lspin1%lseb) .GT. 1.e-6_real_8) THEN
        cntl%tlsd=.TRUE.
+       IF (ASSOCIATED(cp_xc)) cp_xc%polarized = .NOT. cp_xc%polarized
        CALL xcener(sxc2,vxc2,rhoval,rhoe(:,3:4),v)
        cntl%tlsd=.FALSE.
        IF (cntl%tgc) THEN
@@ -245,6 +249,7 @@ CONTAINS
           ! GRADIENT CORRECTION TO THE EXCHANGE ENERGY (EGCX)
           CALL gclsd(sgcx2,sgcc2,rhoe(:,3:),v,vtemp,rvtmp,grad,.FALSE.)
        ENDIF
+       IF (ASSOCIATED(cp_xc)) cp_xc%polarized = .NOT. cp_xc%polarized
     ENDIF
     ! V CONTAINS THE TRIPLET STATE VXC IN R-SPACE, MOVE IT TO RHOE
     !$omp parallel do private(IR)
@@ -536,6 +541,7 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     CALL dcopy(2*fpar%nnr1,v(1,1),1,dqg(1,1),1)
     cntl%tlsd=.TRUE.
+    IF (ASSOCIATED(cp_xc)) cp_xc%polarized = .NOT. cp_xc%polarized
     CALL xcener(sxc1,vxc1,rhoval,rhoe(:,1:2),v)
     cntl%tlsd=.FALSE.
     sgcx1 = 0.0_real_8
@@ -556,6 +562,7 @@ CONTAINS
        ! GRADIENT CORRECTION TO THE EXCHANGE ENERGY (EGCX)
        CALL gclsd(sgcx1,sgcc1,rhoe,v,vtemp,rvtmp,grad,.FALSE.)
     ENDIF
+    IF (ASSOCIATED(cp_xc)) cp_xc%polarized = .NOT. cp_xc%polarized
     ! V CONTAINS THE TOTAL POTENTIAL IN R-SPACE, MOVE IT TO RHOE
     !$omp parallel do private(IR)
     DO ir=1,fpar%nnr1
@@ -581,6 +588,7 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     CALL dcopy(2*fpar%nnr1,dqg(1,1),1,v(1,1),1)
     cntl%tlsd=.TRUE.
+    IF (ASSOCIATED(cp_xc)) cp_xc%polarized = .NOT. cp_xc%polarized
     CALL xcener(sxc2,vxc2,rhoval,rhoe(:,3:4),v)
     cntl%tlsd=.FALSE.
     sgcx2 = 0.0_real_8
@@ -600,6 +608,7 @@ CONTAINS
        ! GRADIENT CORRECTION TO THE EXCHANGE ENERGY (EGCX)
        CALL gclsd(sgcx2,sgcc2,rhoe(:,3:),v,vtemp,rvtmp,grad,.FALSE.)
     ENDIF
+    IF (ASSOCIATED(cp_xc)) cp_xc%polarized = .NOT. cp_xc%polarized
     ! V CONTAINS THE TOTAL POTENTIAL IN R-SPACE, MOVE IT TO RHOE
     !$omp parallel do private(IR)
     DO ir=1,fpar%nnr1

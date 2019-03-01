@@ -270,6 +270,7 @@ CONTAINS
        scex%grp_size(nbr_groups) = scex%grp_size(nbr_groups) + 1
        source_old                = plane_mpi_source(ir)
        dest_old                  = plane_mpi_dest(ir)
+
        !CALL mp_sync(parai%allgrp)
     ENDDO
     scex%nbr_mpi_groups = nbr_groups
@@ -321,6 +322,8 @@ CONTAINS
 
     CLASS(scex_t), INTENT(in)    :: scex
 
+    INTEGER                      :: grp
+
     IF (scex%init) CALL stopgm(procedureN,'ScEX type is already intialised',&
                                __LINE__,__FILE__)
 
@@ -365,6 +368,21 @@ CONTAINS
        CALL stopgm(procedureN,'ScEX: Full grid and auxiliary grid are not commensurate in '// &
                                'z-direction, cf. output file',__LINE__,__FILE__)
     ENDIF
+
+    DO grp=2,scex%nbr_mpi_groups
+       IF ( scex%grp_size(grp-1) /= scex%grp_size(grp) .AND. &
+            scex%grp_size(grp-1) > 0                   .AND. &
+            scex%grp_size(grp)   > 0 ) THEN
+          IF (paral%io_parent) THEN
+             WRITE(cpmd_output_unit,'(1X,A)') 'SCEX GRID PROBLEM: COORDINATE-SCALED GRID IS NOT EQUIDISTRIBUTED'
+             WRITE(cpmd_output_unit,'(1X,A)') 'PLEASE MAKE SURE THAT THE NUMBER OF MPI TASKS IS A DIVISOR OF'
+             WRITE(cpmd_output_unit,'(1X,A)') 'THE NUMBER OF SCALED REAL SPACE GRID POINTS GIVEN ABOVE.'
+             WRITE(cpmd_output_unit,'(1X,A)') 'THIS GUARANTEES AN OPTIMAL SETUP AND BEST POSSIBLE SPEED UPS.'
+          ENDIF
+          CALL stopgm(procedureN,'ScEX: Low-level grid is not equidistributed over tasks, cf. output file', &
+                                 __LINE__,__FILE__)
+       ENDIF
+    ENDDO
 
     ! ==--------------------------------------------------------------== 
   END SUBROUTINE scex_comm_check
