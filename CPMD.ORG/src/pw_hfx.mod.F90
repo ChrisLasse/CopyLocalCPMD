@@ -217,8 +217,6 @@ CONTAINS
     IF (cntl%use_scaled_hfx) THEN
        IF (.NOT. scex%init) CALL stopgm(procedureN,'ScEX requested, but not initialised',&
                                         __LINE__,__FILE__)
-       IF (cntl%tlsd) CALL stopgm(procedureN,'ScEX for LSD NYI',&
-                                  __LINE__,__FILE__)
        CALL setfftn(scex_ID_parent)
     ELSE
        CALL setfftn(ipoolhfx)
