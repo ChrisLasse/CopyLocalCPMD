@@ -79,6 +79,7 @@ MODULE vdwcmod
      LOGICAL :: tpc6
      LOGICAL :: tpforce
      LOGICAL :: treffit
+     LOGICAL :: tdampda
   END TYPE vdwwfl_t
   TYPE(vdwwfl_t) :: vdwwfl
   TYPE :: vdwwfi_t

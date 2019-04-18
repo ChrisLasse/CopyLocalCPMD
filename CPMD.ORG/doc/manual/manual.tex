@@ -5630,7 +5630,7 @@ and the type of functional is read from the next line. One of the following labe
      ... \\
    FRAGMENT BOND \\
      tollength  \\
-   DAMPING \\
+   DAMPING [DIPOLE] \\
      a6 \\
    RESTART WANNIER \\
    ENERGY MONOMER \\
@@ -5653,6 +5653,14 @@ and the type of functional is read from the next line. One of the following labe
   of your fragments (e.g. the ETOT you get by a standard calculation
   not including vdW corrections). For a6 the suggested parameter is
   20.0 \cite{molphy}.
+  An alternative method avoiding the use of the empirical parameter a6
+  is the one exploiting the replacement of the short-range damping function
+  by an estimation of the Pauli exchange repulsion given in terms of solely
+  Wannier function centers and spreads, as reported in arxiv.org/abs/1902.07646.
+  To activate this option the keyword DAMPING has to be given along with DIPOLE
+  on the same line. 
+  The following line (a6) has to be obviously removed, since anyhow is neither
+  read nor used in this (DAMPING DIPOLE) case.
   Note that the two possible vdW options, EMPIRICAL CORRECTION  and
   WANNIER CORRECTION are mutually exclusive.}
 

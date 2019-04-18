@@ -418,12 +418,19 @@ CONTAINS
                                efac=0.0_real_8
                                ffac=0.0_real_8
                             ELSE
-                               efac=c6vdw&
-                                    *POT59(DISTN,vdwwfr%a6,SPR(L,ICFR,ipx),SPR(M,JCFR,ipx),&
-                                    vdwwfi%iswitchvdw)/DISTN6
-                               ffac=c6vdw&
-                                    *FPOT59(DISTN,vdwwfr%a6,SPR(L,ICFR,ipx),SPR(M,JCFR,ipx),&
-                                    vdwwfi%iswitchvdw)/DISTN
+                               IF (vdwwfl%tdampda) THEN
+                                  efac=c6vdw/distn6&
+                                       +potda(distn,vdwwfi%nelpwf,spr(l,icfr,ipx),spr(m,jcfr,ipx))
+                                  ffac=(-6._real_8*c6vdw/(distn6*distn)&
+                                       +fpotda(distn,vdwwfi%nelpwf,spr(l,icfr,ipx),spr(m,jcfr,ipx)))/distn
+                               ELSE
+                                  efac=c6vdw&
+                                       *POT59(DISTN,vdwwfr%a6,SPR(L,ICFR,ipx),SPR(M,JCFR,ipx),&
+                                       vdwwfi%iswitchvdw)/DISTN6
+                                  ffac=c6vdw&
+                                       *FPOT59(DISTN,vdwwfr%a6,SPR(L,ICFR,ipx),SPR(M,JCFR,ipx),&
+                                       vdwwfi%iswitchvdw)/DISTN
+                               ENDIF
                             ENDIF
                             ! Energy
                             vdwr%evdw=vdwr%evdw+efac
@@ -523,6 +530,44 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE vdw_wf
+  ! ==================================================================
+  REAL(real_8) FUNCTION fpotda(r,nel,s1,s2)
+    ! ==--------------------------------------------------------------==
+    IMPLICIT NONE
+    ! Arguments
+    INTEGER :: nel
+    REAL(real_8) :: r,s1,s2
+    ! Local variables
+    REAL(real_8) :: q,ss,f1,f2,es
+    ! ==--------------------------------------------------------------==
+    q=REAL(nel,KIND=real_8)
+    ss=s1*s1+s2*s2
+    f1=s1*s2/ss
+    f2=r*r/ss
+    es=EXP(-1.5_real_8*f2)
+    fpotda=-4._real_8*q**2*f1**3*(1._real_8+3._real_8*f2)*es/(r*r)
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END FUNCTION fpotda
+  ! ==================================================================
+  REAL(real_8) FUNCTION potda(r,nel,s1,s2)
+    ! ==--------------------------------------------------------------==
+    IMPLICIT NONE
+    ! Arguments
+    INTEGER :: nel
+    REAL(real_8) :: r,s1,s2
+    ! Local variables
+    REAL(real_8) :: q,ss,f1,f2,es
+    ! ==--------------------------------------------------------------==
+    q=REAL(nel,KIND=real_8)
+    ss=s1*s1+s2*s2
+    f1=s1*s2/ss
+    f2=r*r/ss
+    es=EXP(-1.5_real_8*f2)
+    potda=4._real_8*q**2*f1**3*es/r
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END FUNCTION potda
   ! ==================================================================
   REAL(real_8) FUNCTION fpot59(r,a,s1,s2,iswitchvdw)
     ! ==--------------------------------------------------------------==

@@ -1,7 +1,7 @@
 #INFO#
 #INFO# Configuration for Linux HPC (NEC) cluster Equip@Meso / CPER AlsaCalcul
 #INFO# Intel Composer v.16 or later - OpenMPI/IntelMPI + OMP 3.0 (or later)
-#INFO# (IPCMS/Nagoya University, January 2019)
+#INFO# (IPCMS/Nagoya University, April 2019)
 #INFO#
      IRAT=2
      FC='mpiifort'
@@ -21,7 +21,7 @@
        FFLAGS='-g'
        CFLAGS='-g -Wall -m64'
      else
-       FFLAGS='-O2 -pc64 -funroll-loops -fpp -heap-arrays 64'
+       FFLAGS='-O2 -pc64 -funroll-loops -fpp -heap-arrays 64 -xHost'
        CFLAGS='-O2 -Wall  '
      fi
      if [ $omp ]; then

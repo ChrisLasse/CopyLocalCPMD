@@ -67,8 +67,8 @@ CONTAINS
     ! ==                                                              ==
     ! ==  Added support for DCACP.                                    ==
     ! ==                          12.06.2017 M.P.Bircher @ LCBC/EPFL  ==
-    ! ==  Previous releases:                                          ==
-    ! ==             Strasbourg/Tokyo/Zurich/Hyogo, 23 May 2013       ==
+    ! ==  Present release:                                            ==
+    ! ==             Strasbourg/Tokyo/Zurich/Hyogo, 2 April 2019      ==
     ! ==--------------------------------------------------------------==
     CHARACTER(*), PARAMETER                  :: procedureN = 'vdwin'
 
@@ -695,7 +695,7 @@ CONTAINS
     ! ==    FRAGMENT BOND [COVRAD]                                    ==
     ! ==      xmfacwf                                                 ==
     ! ==      covrad2 ...                                             ==
-    ! ==    DAMPING                                                   ==
+    ! ==    DAMPING [DIPOLE]                                          ==
     ! ==      a6                                                      ==
     ! ==    RESTART WANNIER                                           ==
     ! ==    ENERGY MONOMER                                            ==
@@ -761,6 +761,7 @@ CONTAINS
     vdwwfl%tpc6=.FALSE.
     vdwwfl%tpforce=.FALSE.
     vdwwfl%treffit=.FALSE.
+    vdwwfl%tdampda=.FALSE.
     !
     !
     !
@@ -848,17 +849,21 @@ CONTAINS
              resetcb=.TRUE.
           ENDIF
        ELSEIF (keyword_contains(line,'DAMPING')) THEN
-          READ(iunit,*,iostat=ierr) vdwwfr%a6
-          IF (ierr /= 0) THEN
-             error_message        = 'ERROR WHILE READING LINE'
-             something_went_wrong = .TRUE.
-             go_on_reading        = .FALSE.
-          ENDIF
-          IF (vdwwfr%a6 < 1.0e-05_real_8) THEN
-             WRITE(output_unit,'(/,1X,A,1X,A,/)')&
-                  'DAMPING FACTOR TOO SMALL. SET TO 20.0',&
-                  'ACCORDING TO: MOL. PHYS. 107, 999 (2009)'
-             vdwwfr%a6=20.0_real_8
+          IF (keyword_contains(line,'DIPOLE')) THEN
+             vdwwfl%tdampda=.TRUE.
+          ELSE
+             READ(iunit,*,iostat=ierr) vdwwfr%a6
+             IF (ierr /= 0) THEN
+                error_message        = 'ERROR WHILE READING LINE'
+                something_went_wrong = .TRUE.
+                go_on_reading        = .FALSE.
+             ENDIF
+             IF (vdwwfr%a6 < 1.0e-05_real_8) THEN
+                WRITE(output_unit,'(/,1X,A,1X,A,/)')&
+                     'DAMPING FACTOR TOO SMALL. SET TO 20.0',&
+                     'ACCORDING TO: MOL. PHYS. 107, 999 (2009)'
+                vdwwfr%a6=20.0_real_8
+             ENDIF
           ENDIF
        ELSEIF(keyword_contains(line,'RESTART') .AND.&
             keyword_contains(line,'WANN',alias='WANNIER')) THEN
@@ -1034,6 +1039,15 @@ CONTAINS
       ELSE
          WRITE(output_unit,'(A)')&
               '    USE REFERENCES OF ATOM/BOND CENTERS'
+      ENDIF
+      IF (vdwwfl%tdampda) THEN
+         WRITE(output_unit,'(A)')&
+              '    USE DIPOLE APPROXIMATION OF DAMPING FUNCTION'
+         WRITE(output_unit,'(A)')&
+              '    AS IN SILVESTRELLI-AMBROSETTI arXiv:1902.07646'
+      ELSE
+         WRITE(output_unit,'(A,T56,F10.3)')&
+              '    USE SEMIEMPIRICAL DAMPING FUNCTION WITH A6 FACTOR:',vdwwfr%a6
       ENDIF
       WRITE(output_unit,'(A,T56,F10.3)')&
            '    TOLERANCE FOR EXTRAPOLATION OF WF CENTERS(A.U.):',vdwwfr%tolwann
