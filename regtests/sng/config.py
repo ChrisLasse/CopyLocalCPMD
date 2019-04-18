@@ -1,0 +1,14 @@
+root='/dss/dsshome1/07/lu64bag3/src/cpmd/uspp_xc/CPMD.ORG'
+arch='sng'
+version='x'
+nproc=10
+bin='${root}/../build/${arch}/bin/cpmd.${version}'
+testsrc='${root}/../regtests/tests'
+ppdir='${root}/../regtests/tests/PP_LIBRARY/'
+make='make -j'
+makedir='${root}/../build/${arch}/'
+#cvs_update='cvs update -dP'
+nproc_mpi=2
+mpi_prefix='mpirun -n %i'
+mpi_suffix='-hostfile localhost'
+mpi_suffix=''
