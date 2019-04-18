@@ -1,0 +1,28 @@
+ &ATOM
+  Z  =     55.0000000000000     
+  ZV =     9.00000000000000     
+  XC = 0055   0.6666666667
+  TYPE = NORMCONSERVING GOEDECKER
+ &END
+ &INFO
+    ============================================================
+    |    Pseudopotential Report  Mon Dec 19 15:39:06 JST 2011  |
+    ------------------------------------------------------------
+    |  Atomic Symbol                   :   Cs                  |
+    |  Atomic Number                   :  55                   |
+    |  Exchange-Correlation Functional :                       |
+    |     Gradient corrected HCTH/120 functional               |
+    |     Handy et al., JCP 109, 6264 (1998)                   |
+    |  Goedecker/Hartwigsen normconserving PP                  |
+    ============================================================
+ &END
+ &POTENTIAL
+     GOEDECKER
+           4                                    LMAX
+      0.540000000                                 RC
+   2    35.086234280    -3.183152337   #C  C1 C2
+      0.461896000  2  -4.227631385   2.402694334  -3.101865047 H(s) 11 12 22           
+      0.366359000  2  -5.916841214   0.723535954  -0.856099286 H(p) 11 12 22           
+      0.761502000  1   0.188340686 H(d) 11                 
+      0.597015000  1  -1.607462240 H(f) 11                 
+ &END

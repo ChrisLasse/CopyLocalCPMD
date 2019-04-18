@@ -1,0 +1,107 @@
+&INFO
+ MgCl2 and ALCl3
+ in 51 THF molecules
+ of solvent
+ Trajectories from
+ Classical MD
+ restart
+&END
+
+
+&CPMD
+  USE_CUFFT 
+  FFT_N_STREAMS_PER_DEVICE
+  2
+  FFT_N_DEVICES_PER_TASK
+  1
+  USE_CUBLAS
+  BLAS_N_STREAMS_PER_DEVICE
+  2
+  BLAS_N_DEVICES_PER_TASK
+  1
+ MOLECULAR DYNAMICS BO                                                                                                                                                                                                                   
+ TRAJECTORY XYZ
+ TEMPERATURE
+ 300.0
+ NOSE IONS
+ 300.0  1000.0
+ MAXSTEP
+  5 
+ TIMESTEP
+  10.0
+ RESTFILE
+  10
+ STORE
+  500
+ VDW CORRECTION
+  ON
+ CP_GROUPS
+   2
+&END
+
+
+&SYSTEM
+ ANGSTROM
+ CELL VECTORS
+10.0000000 0.0000000 0.0000000 
+0.0000000 10.0000000 0.0000000 
+0.0000000 0.0000000 10.0000000 
+ CUTOFF
+  20.0
+&END
+
+
+&DFT
+ FUNCTIONAL PBE
+&END
+
+&VDW
+  DFT-D2
+  S6GRIM
+  PBE
+&END
+
+
+&ATOMS
+*Mg_MT_PBE_NLCC_FHI.psp NLCC
+LMAX=P
+    1
+20.028776     18.787051     20.862287
+*Al_MT_PBE.psp
+LMAX=P
+    1
+5.532026      5.011625      2.687166
+*Cl_MT_PBE.psp
+LMAX=P
+    5
+ 3.507942      4.756475      3.514731
+ 5.966785      7.022374      1.649544
+ 6.344671      3.203202      1.539607
+20.162807      1.520175      3.618759
+19.737051     17.688166     18.717529
+
+META DYNAMICS COLLECTIVE VARIABLE
+DEFINE VARIABLES
+1
+COORD 1 100  2.8 
+END DEFINE
+
+METASTEPNUM
+300
+
+HILLS OFF 
+
+MAXSTEPNUM INTERMETA
+40
+MINSTEPNUM INTERMETA
+20
+MOVEMENT CHECK
+0.1
+MONITOR
+5
+END METADYNAMICS
+
+
+&END
+
+

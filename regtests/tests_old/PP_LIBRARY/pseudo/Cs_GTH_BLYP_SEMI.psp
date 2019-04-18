@@ -1,0 +1,30 @@
+ &ATOM
+  Z  =     55.0000000000000     
+  ZV =     9.00000000000000     
+  XC = 1312   0.6666666667
+  TYPE = NORMCONSERVING GOEDECKER
+ &END
+ &INFO
+    ============================================================
+    |    Pseudopotential Report  Sat Oct 20 12:12:59 JST 2012  |
+    ------------------------------------------------------------
+    |  Atomic Symbol                   :   Cs                  |
+    |  Atomic Number                   :  55                   |
+    |  Exchange-Correlation Functional :                       |
+    |     Slater exchange :  0.6667                            |
+    |     LDA correlation : Lee-Yang-Parr                      |
+    |     Exchange GC     : Becke (1988)                       |
+    |     Correlation GC  : LYP                                |
+    |  Goedecker/Hartwigsen normconserving PP                  |
+    ============================================================
+ &END
+ &POTENTIAL
+     GOEDECKER
+           4                                    LMAX
+      0.540000000                                 RC
+   2    34.770398890    -3.065927628   #C  C1 C2
+      0.461896000  2  -4.274312574   2.318913036  -2.993703857 H(s) 11 12 22           
+      0.366359000  2  -5.770575784   0.619868233  -0.733437984 H(p) 11 12 22           
+      0.761502000  1   0.193416376 H(d) 11                 
+      0.597015000  1  -1.565229211 H(f) 11                 
+ &END

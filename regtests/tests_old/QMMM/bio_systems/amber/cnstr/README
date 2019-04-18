@@ -1,0 +1,8 @@
+QM/MM Regtests for AMBER force field:
+
+ CPMD with atoms fix (1 QM and all MM) within BLYP and link atom      atp_blyp_cpmd_capH_fixonly.in
+ CPMD Blue Moon constraint within BLYP and link atom                  atp_blyp_cpmd_capH_cnstr.in
+ BOMD Blue Moon constraint within BLYP and link atom                  atp_blyp_bo_capH_cnstr.in
+ CPMD Blue Moon constraint within BLYP and optimized eff. core pot.   atp_blyp_cpmd_oecp_cnstr.in
+ BOMD Blue Moon constraint and optimized eff. core pot.               atp_blyp_bo_oecp_cnstr.in
+

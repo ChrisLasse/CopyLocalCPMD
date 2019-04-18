@@ -1,0 +1,5 @@
+QM/MM Regtests for AMBER force field:
+
+ Car-Parrinello MD within HCTH and link atom                  atp_hcth_cpmd_capH.in
+ Born-Oppenheimer MD within HCTH and link atom                atp_hcth_bo_capH.in
+

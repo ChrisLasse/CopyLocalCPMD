@@ -1,0 +1,5 @@
+QM/MM Regtests for GROMOS force field:
+
+ Car-Parrinello MD within BLYP and link atom                  atp_blyp_cpmd_capH_Gromos.in
+ Born-Oppenheimer MD within BLYP and link atom                atp_blyp_bo_capH_Gromos.in
+

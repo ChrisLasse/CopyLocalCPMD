@@ -1,0 +1,37 @@
+# reset after Davidson
+oh_md.inp
+test.inp
+test.inp
+spec.inp
+# reset numerics
+test.inp
+test.inp
+test.inp
+ho.inp
+test.inp
+test.inp
+# numerics
+test.inp
+test.inp
+test.inp
+test.inp
+test.inp
+test.inp
+# numerical reset
+test.inp
+test.inp
+test.inp
+ho.inp
+test.inp
+test.inp
+# numerical reset
+test.inp
+test.inp
+test.inp
+test-2.inp
+test.inp
+test.inp
+test.inp
+eh.inp
+test.inp
+test.inp

@@ -1,0 +1,61 @@
+&INFO
+ ice 
+&END
+
+&CPMD
+  USE_CUFFT 
+  FFT_N_STREAMS_PER_DEVICE
+  2
+  FFT_N_DEVICES_PER_TASK
+  1
+  USE_CUBLAS
+  BLAS_N_STREAMS_PER_DEVICE
+  2
+  BLAS_N_DEVICES_PER_TASK
+  1
+  INITIALIZE WAVEFUNCTION ATOM
+  WAVEFUNCTION OPTIMIZATION
+  CONVERGENCE ORBITALS
+  1.0E-6
+  MAXITER
+  5
+  REAL SPACE WFN KEEP
+&END
+
+&DFT
+  NEWCODE
+  FUNCTIONAL OLDB3LYP
+&END
+
+&SYSTEM
+  SYMMETRY
+  14
+  CELL ABSOLUTE DEGREE
+  4.511 4.511 7.346 90.000000 90.000000 120.000000
+  CUTOFF
+  70.0
+&END
+
+&ATOMS
+*O_GTH_LDA
+   LMAX=P
+   4
+   -0.00000000              2.60400000               3.21600000
+   2.25600000               1.30200000               4.13000000
+   2.25600000               1.30200000               6.88900000
+   -0.00000000              2.60400000               7.80300000
+*H_GTH_LDA
+LMAX=S
+  8
+   2.25550000               0.00035940               3.67300000
+   1.12800000               1.95400000               3.67300000
+   -1.12800000              1.95400000               3.67300000
+   2.25600000               1.30200000               5.51000000
+   1.12800000               1.95400000               7.34600000
+   -1.12800000              1.95400000               7.34600000
+   -0.00000000              2.60400000               9.18300000
+   2.25550000               0.00035940               7.34600000
+&END
+
+
+

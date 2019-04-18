@@ -1,0 +1,5 @@
+QM/MM Regtests for GROMOS force field:
+
+ Car-Parrinello MD within BLYP and optimized eff. core pot.   atp_blyp_cpmd_oecp_Gromos.in
+ Born-Oppenheimer MD within BLYP and optimized eff. core pot. atp_blyp_bo_oecp_Gromos.in
+

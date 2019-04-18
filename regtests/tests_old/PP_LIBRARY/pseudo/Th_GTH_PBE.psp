@@ -1,0 +1,54 @@
+ &ATOM
+  Z  =     90.0000000000000     
+  ZV =     12.0000000000000     
+  XC = 1134   0.6666666667
+  TYPE = NORMCONSERVING GOEDECKER
+ &END
+ &INFO
+ ****************************************************************
+
+ Atomic symbol                       : Th
+
+ Atomic number                       :  90
+ Effective core charge               :  12
+ Number of core states               :  13
+ Number of valence states            :  13
+ Electronic configuration (s,p,d,...):     4    6    2
+
+ Exchange-correlation functional     : PBE
+
+       r(loc)         C(1)         C(2)
+     0.526826    33.598260    -1.497490
+
+         r(0)     h(i,j)^0
+     0.512526    -3.627611     2.090943
+                              -2.699396
+         r(1)     h(i,j)^1
+     0.448300    -0.789023     1.214884
+                              -1.437470
+         r(2)     h(i,j)^2
+     0.675598     0.652464
+         r(3)     h(i,j)^3
+     0.371805   -11.780348
+
+ Please cite:
+
+ - S. Goedecker, M. Teter, and J. Hutter,
+   Phys. Rev. B 54, 1703 (1996)
+ - C. Hartwigsen, S. Goedecker, and J. Hutter,
+   Phys. Rev. B 58, 3641 (1998)
+ - M. Krack,
+   Theor. Chem. Acc. 114, 145 (2005)
+
+ ****************************************************************
+ &END
+ &POTENTIAL
+     GOEDECKER
+           4                                    LMAX
+      0.526825678                                 RC
+   2    33.598259516    -1.497490189   #C  C1 C2
+      0.512526249  2  -3.627611176   2.090942840  -2.699395600 H(s) 11 12 22           
+      0.448300147  2  -0.789023318   1.214883884  -1.437469997 H(p) 11 12 22           
+      0.675598345  1   0.652464103 H(d) 11                 
+      0.371805356  1 -11.780348012 H(f) 11                 
+ &END
