@@ -5595,7 +5595,7 @@ and the type of functional is read from the next line. One of the following labe
     van der Waals correction.}
 
 \keyword{VDW WANNIER}{}{}{}{\&CPMD}
-\desc{A first-principle van der Waals correction scheme \cite{psil1,psil2}
+\desc{A first-principle van der Waals correction scheme \cite{psil1,psil2,psil3}
   is applied to selected groups of atoms on which maximally localized Wannier
   functions (WF) and centers (WFC) have been previously computed.
   The file WANNIER-CENTER generated upon WFC calculation must be present.
@@ -5656,7 +5656,7 @@ and the type of functional is read from the next line. One of the following labe
   An alternative method avoiding the use of the empirical parameter a6
   is the one exploiting the replacement of the short-range damping function
   by an estimation of the Pauli exchange repulsion given in terms of solely
-  Wannier function centers and spreads, as reported in arxiv.org/abs/1902.07646.
+  Wannier function centers and spreads \cite{psil3}.
   To activate this option the keyword DAMPING has to be given along with DIPOLE
   on the same line. 
   The following line (a6) has to be obviously removed, since anyhow is neither
@@ -11892,6 +11892,9 @@ Phys.~Rev.~B  {\bf 73}, 094204,(2006).
 
 \bibitem{psil2}
      A.~Ambrosetti and P.~L.~Silvestrelli, Phys.~Rev.~B {\bf 85}, 073101 (2012).
+
+\bibitem{psil3}
+     P.~L.~Silvestrelli and A.~Ambrosetti, J.~Chem.~Phys.{\bf 150}, 164109 (2019).
 
 \bibitem{molphy}
      L.~V.~Slipchenko and M.~S.~Gordon, 

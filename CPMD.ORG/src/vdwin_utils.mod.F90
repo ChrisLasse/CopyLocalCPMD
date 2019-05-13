@@ -68,7 +68,7 @@ CONTAINS
     ! ==  Added support for DCACP.                                    ==
     ! ==                          12.06.2017 M.P.Bircher @ LCBC/EPFL  ==
     ! ==  Present release:                                            ==
-    ! ==             Strasbourg/Tokyo/Zurich/Hyogo, 2 April 2019      ==
+    ! ==             Strasbourg/Tokyo/Zurich/Hyogo, 6 May 2019        ==
     ! ==--------------------------------------------------------------==
     CHARACTER(*), PARAMETER                  :: procedureN = 'vdwin'
 
@@ -1042,9 +1042,9 @@ CONTAINS
       ENDIF
       IF (vdwwfl%tdampda) THEN
          WRITE(output_unit,'(A)')&
-              '    USE DIPOLE APPROXIMATION OF DAMPING FUNCTION'
+              '    USE DIPOLE APPROXIMATION PAULI EXCHANGE OF DAMPING FUNCTION'
          WRITE(output_unit,'(A)')&
-              '    AS IN SILVESTRELLI-AMBROSETTI arXiv:1902.07646'
+              '    SILVESTRELLI-AMBROSETTI J. CHEM. PHYS. 150, 164109 (2019)'
       ELSE
          WRITE(output_unit,'(A,T56,F10.3)')&
               '    USE SEMIEMPIRICAL DAMPING FUNCTION WITH A6 FACTOR:',vdwwfr%a6
