@@ -794,7 +794,7 @@ contains
   integer,save :: icall = 0 
   integer,save :: nAtomInTSCR_cnf1, nAtomInTSCR_cnf2
   integer,save :: nsp_cnf1, nsp_cnf2
-  real(real_8) :: xa(3), xb(3), dab(3), cab(3), eab(3), dd, vwall
+  real(real_8) :: xa(3), xb(3), dab(3), cab(3), eab(3), dd, vwall, dab_(3)
   LOGICAL ::  applywall
 
  !if (paral%io_parent) write(*,*) 'Entering ', procedureN
@@ -850,7 +850,8 @@ contains
     call fillc(ib, tscr, xb)
     dab(1:3) = xa(1:3) - xb(1:3)
     ! IF ( .NOT. TISOS) 
-    call pbc(dab(1), dab(2), dab(3), dab(1), dab(2), dab(3), 1, parm%apbc, parm%ibrav)
+    dab_(:) = dab(:)
+    call pbc(dab_(1), dab_(2), dab_(3), dab(1), dab(2), dab(3), 1, parm%apbc, parm%ibrav)
     dd = dab(1)*dab(1) + dab(2)*dab(2) + dab(3)*dab(3)
     dd = dsqrt(dd)
     !jf dbg write (*,*) "distance ",DD
