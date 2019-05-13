@@ -1,0 +1,57 @@
+Index: doc/manual/manual.tex
+===================================================================
+--- doc/manual/manual.tex	(revision 4627)
++++ doc/manual/manual.tex	(revision 4628)
+@@ -5595,7 +5595,7 @@
+     van der Waals correction.}
+ 
+ \keyword{VDW WANNIER}{}{}{}{\&CPMD}
+-\desc{A first-principle van der Waals correction scheme \cite{psil1,psil2}
++\desc{A first-principle van der Waals correction scheme \cite{psil1,psil2,psil3}
+   is applied to selected groups of atoms on which maximally localized Wannier
+   functions (WF) and centers (WFC) have been previously computed.
+   The file WANNIER-CENTER generated upon WFC calculation must be present.
+@@ -5656,7 +5656,7 @@
+   An alternative method avoiding the use of the empirical parameter a6
+   is the one exploiting the replacement of the short-range damping function
+   by an estimation of the Pauli exchange repulsion given in terms of solely
+-  Wannier function centers and spreads, as reported in arxiv.org/abs/1902.07646.
++  Wannier function centers and spreads \cite{psil3}.
+   To activate this option the keyword DAMPING has to be given along with DIPOLE
+   on the same line. 
+   The following line (a6) has to be obviously removed, since anyhow is neither
+@@ -11893,6 +11893,9 @@
+ \bibitem{psil2}
+      A.~Ambrosetti and P.~L.~Silvestrelli, Phys.~Rev.~B {\bf 85}, 073101 (2012).
+ 
++\bibitem{psil3}
++     P.~L.~Silvestrelli and A.~Ambrosetti, J.~Chem.~Phys.{\bf 150}, 164109 (2019).
++
+ \bibitem{molphy}
+      L.~V.~Slipchenko and M.~S.~Gordon, 
+      Mol.~Phys.~{\bf 107}, 999 (2009).
+Index: src/vdwin_utils.mod.F90
+===================================================================
+--- src/vdwin_utils.mod.F90	(revision 4627)
++++ src/vdwin_utils.mod.F90	(revision 4628)
+@@ -68,7 +68,7 @@
+     ! ==  Added support for DCACP.                                    ==
+     ! ==                          12.06.2017 M.P.Bircher @ LCBC/EPFL  ==
+     ! ==  Present release:                                            ==
+-    ! ==             Strasbourg/Tokyo/Zurich/Hyogo, 2 April 2019      ==
++    ! ==             Strasbourg/Tokyo/Zurich/Hyogo, 6 May 2019        ==
+     ! ==--------------------------------------------------------------==
+     CHARACTER(*), PARAMETER                  :: procedureN = 'vdwin'
+ 
+@@ -1042,9 +1042,9 @@
+       ENDIF
+       IF (vdwwfl%tdampda) THEN
+          WRITE(output_unit,'(A)')&
+-              '    USE DIPOLE APPROXIMATION OF DAMPING FUNCTION'
++              '    USE DIPOLE APPROXIMATION PAULI EXCHANGE OF DAMPING FUNCTION'
+          WRITE(output_unit,'(A)')&
+-              '    AS IN SILVESTRELLI-AMBROSETTI arXiv:1902.07646'
++              '    SILVESTRELLI-AMBROSETTI J. CHEM. PHYS. 150, 164109 (2019)'
+       ELSE
+          WRITE(output_unit,'(A,T56,F10.3)')&
+               '    USE SEMIEMPIRICAL DAMPING FUNCTION WITH A6 FACTOR:',vdwwfr%a6

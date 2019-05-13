@@ -1,0 +1,13 @@
+Index: src/control_utils.mod.F90
+===================================================================
+--- src/control_utils.mod.F90	(revision 4625)
++++ src/control_utils.mod.F90	(revision 4626)
+@@ -3439,7 +3439,7 @@
+              ELSEIF ( keyword_contains(line,'RHOOUT') ) THEN
+                 ! Store density
+                 rout1%rhoout=.TRUE.
+-                IF ( keyword_contains(line,'SAMPLE') ) THEN
++                IF ( keyword_contains(line,'SAMPLE',cut_at='=') ) THEN
+                    first = index_of_delimiter(line,'SAMPLE','=')
+                    CALL readsi(line,first,last,rout1%nrhoout,erread)
+                    IF (erread) THEN
