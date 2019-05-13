@@ -115,7 +115,7 @@ module bicanonicalCpmd
     integer:: geometryScaleTape
     character(20) :: nameGeometryScaleTape 
     type (bicanonicalConfigType) :: bicanonicalConfig
-    type (bicanonicalCalculationType), pointer :: bicanonicalCalculation
+    type (bicanonicalCalculationType), pointer :: bicanonicalCalculation=>NULL()
  end type BicanonicalCpmdType
   !
   ! JF TODO this is used as global variable for all the calls in cpmd routines 
@@ -377,7 +377,7 @@ contains
 
 
   subroutine SanityChecksPrivate(self)
-    type (BicanonicalCpmdType), intent(out) :: self
+    type (BicanonicalCpmdType), intent(inout) :: self
     integer,allocatable :: ionsIatypBican2(:),ionsIatomBican2(:)
     integer :: nspBican2, natBican2, msgid, ierr
     real(real_8) :: checkVolumeSimulationBox
