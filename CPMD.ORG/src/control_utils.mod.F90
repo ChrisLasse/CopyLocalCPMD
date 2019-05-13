@@ -3439,7 +3439,7 @@ CONTAINS
              ELSEIF ( keyword_contains(line,'RHOOUT') ) THEN
                 ! Store density
                 rout1%rhoout=.TRUE.
-                IF ( keyword_contains(line,'SAMPLE') ) THEN
+                IF ( keyword_contains(line,'SAMPLE',cut_at='=') ) THEN
                    first = index_of_delimiter(line,'SAMPLE','=')
                    CALL readsi(line,first,last,rout1%nrhoout,erread)
                    IF (erread) THEN
