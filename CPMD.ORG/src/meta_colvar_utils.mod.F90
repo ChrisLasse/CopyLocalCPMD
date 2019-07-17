@@ -153,8 +153,9 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     ionode=paral%io_parent
     IF (tmw) ionode=grandparent
-    IF (.NOT.ionode) GOTO 9999
+    !TK bugfix: FINAL needs to be initialized on all procs!
     FINAL = .FALSE.
+    IF (.NOT.ionode) GOTO 9999
 
     ! TODO align for BG
     ALLOCATE(f_hill(cotc0%nodim),STAT=ierr)

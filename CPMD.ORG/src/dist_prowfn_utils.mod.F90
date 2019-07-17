@@ -1441,55 +1441,52 @@ CONTAINS
 ! NEW VARIABLES
 ! ==--------------------------------------------------------------==
 
-    msweep=numorb/8
-    IF (MOD(numorb,8).NE.0) msweep=msweep+1
-    ! ALLOCATE LOCAL MEMORY
-    ALLOCATE(lxxmat(nattot,8),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-         __LINE__,__FILE__)
-    DO isw=1,msweep
-       IF (paral%io_parent)&
-            CALL fileopen(41,'WFNCOEF',fo_def+fo_ufo,ferror)
-       IF (paral%io_parent)&
-            READ(41) lnattot,ions1%nsp,(ions0%zv(is),ions0%na(is),numaor(is),is=1,ions1%nsp)
-       i1=(isw-1)*8+1
-       i2=MIN(8*isw,numorb)
-       ! LOAD XXMAT(*,I1:I2) PART FROM FILE TO LXXMAT
-       DO k=1, nattot
-          is = 1
-          DO l=1, numorb
-             IF (paral%io_parent)&
-                  READ(41) tmp
-             IF ((l.GE.i1).AND.(l.LE.i2)) THEN
-                lxxmat(k,is) = tmp
-                is = is +1
-             ENDIF
+    !TK Bug fix: tmp only defined on io_parent...
+    !io_parent only does something here anyway - move io_parent to the
+    !very beginning
+    IF(paral%io_parent)THEN
+       msweep=numorb/8
+       IF (MOD(numorb,8).NE.0) msweep=msweep+1
+       ! ALLOCATE LOCAL MEMORY
+       ALLOCATE(lxxmat(nattot,8),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+       DO isw=1,msweep
+          CALL fileopen(41,'WFNCOEF',fo_def+fo_ufo,ferror)
+          READ(41) lnattot,ions1%nsp,(ions0%zv(is),ions0%na(is),numaor(is),is=1,ions1%nsp)
+          i1=(isw-1)*8+1
+          i2=MIN(8*isw,numorb)
+          ! LOAD XXMAT(*,I1:I2) PART FROM FILE TO LXXMAT
+          DO k=1, nattot
+             is = 1
+             DO l=1, numorb
+                READ(41) tmp
+                IF ((l.GE.i1).AND.(l.LE.i2)) THEN
+                   lxxmat(k,is) = tmp
+                   is = is +1
+                ENDIF
+             ENDDO
+          ENDDO
+          CALL fileclose(41)
+          WRITE(6,'(/,A,8(I5,3X))') '      ORBITAL  ',(ii,ii=i1,i2)
+          WRITE(6,'(A,8(F7.3,1X))')&
+               '  COMPLETNESS  ',(comp(ii),ii=i1,i2)
+          WRITE(6,'(A,8(F7.3,1X),/)')&
+               '  OCCUPATION   ',(f(ii),ii=i1,i2)
+          ! DO IA=1,NATTOT
+          ! WRITE(6,'(A15,8(F7.3,1X))') LABEL(IA),
+          ! *                                   (XXMAT(IA,II),II=I1,I2)
+          DO ia=1,nattot
+             WRITE(6,'(A15,8(F7.3,1X))') label(ia),&
+                  (lxxmat(ia,ii),ii=1,8)
           ENDDO
        ENDDO
-       IF (paral%io_parent)&
-            CALL fileclose(41)
-       IF (paral%io_parent)&
-            WRITE(6,'(/,A,8(I5,3X))') '      ORBITAL  ',(ii,ii=i1,i2)
-       IF (paral%io_parent)&
-            WRITE(6,'(A,8(F7.3,1X))')&
-            '  COMPLETNESS  ',(comp(ii),ii=i1,i2)
-       IF (paral%io_parent)&
-            WRITE(6,'(A,8(F7.3,1X),/)')&
-            '  OCCUPATION   ',(f(ii),ii=i1,i2)
-       ! DO IA=1,NATTOT
-       ! WRITE(6,'(A15,8(F7.3,1X))') LABEL(IA),
-       ! *                                   (XXMAT(IA,II),II=I1,I2)
-       DO ia=1,nattot
-          IF (paral%io_parent)&
-               WRITE(6,'(A15,8(F7.3,1X))') label(ia),&
-               (lxxmat(ia,ii),ii=1,8)
-       ENDDO
-    ENDDO
-    ! FREE LOCAL MEMORY
-    DEALLOCATE(lxxmat,STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
-         __LINE__,__FILE__)
-    ! ==--------------------------------------------------------------==
+       ! FREE LOCAL MEMORY
+       DEALLOCATE(lxxmat,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+            __LINE__,__FILE__)
+       ! ==--------------------------------------------------------------==
+    END IF
     RETURN
   END SUBROUTINE dist_prtmat
   SUBROUTINE give_scr_dist_prowfn(lprowfn,tag,norbx)

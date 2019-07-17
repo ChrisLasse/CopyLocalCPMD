@@ -508,11 +508,7 @@ CONTAINS
     INTEGER                                  :: fftw_dir, fftw_flags, i, j
     LOGICAL                                  :: tscal
 
-#if defined(__PRIMEHPC)
-    INTEGER(int_8) :: plan
-#else
-    INTEGER :: plan
-#endif
+    TYPE(C_PTR) :: plan
 #if defined(__HAS_FFT_FFTW3)
     tscal=(ABS(scale-1._real_8).GT.1.e-12_real_8)
     IF (isign.EQ.1) THEN

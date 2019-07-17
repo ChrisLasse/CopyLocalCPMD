@@ -1630,36 +1630,36 @@ CONTAINS
           ENDIF
           irecord = 0
        ENDIF
-    ENDIF
-    IF (irecord.NE.0) THEN
-       IF(ALLOCATED(hesscr)) THEN
-          DEALLOCATE(hesscr,STAT=ierr)
-          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+       IF (irecord.NE.0) THEN
+          IF(ALLOCATED(hesscr)) THEN
+             DEALLOCATE(hesscr,STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+                  __LINE__,__FILE__)
+          ENDIF
+          ALLOCATE(hesscr(nvar,nvar),STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
                __LINE__,__FILE__)
-       ENDIF
-       ALLOCATE(hesscr(nvar,nvar),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-            __LINE__,__FILE__)
-       nshess = 0
-       lallhs = .FALSE.
-       IF (paral%io_parent) THEN
-          k=0
-          DO i=1,nvar
-             READ(nr) (hesscr(j+k,1),j=1,nvar)! if NVAR is set here
-             k=k+nvar
-          ENDDO
-          READ(nr) nshess, lvlhes
-          IF (.NOT.lvlhes) THEN
-             IF (nshess.GT.0 .AND. MOD(nshess,2).EQ.0) THEN
-                nshess = nshess - 1
-                lundop = .TRUE.
-                WRITE(6,'(A,A,I3)') ' RV30| WARNING! ',&
-                     'INCOMPLETE HESSIAN, REDOING DIMENSION ',&
-                     nshess/2+1
-             ELSE
-                WRITE(6,'(A,A,I3)') ' RV30| WARNING! ',&
-                     'INCOMPLETE HESSIAN, DOING DIMENSION ',&
-                     nshess/2+1
+          nshess = 0
+          lallhs = .FALSE.
+          IF (paral%io_parent) THEN
+             k=0
+             DO i=1,nvar
+                READ(nr) (hesscr(j+k,1),j=1,nvar)! if NVAR is set here
+                k=k+nvar
+             ENDDO
+             READ(nr) nshess, lvlhes
+             IF (.NOT.lvlhes) THEN
+                IF (nshess.GT.0 .AND. MOD(nshess,2).EQ.0) THEN
+                   nshess = nshess - 1
+                   lundop = .TRUE.
+                   WRITE(6,'(A,A,I3)') ' RV30| WARNING! ',&
+                        'INCOMPLETE HESSIAN, REDOING DIMENSION ',&
+                        nshess/2+1
+                ELSE
+                   WRITE(6,'(A,A,I3)') ' RV30| WARNING! ',&
+                        'INCOMPLETE HESSIAN, DOING DIMENSION ',&
+                        nshess/2+1
+                ENDIF
              ENDIF
           ENDIF
        ENDIF
