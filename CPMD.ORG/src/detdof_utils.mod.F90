@@ -3,6 +3,7 @@ MODULE detdof_utils
   USE cnstfc_utils,                    ONLY: cnstfc,&
                                              restfc
   USE cnstpr_utils,                    ONLY: cnstpr
+  USE comvelmod,                       ONLY: comvl
   USE cotr,                            ONLY: &
        anorm, askel, bsigma, cnsval, cotc0, cotr007, csigm, dsigma, dtm, &
        duat, fc, fcstr, fv, lskcor, lskptr, mm_askel, ntcnst, ntrest, patot, &
@@ -11,6 +12,7 @@ MODULE detdof_utils
   USE dum2_utils,                      ONLY: dum2,&
                                              dumpr
   USE error_handling,                  ONLY: stopgm
+  USE glemod,                          ONLY: tglepc
   USE ions,                            ONLY: ions0,&
                                              ions1
   USE isos,                            ONLY: isos1
@@ -22,7 +24,8 @@ MODULE detdof_utils
   USE nose,                            ONLY: glib,&
                                              loct,&
                                              nosl,&
-                                             tcafes
+                                             tcafes,&
+                                             tnosepc
   USE parac,                           ONLY: paral
   USE pimd,                            ONLY: pimd1
   USE rmas,                            ONLY: rmass
@@ -664,8 +667,8 @@ CONTAINS
     ! ..      (staging) bead, whereas all other beads have always 3*NAT
     ! ..      degrees of freedom each in the path integral case
     ! ..      (the latter case is handled via GLIB_S=3._real_8*NAT)
-    ! ..      For Centroid cntl%md: TCENTRO=.TRUE.
-    ! ..                       first bead is NOT thermostatted in any case,
+    ! ..      For CMD: TCENTRO=.TRUE. or RPMD: TRINGP=.TRUE.
+    ! ..                       first bead should NOT be thermostatted 
     ! ..                       which means that GLIB has to be calculated
     ! ..                       as for a classical simulation
     ! ..      MCNSTR is the number of internal constraints
@@ -683,7 +686,9 @@ CONTAINS
           ENDIF
        ENDDO
     ENDDO
-    IF (.NOT.pimd1%tcentro) THEN
+    IF (.NOT.((pimd1%tcentro.OR.pimd1%tringp)&
+        .AND.(pimd1%tstage.OR.pimd1%tpinm)&
+        .AND.(.NOT.tnosepc.OR..NOT.tglepc.OR.comvl%tsubcom))) THEN
        glib=REAL(cotc0%nodim,kind=real_8)
     ELSE
        IF (cotc0%nodim.NE.3*ions1%nat) THEN

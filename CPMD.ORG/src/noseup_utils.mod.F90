@@ -72,7 +72,7 @@ CONTAINS
        DO i=1,nit
           DO j=1,ncalls
              IF (cntl%tpath.AND.cntl%tpimd) THEN
-                IF (.NOT.(pimd1%tcentro.AND.ip.EQ.1.AND..NOT.tnosepc)) THEN
+                IF (.NOT.((pimd1%tcentro.OR.pimd1%tringp).AND.ip.EQ.1.AND..NOT.tnosepc)) THEN
                    IF (pimd1%tpinm.OR.pimd1%tstage) THEN
                       CALL pnosmove(velp,dtsuz(j),pma0s(1,ip),ip)
                    ELSE

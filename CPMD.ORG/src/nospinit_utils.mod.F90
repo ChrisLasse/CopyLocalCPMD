@@ -37,7 +37,7 @@ CONTAINS
 ! ==--------------------------------------------------------------==
 
     IF (cntl%tpath.AND.cntl%tpimd) THEN
-       IF (pimd1%tcentro.AND.ip.EQ.1.AND..NOT.tnosepc) RETURN
+       IF ((pimd1%tcentro.OR.pimd1%tringp).AND.ip.EQ.1.AND..NOT.tnosepc) RETURN
     ENDIF
     ipp=1
     IF (cntl%tpath.AND.cntl%tpimd) ipp=MIN(ip,2)

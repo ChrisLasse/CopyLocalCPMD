@@ -8,8 +8,7 @@ MODULE glemod
   INTEGER :: gle_ns, gle_mode, gle_com
   REAL(real_8), PARAMETER :: gle_omega_def=2000.0_real_8, icm2au=4.5563353e-06_real_8 
 
-
-
+  LOGICAL :: tglepc
   REAL(real_8), ALLOCATABLE :: glea(:), glec(:), gles(:), glet(:),&
        glep(:,:,:,:)
 

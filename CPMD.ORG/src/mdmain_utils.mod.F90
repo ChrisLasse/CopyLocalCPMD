@@ -127,6 +127,7 @@ MODULE mdmain_utils
                                              rhopri
   USE rinvel_utils,                    ONLY: rinvel,&
                                              rvscal
+  USE rmas,                            ONLY: rmass
   USE ropt,                            ONLY: infi,&
                                              iteropt,&
                                              ropt_mod
@@ -625,7 +626,7 @@ CONTAINS
     ENDIF
 
     ! INITIALIZE GLE
-    CALL gle_init
+    CALL gle_init(tau0,velp,rmass%pma)
 
     IF (paral%parent) THEN
        IF (paral%io_parent)&
@@ -698,7 +699,7 @@ CONTAINS
        bsclcs=1
        CALL noseup(velp,cm,nstate,ipwalk)
        ! FIRST HALF OF GLE EVOLUTION
-       IF (glepar%gle_mode.GT.0) CALL gle_step()
+       IF (glepar%gle_mode.GT.0) CALL gle_step(tau0,velp,rmass%pma)
 
        ! -FOR HIGH SPIN 
        IF (cntl%bsymm)THEN
@@ -958,7 +959,7 @@ CONTAINS
        ENDIF
 #endif
        ! SECOND HALF OF GLE EVOLUTION
-       IF (glepar%gle_mode.GT.0) CALL gle_step
+       IF (glepar%gle_mode.GT.0) CALL gle_step(tau0,velp,rmass%pma)
 
        ! UPDATE NOSE THERMOSTATS
        IF (cntl%tnosee.OR.cntl%tc) THEN

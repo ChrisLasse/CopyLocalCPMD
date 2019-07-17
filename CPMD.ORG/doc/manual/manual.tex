@@ -898,9 +898,9 @@ QM\_TEMP     \> ``local'' temperatures of the QM/MM subsystems.\\
 CRD\_INI.grm \> Positions of all atoms of first step in Gromos format (QM/MM only).\\
 CRD\_FIN.grm \> Positions of all atoms of last step in Gromos format (QM/MM only).\\
 MM\_TOPOLOGY \> New Gromos format topology file (QM/MM only).\\
-ESP          \> Containes the ESP charges of the QM atoms (QM/MM only).\\
+ESP          \> Contains the ESP charges of the QM atoms (QM/MM only).\\
 EL\_ENERGY   \> Contains the electrostatic interaction energy (QM/MM only).\\
-MULTIPOLE    \> Contains the dipole- and the quadrupole-momenent of the quantum system.\\
+MULTIPOLE    \> Contains the dipole- and the quadrupole-moment of the quantum system.\\
 MM\_CELL\_TRANS \> Contains the trajectory of the offset of the QM cell (QM/MM only).\\
 \\
 OCCMAT       \> The "trajectory" of the Occupation Matrix (DFT+U only)\\
@@ -1791,12 +1791,12 @@ Parameter Rcut is read in from next line.}
 
 \keyword{BICANONICAL ENSEMBLE}{\{CHEMICALPOTENTIAL,\,XWEIGHT\} }{[INFO]}{}{\&CPMD}
     %
-  \desc{Use the bicanonical ensemble AIMD for simualtion of open
+  \desc{Use the bicanonical ensemble AIMD for simulation of open
     systems~\cite{Frenzel2017}. 
     %
     \\
     %
-    Note, requesting this runtype cpmd must be excecuted on more then one MPI
+    Note, requesting this runtype cpmd must be executed on more then one MPI
     thread.
     %
     \\
@@ -1872,13 +1872,13 @@ Parameter Rcut is read in from next line.}
     system 1.
     %
     Thus the INPUT for system 2 is created from 1 by removing that species and
-    then apply optional changes, \textit{e.g.\@} modifiy the number of
+    then apply optional changes, \textit{e.g.\@} modify the number of
     electrons in that system via the CHARGE keyword. 
     %
     Note, positions and velocities of the atomic nuclei must be the same in
     both systems.
     %
-    A restart from preoptimized electronic wavefunctions of the inividual
+    A restart from preoptimized electronic wavefunctions of the individual
     canonical systems is recommended (see Sec.~\ref{FILES} and CPMD regtests 
     BICAN/mdX0\_50, BICAN/c-cnf1, BICAN/c-cnf2).   
     %
@@ -2063,7 +2063,7 @@ Parameter Rcut is read in from next line.}
 
 \keyword{CG-FACTOR}{}{}{}{\&RESP}
   \desc{The analytic length calculation of the conjugate-gradient step
-  lengthes yields in general a result that is slightly too large. This
+  lengths yields in general a result that is slightly too large. This
   factor is used to correct for that deficiency. No accuracy impact,
   pure convergence speed tuning.\\ \textbf{Default} is
   \defaultvalue{0.8}.}
@@ -2801,7 +2801,7 @@ Parameter Rcut is read in from next line.}
 \spekeyword{EXT\_PULSE}{}{}{}{\&PTDDFT}{EXT-PULSE}
   \desc{A Dirac type pulse is applied to the KS orbitals before propagation.
 This keyword is used with the principal keyword \refkeyword{PROPAGATION SPECTRA}. The intensity
-of the perturbing field is readi from the next line.}
+of the perturbing field is read from the next line.}
 
 \spekeyword{EXT\_POTENTIAL}{}{}{}{\&PTDDFT}{EXT-POTENTIAL}
   \desc{An external potential is applied to the KS orbitals before propagation.
@@ -3128,6 +3128,13 @@ with {\bf{PERT\_AMPLI}} (in \&PTDDFT).}
         %
         This is the default if \refkeyword{INITIALIZATION} is active.}
 
+\keyword{GLE\_LAMBDA}{}{}{}{\&PIMD}
+  \desc{Set the scaling factor $\lambda $ of the generalized Langevin thermostat 
+        read from the next line for removing the resonances between the vibrations 
+        of the system and the harmonic potential representing the quantum kinetic 
+        energy term in the description of the path integral. 
+        The default value is 0.5 as suggested in Ref.~\cite{Rossi2014}.}
+
 \keyword{GRADIENT CORRECTION}{}{}{[functionals]}{\&DFT}
   \desc{Individual components of gradient corrected functionals can be
     selected. Rarely needed anymore, use the \refkeyword{FUNCTIONAL}
@@ -3240,7 +3247,7 @@ with {\bf{PERT\_AMPLI}} (in \&PTDDFT).}
     \&DFT section with the \refspekeyword{MTS\_HIGH\_FUNC}{MTS HIGH FUNC} keyword.
     (ii) The forces are calculated by an external program which called via a script which should be named
     \texttt{EXT\_HIGH\_FORCES}. When the forces are needed, CPMD will write a file \texttt{geometry.xyz} containing
-    the current geometry in xyz format (carthesian coordinates in Aangstroms). Then the script will 
+    the current geometry in xyz format (cartesian coordinates in Angstroms). Then the script will 
     be called and CPMD will wait until a file \texttt{forces.xyz} becomes available with the new forces
     in xyz format (atomic units are expected). See the \texttt{get\_external\_forces} routine in the
     \texttt{interface\_utils.mod.F90} file.
@@ -3552,7 +3559,7 @@ For each of those, the shell number of the projector and angular momentum $l$ is
    DETAILS  = argument for verbosity. prints a lot of stuff
    }
 
-\keyword{LANGEVIN}{\{WHITE, CPMD, OPTIMAL, SMART, CUSTOM\}}{[MOVECM]}{[W0, NS]}{\&CPMD}
+\keyword{LANGEVIN}{\{WHITE, CPMD, OPTIMAL, SMART, CUSTOM, CENTROIDOFF\}}{[MOVECM]}{[W0, NS]}{\&CPMD}
   \desc{Use a (generalized) Langevin equation to thermostat the simulation\cite{Ceriotti10}. 
    By default, the component of the noise parallel to the center of mass velocity is 
      removed at each step of the thermostat. Removal can be disabled by the option {\sl MOVECM}.
@@ -3600,7 +3607,16 @@ For each of those, the shell number of the projector and angular momentum $l$ is
                   next line. Will be about 50\%{} more efficient than {\sl OPTIMAL} for slow
                   modes, but less efficient for fast vibrations. Use only with Born-Oppenheimer
                   dynamics.
-                      \end{minipage}                      
+                      \end{minipage}
+
+   {\sl CENTROIDOFF:} \hfill\begin{minipage}[t]{10cm}
+                 For centroid and ring-polymer dynamics the generalized Langevin thermostat
+                 for the centroids can be switched off by using the optional keyword CENTROIDOFF 
+                 otherwise the thermostat with the frequency read from the next line is attached 
+                 to the centroids. For each non-centroid mode the frequency of the thermostat 
+                 is automatically determined depending on the frequency of its associated harmonic 
+                 potential representing the quantum kinetic energy term.  
+                      \end{minipage}
   }
 
 \keyword{LBFGS}{}{[NREM, NTRUST, NRESTT, TRUSTR]}{}{\&CPMD}
@@ -3854,7 +3870,7 @@ For ROKS calculations, see also the \refkeyword{ROKS} keyword in the \&CPMD-sect
       section {\&PTDDFT} has to be specified. You need to start the dynamics with well converged
       KS orbitals from the RESTART file (before starting the EH dynamics do an optimization of the
       wavefunction with a convergence of {1.D-8} or {1.D-9}, if possible. An additional file
-      called "wavefunctions" is produced, which containes the complex KS orbitals needed for
+      called "wavefunctions" is produced, which contains the complex KS orbitals needed for
       the restart of the EH dynamics (see restart options in {\&PTDDFT}). Typical (minimal) input
       \&CPMD and \&PTDDFT sections to be used with EH dynmiacs\\
       \&CPMD \\
@@ -4035,7 +4051,7 @@ For ROKS calculations, see also the \refkeyword{ROKS} keyword in the \&CPMD-sect
       {\bf If the keyword is used \underline{all} parameters have to be
       specified.}}
 
-\keyword{NOSE}{\{IONS, ELECTRONS, CELL\}}{[ULTRA,MASSIVE,CAFES,LOCAL]}{}{[T0]}{\&CPMD}
+\keyword{NOSE}{\{IONS, ELECTRONS, CELL\}}{[ULTRA,MASSIVE,CAFES,LOCAL,CENTROIDOFF]}{[T0]}{\&CPMD}
   \desc{{\bf Nos\'e-Hoover chains}~\cite{Nose84,Hoover85} for the {\bf
       ions}, {\bf electrons}, or {\bf cell parameters} are used.\\
       The {\bf target temperature} in Kelvin and
@@ -4100,6 +4116,15 @@ For ROKS calculations, see also the \refkeyword{ROKS} keyword in the \&CPMD-sect
       Nos{\'e}-Hoover chains are read soon after the thermostat frequencies in the same line (also for the
       LOCAL thermostat). By default it is same as the target temperature of the thermostat. 
       Note: This is not implemented for the CAFES thermostat.}
+
+      The keyword {\bf CENTROIDOFF} is intended to be used in connection with 
+      the centroid and ring-polymer dynamics. In this type of path integral MD,
+      you can request not to attach the Nos{\' e}-Hoover chains for ions to the centroids 
+      by explicit use of the keyword CENTROIDOFF, otherwise the thermostat with the 
+      frequency read from the next line is attached to the centroids.
+      For each non-centroid mode the frequency with the Nos{\' e}-Hoover chains is 
+      automatically determined depending on the frequency of its associated harmonic potential 
+      representing the {\it quantum} kinetic energy term.  
 
 \keyword{NPREVIOUS}{}{}{}{\&PATH}
   \desc{String index to restart from. Note that this is just for numbering files, the initial path in collective variables for the search is always {\em string.inp}.}
@@ -4635,6 +4660,19 @@ for the propagation of the KS orbitals.}
         to restrict the calculation to only one state. The number of the
         state is read from the next line.}
 
+\keyword{RING-POLYMER DYNAMICS}{}{}{}{\&PIMD}
+  \desc{Perform ring-polymer molecular dynamics (RPMD)~\cite{Craig2004}.  
+        In the present implementation the fictitious mass of the  nuclei for 
+        all the replicas is set to the real physical mass divided by the number 
+        of replicas (P) in the primitive representation and the physical mass 
+        in the normal mode representation for compatibility with the formulation 
+        of the conventional path integral. According to our choice of the fictitious 
+        masses, the target temperature you should set is not TP in the original
+        formulation of Ref.~\cite{Craig2004}  but just T as in the standard path 
+        integral and centroid MD. Note that RPMD in the staging mode representation 
+        is not supported and the generalized Langevin thermostat is available in the 
+        normal mode representation only.}
+
 \keyword{QMMM}{}{[QMMMEASY]}{}{\&CPMD}
 \desc{Activate the hybrid QM/MM code. This keyword requires
       further input in the section \&QMMM \dots \&END.
@@ -4869,7 +4907,7 @@ for the propagation of the KS orbitals.}
          1. restart from the orbital files WAVEFUNCTION.n, where $n$ is the index 
          of the KS orbital and runs from $1$ to the number of states (This states 
          a prepare in a previous run using the KOHN-SHAM ENERGIES
-         principal keyward), 2; restart from the orbitals stored in RESTART (obtained
+         principal keyword), 2; restart from the orbitals stored in RESTART (obtained
          from a optimization run with tight convergence (at least 1.D-7)).}
 
 \keyword{REVERSE VELOCITIES}{}{}{}{\&CPMD}
@@ -5669,7 +5707,7 @@ and the type of functional is read from the next line. One of the following labe
       The first line contains first the total number of specified atomic velocities
       followed \textbf{on the same line} by the list of atomic numbers
       for which the velocities will be read.
-      On each of the follwoing lines the x, y and z coordinates of the
+      On each of the following lines the x, y and z coordinates of the
       velocities of an atom have to be specified. These values will
       ignored in case of starting with \refkeyword{RESTART} VELOCITIES..
 
@@ -6023,7 +6061,7 @@ but the actual values are {\bf not} used.
            This is ignored unless you are running a QM/MM
            calculation with the Gromos interface code.
            The definition of what is a solute is taken from the
-           respecitve GROMOS topology file.
+           respective GROMOS topology file.
 
         \item[FIX SEQUENCE]\hfill \\
           {\bf All coordinates} of a series of atoms are kept fixed.\\
@@ -6548,7 +6586,7 @@ the first position. Two lines have to be at the beginning of each time step,
 from which the first line gives the number of the total atoms. An .xyz
 file can also be recorded directly during the simulation Using the
 \refkeyword{TRAJECTORY} keyword with the option {\bf XYZ}.\\
-Please note, that CPMD does not apply the minium image convention
+Please note, that CPMD does not apply the minimum image convention
 to these trajectory files, i.e. atoms are \textbf{not} replaced by their
 images if they leave the supercell.
 
@@ -6575,7 +6613,7 @@ references \cite{Allen87,Frenkel02}.
 \subsection{The MOVIE format}
 
 Besides the TRAJECTORY file CPMD also produces a specially
-formated trajectory in the MOVIE file. This file contains the position
+formatted trajectory in the MOVIE file. This file contains the position
 of all atoms of the system in Angstrom units at a rather low
 precision ($10^{-4}$). The sampling of the positions can be done
 independently from the trajectory file. The sets of coordinates are
@@ -11411,7 +11449,7 @@ Phys.~Rev.~B  {\bf 73}, 094204,(2006).
 
 \bibitem{Frenzel2017}
     J.~Frenzel, B.~Meyer, D.~Marx, 
-    \em{Bicanonical Ab Initio Molecular Dynamics for Open Systems}
+    {\em Bicanonical Ab Initio Molecular Dynamics for Open Systems}
     J. Chem. Theory Comput., Just Accepted Manuscript 
     (2017), 
     DOI: 10.1021/acs.jctc.7b00263 .
@@ -11551,6 +11589,10 @@ Phys.~Rev.~B  {\bf 73}, 094204,(2006).
     P.~Cs\'asz\'ar and P.~Pulay,
     J.~Mol.~Struct. {\bf 114} 31 (1984).
 
+\bibitem{Rossi2014}
+    M.~Rossi, M.~Ceriotti, and D.~E.~Manolopoulos, 
+    J.~Chem.~Phys. {\bf 140}, 234116 (2014).
+
 \bibitem{Perdew92}
     J.~P.~Perdew, J.~A.~Chevary, S.~H.~Vosko, K.~A.~Jackson,
     M.~R.~Pederson, D.~J.~Singh, and C.~Fiolhais, 
@@ -11678,6 +11720,10 @@ Phys.~Rev.~B  {\bf 73}, 094204,(2006).
 \bibitem{Turner99}
     A.~J. Turner, V.~Moliner and I.~H. Williams,
     Phys.~Chem.~Chem.~Phys. {\bf 1}, 1323 (1999).
+
+\bibitem{Craig2004}
+    R. Craig and D.~E.~Manolopoulos, 
+    J.~Chem.~Phys. {\bf 121}, 3368 (2004).
 
 \bibitem{gromos96}
     W.~F.~van~Gunsteren, S.~R.~Billeter, A.~A.~Eising, P.~H.~H\"unenberger,

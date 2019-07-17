@@ -21,7 +21,8 @@ MODULE control_def_utils
   USE g_loc,                           ONLY: glocal,&
                                              gloci,&
                                              glocr
-  USE glemod,                          ONLY: glepar
+  USE glemod,                          ONLY: glepar,&
+                                             tglepc
   USE ions,                            ONLY: coord_fdiff,&
                                              r_fdiff,&
                                              tref_fdiff
@@ -146,6 +147,7 @@ CONTAINS
     glepar%gle_omega=0.0_real_8
     glepar%gle_ns=0
     glepar%gle_com=1
+    tglepc=.TRUE. 
     cnti%iprng=123456
     czones(1,1)=10.0_real_8
     czones(1,2)=1.0e-3_real_8 ! outmost zone sloppy convergence

@@ -43,6 +43,13 @@ MODULE pi_diag_utils
   USE getfnm_utils,                    ONLY: getfnm
   USE getfu_utils,                     ONLY: getfu
   USE getgyr_utils,                    ONLY: getgyration
+  USE glemod,                          ONLY: glepar,&
+                                             glec,&
+                                             gles,&
+                                             glet,&
+                                             glep
+  USE gle_utils,                       ONLY: gle_init,&
+                                             gle_step
   USE global_utils,                    ONLY: global
   USE ions,                            ONLY: ions1
   USE kinds,                           ONLY: real_8
@@ -56,6 +63,8 @@ MODULE pi_diag_utils
   USE moverho_utils,                   ONLY: moverho
   USE mp_interface,                    ONLY: mp_bcast,&
                                              mp_sync
+! USE interface_utils,                 ONLY: get_external_forces
+  USE mts_utils,                       ONLY: mts, set_mts_functional
   USE nlcc,                            ONLY: corel,&
                                              vnlcc,&
                                              vnlt
@@ -74,24 +83,33 @@ MODULE pi_diag_utils
   USE nosepa_utils,                    ONLY: nosepa
   USE noseup_utils,                    ONLY: noseup
   USE nospinit_utils,                  ONLY: nospinit
+  USE ortho_utils,                     ONLY: ortho
   USE parac,                           ONLY: parai,&
                                              paral
   USE phfac_utils,                     ONLY: phfac
   USE pi_md_utils,                     ONLY: disten,&
-                                             pi_ener
+                                             pi_ener,&
+                                             gleback
   USE pimd,                            ONLY: &
        eharv, etotv, fionks, grandparent, ipcurr, maxnp, np_high, np_local, &
-       np_low, pimd1, pimd3, supergroup
+       np_low, pimd1, pimd3, supergroup, pma0s, pi_egle, pi_glec, pi_gles, &
+       pi_glet, pi_glep
   USE pinmtrans_utils,                 ONLY: pinmtrans
   USE pi_stress_utils,                 ONLY: pi_stress_vir,&
                                              pi_stress_nmm,&
                                              pi_stress_pri,&
                                              wr_pi_stress
+  USE pi_wf_utils,                     ONLY: initrep
   USE poin,                            ONLY: rhoo
   USE posupi_utils,                    ONLY: posupi
   USE printave_utils,                  ONLY: paccd
-  USE printp_utils,                    ONLY: printp
+  USE printp_utils,                    ONLY: printp,&
+                                             print_mts_forces
   USE prmem_utils,                     ONLY: prmem
+  USE prng,                            ONLY: prng_com,&
+                                             pi_prng_com
+  USE prng_utils,                      ONLY: prnginit,&
+                                             repprngu_vec
   USE prtgyr_utils,                    ONLY: prtgyr
   USE pslo,                            ONLY: pslo_com
   USE puttau_utils,                    ONLY: taucl
@@ -105,11 +123,13 @@ MODULE pi_diag_utils
   USE rinvel_utils,                    ONLY: rinvel,&
                                              rvscal,&
                                              s_rinvel
+  USE rmas,                            ONLY: rmass
   USE rnlsm_utils,                     ONLY: rnlsm
   USE ropt,                            ONLY: infi,&
                                              iteropt,&
                                              ropt_mod
   USE rotvel_utils,                    ONLY: rotvel
+  USE rrane_utils,                     ONLY: rrane
   USE rscvp_utils,                     ONLY: rscvp
   USE rv30_utils,                      ONLY: zhrwf
   USE setirec_utils,                   ONLY: read_irec,&
@@ -120,10 +140,10 @@ MODULE pi_diag_utils
   USE stagetrans_utils,                ONLY: stagetrans
   USE store_types,                     ONLY: &
        cprint, iprint_coor, iprint_force, irec_nop1, irec_nop2, irec_nop3, &
-       irec_nop4, irec_rho, irec_wf, restart1, rout1
+       irec_nop4, irec_rho, irec_wf, irec_prng, irec_co, restart1, rout1
   USE strs,                            ONLY: paiu
   USE system,                          ONLY: &
-       acc, cnti, cntl, cntr, fpar, maxsys, nacc, nacx, nkpt, restf, ncpw
+       acc, cnti, cntl, cntr, fpar, maxsys, nacc, nacx, nkpt, restf, ncpw, iatpt
   USE testex_utils,                    ONLY: testex,&
                                              testex_mw
   USE teststore_utils,                 ONLY: teststore
@@ -163,15 +183,18 @@ CONTAINS
     CHARACTER(len=100)                       :: filen
     CHARACTER(len=12)                        :: cflbod, cipnum
     CHARACTER(len=30)                        :: tag
-    COMPLEX(real_8), ALLOCATABLE             :: coldall(:,:,:,:,:), psi(:,:)
+    COMPLEX(real_8), ALLOCATABLE             :: coldall(:,:,:,:,:), &
+                                                coldall_high(:,:,:,:,:), &
+                                                psi(:,:)
     INTEGER :: i, i1, i2, ierr, ifcalc, ik, il_psi_1d, il_psi_2d, il_rhoe_1d, &
       il_rhoe_2d, ip, ipx, itemp, k, l, lenext, lscr, n1, n2, nnx, &
-      npx, nrepl, nwfc, nx
+      npx, nrepl, nwfc, nx, iprng0
     INTEGER, ALLOCATABLE                     :: nnowall(:), numcoldall(:), &
+                                                nnowall_high(:), numcoldall_high(:), &
                                                 irec(:,:)
     LOGICAL                                  :: ferror, reset_gkt, &
                                                 pitmnose(2)
-    REAL(real_8) :: accus(nacx,maxnp), d1, d2, disa(maxnp), dummies(1), &
+    REAL(real_8) :: accus(nacx,maxnp), d1, d2, disa(maxnp), dummies(maxnp), &
       dummy, dummy2, econs(maxnp), econsa, eham(maxnp), ehama, ekin1, ekin2, ekina, &
       ekinc(maxnp), ekincp, ekinh1, ekinh2, ekinp, enose(maxnp), &
       enosp(maxnp), equant, etota, glib_s, lmio(3), qpkinp, qvkinp, rmem, &
@@ -183,6 +206,16 @@ CONTAINS
     REAL(real_8), POINTER                    :: pifion(:,:,:,:), &
                                                 pitaup(:,:,:,:), &
                                                 pivelp(:,:,:,:)
+    ! MTS[
+    ! number of inner steps between two large steps and total number of large steps
+    integer :: n_inner_steps, n_large_steps
+    ! logical to know if the current step is a large step in the MTS scheme
+    logical :: mts_large_step, mts_pure_dft
+    ! high level ionic forces
+    real(real_8), allocatable :: fion_high(:,:,:)
+    ! high level wave-function parameters
+    complex(real_8), allocatable :: c0_high(:,:,:)
+    ! MTS]
 
     accus=0.0_real_8
     disa=0.0_real_8
@@ -194,6 +227,26 @@ CONTAINS
     tempp=0.0_real_8
     restf%nfnow=1
     time1 =m_walltime()
+
+    mts_pure_dft = .false.
+    if (cntl%use_mts) then
+
+       ! allocate high level forces array
+       allocate(fion_high(3,maxsys%nax,maxsys%nsx),stat=ierr)
+       if(ierr/=0) call stopgm(proceduren,'allocation problem: fion_high',&
+          __LINE__,__FILE__)
+       call zeroing(fion_high)
+
+       ! allocate high level WF param array only if needed
+       mts_pure_dft = ( (mts%low_level == 'DFT') .and. (mts%high_level == 'DFT') )
+       if (mts_pure_dft) then
+          allocate( c0_high(size(c0,1),size(c0,2),size(c0,3)), stat=ierr )
+          if(ierr/=0) call stopgm(proceduren,'allocation problem : c0_high',&
+             __LINE__,__FILE__)
+       end if
+
+    end if
+
     npx=pimd3%np_total
     rnp=REAL(npx,kind=real_8)
     ALLOCATE(taup(3,maxsys%nax,maxsys%nsx*npx),STAT=ierr)
@@ -308,17 +361,63 @@ CONTAINS
        ALLOCATE(cold(nkpt%ngwk,crge%n,nkpt%nkpnt,lenext/(crge%n*nkpt%ngwk*nkpt%nkpnt)),STAT=ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
             __LINE__,__FILE__)
-       IF (paral%io_parent)&
-            WRITE(6,'(A,T51,F8.3,A)') ' PI_DIAG| '&
-            // 'EXTRAPOLATION WAVEFUNCTION HISTORY TAKES ',rmem,' MBYTES'
+       call zeroing(cold)
        IF (np_local>1) THEN
           ALLOCATE(coldall(nkpt%ngwk,crge%n,nkpt%nkpnt,cnti%mextra,np_local),STAT=ierr)
           IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
                __LINE__,__FILE__)
+          call zeroing(coldall)
           ALLOCATE(nnowall(np_local),STAT=ierr)
           IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
                __LINE__,__FILE__)
+          call zeroing(nnowall)
           ALLOCATE(numcoldall(np_local),STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+               __LINE__,__FILE__)
+          call zeroing(numcoldall)
+          rmem=rmem+rmem*REAL(np_local,kind=real_8)
+       ENDIF
+
+       ! allocate array for high level WF extrapolation
+       if (mts_pure_dft) then
+          allocate(coldall_high(nkpt%ngwk,crge%n,nkpt%nkpnt,cnti%mextra,np_local),stat=ierr)
+          if(ierr/=0) call stopgm(proceduren,'allocation problem: coldall_high',&
+               __LINE__,__FILE__)
+          call zeroing(coldall_high)
+          allocate(nnowall_high(np_local),STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+          call zeroing(nnowall_high)
+          allocate(numcoldall_high(np_local),STAT=ierr)
+          if(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+          call zeroing(numcoldall_high)
+          rmem=rmem+rmem*REAL(np_local,kind=real_8)
+       endif
+
+       IF (paral%io_parent)&
+            WRITE(6,'(A,T51,F8.3,A)') ' PI_DIAG| '&
+            // 'EXTRAPOLATION WAVEFUNC. HISTORY TAKES ',rmem,' MBYTES'
+    ENDIF
+
+    ALLOCATE(pi_egle(npx),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    IF (np_local>1) THEN
+       ALLOCATE(pi_prng_com(np_local),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+       IF (glepar%gle_mode>0) THEN
+          ALLOCATE(pi_glec(np_local),STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+               __LINE__,__FILE__)
+          ALLOCATE(pi_gles((glepar%gle_ns+1)*(glepar%gle_ns+1),np_local),STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+               __LINE__,__FILE__)
+          ALLOCATE(pi_glet((glepar%gle_ns+1)*(glepar%gle_ns+1),np_local),STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+               __LINE__,__FILE__)
+          ALLOCATE(pi_glep(3,maxsys%nax,maxsys%nsx,(glepar%gle_ns+1),np_local),STAT=ierr)
           IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
                __LINE__,__FILE__)
        ENDIF
@@ -354,78 +453,71 @@ CONTAINS
     DO ipcurr=np_low,np_high
        nosl%tmnose=pitmnose(MIN(ipcurr,2))
        CALL read_irec(irec(:,ipcurr))
-       ! ..Construct filenames
-       cflbod='RESTART_'
-       IF (paral%io_parent)&
-            WRITE(cipnum,'(I4)') ipcurr
-       CALL xstring(cflbod,n1,n2)
-       CALL xstring(cipnum,i1,i2)
-       filbod=cflbod(n1:n2)//cipnum(i1:i2)//'.1'
-       IF (restart1%rlate) THEN
-          filn=filbod
-       ELSE
-          filn=cflbod(n1:n2)//cipnum(i1:i2)
-       ENDIF
-       ! ..Read restart file
-       ipx=ipcurr-np_low+1
-       CALL zhrwf(1,irec(:,ipcurr),c0(:,:,ipx:ipx),c2,crge%n,eigv(:,ipx),&
-            pitaup(:,:,:,ipcurr),&
-            pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),iteropt%nfi)
-       CALL dcopy(nacc,acc,1,accus(1,ipcurr),1)
-       IF (restart1%rgeo) THEN
-          IF (paral%io_parent) CALL geofile(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),'READ')
-          CALL mp_bcast(pitaup(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
-          CALL mp_bcast(pivelp(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
-          restart1%rvel=.TRUE.
-       ENDIF
-       IF (irec(irec_rho,ipcurr).NE.0) THEN
-          CALL dcopy(nnx,rhoo,1,rall(1,ipx),1)
-       ENDIF
-       ! ..Randomization of the atomic coordinates
-       IF (cntl%tranp.AND.paral%parent) CALL ranp(pitaup(:,:,:,ipcurr))
-       ! ..Read WF centers & spread from restart file
-       IF (vdwl%vdwd) THEN
-          IF (paral%io_parent) THEN
-             nwfc=crge%n
-             vdwwfl%trwannc=trwanncx(ipx)
-             CALL rwannier(nwfc,tauref(:,:,:,ipx),rwann(:,:,ipx),swann(:,ipx),&
-                  vdwwfl%trwannc)
-             IF (.NOT.vdwwfl%trwannc) THEN
-                CALL dcopy(3*maxsys%nax*maxsys%nsx,pitaup(1,1,1,ipcurr),&
-                     1,tauref(1,1,1,ipx),1)
-             ENDIF
+       IF (restart1%restart) THEN
+          ! ..Construct filenames
+          cflbod='RESTART_'
+          IF (paral%io_parent)&
+               WRITE(cipnum,'(I4)') ipcurr
+          CALL xstring(cflbod,n1,n2)
+          CALL xstring(cipnum,i1,i2)
+          filbod=cflbod(n1:n2)//cipnum(i1:i2)//'.1'
+          IF (restart1%rlate) THEN
+             filn=filbod
+          ELSE
+             filn=cflbod(n1:n2)//cipnum(i1:i2)
           ENDIF
-          CALL mp_bcast(tauref(:,:,:,ipx),3*maxsys%nax*maxsys%nsx,&
-               parai%io_source,parai%cp_grp)
-          CALL mp_bcast(rwann(:,:,ipx),3*nwfcx*nfragx,parai%io_source,&
-               parai%cp_grp)
-          CALL mp_bcast(swann(:,ipx),nwfcx*nfragx,parai%io_source,parai%cp_grp)
-          CALL mp_bcast(vdwwfl%trwannc,parai%io_source,parai%cp_grp)
-          trwanncx(ipx)=vdwwfl%trwannc
-       ENDIF
-       ! ..Store occupation numbers in fall
-       CALL dcopy(crge%n*nkpt%nkpts,crge%f,1,fall(1,ipx),1)
-       ! ..Store WF history in coldall
-       IF (cntl%textrap.AND.np_local>1) THEN
-          CALL zcopy(nkpt%ngwk*crge%n*nkpt%nkpnt*cnti%mextra,cold,1,&
-               coldall(1,1,1,1,ipx),1)
-          nnowall(ipx)=nnow; numcoldall(ipx)=numcold
+          ! ..Read restart file
+          ipx=ipcurr-np_low+1
+          CALL zhrwf(1,irec(:,ipcurr),c0(:,:,ipx:ipx),c2,crge%n,eigv(:,ipx),&
+               pitaup(:,:,:,ipcurr),&
+               pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),iteropt%nfi)
+          CALL dcopy(nacc,acc,1,accus(1,ipcurr),1)
+          IF (restart1%rgeo) THEN
+             IF (paral%io_parent) CALL geofile(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),'READ')
+             CALL mp_bcast(pitaup(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
+             CALL mp_bcast(pivelp(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
+             restart1%rvel=.TRUE.
+          ENDIF
+          IF (irec(irec_rho,ipcurr).NE.0) THEN
+             CALL dcopy(nnx,rhoo,1,rall(1,ipx),1)
+          ENDIF
+          ! ..Randomization of the atomic coordinates
+          IF (cntl%tranp.AND.paral%parent) CALL ranp(pitaup(:,:,:,ipcurr))
+          ! ..Initialization of wavefunction
+          IF (irec(irec_wf,ipcurr).EQ.0) THEN
+             CALL rinitwf(c0(:,:,ipx:ipx),c2,sc0,crge%n,pitaup(:,:,:,ipcurr),taur,rhoe,psi)
+          ENDIF
+          ! Randomize electronic wavefunctions around loaded ones
+          IF (cntl%trane) CALL rrane(c0(:,:,ipx:ipx),c2,crge%n)
+          ! Orthogonalize electronic wavefunctions
+          IF (irec(irec_wf,ipcurr).EQ.0.OR.cntl%trane.OR.(pslo_com%tivan.AND..NOT.cntl%nonort)) THEN
+             IF (pslo_com%tivan) CALL rnlsm(c0(:,:,ipx),crge%n,1,1,.FALSE.)
+             CALL ortho(crge%n,c0(:,:,ipx),c2)
+          ENDIF
+          ! ..Store occupation numbers in fall
+          CALL dcopy(crge%n*nkpt%nkpts,crge%f,1,fall(1,ipx),1)
+          ! ..Store WF history in coldall
+          IF (cntl%textrap.AND.np_local>1) THEN
+             CALL zcopy(nkpt%ngwk*crge%n*nkpt%nkpnt*cnti%mextra,cold,1,&
+                  coldall(1,1,1,1,ipx),1)
+             nnowall(ipx)=nnow; numcoldall(ipx)=numcold
+          ENDIF
+          ! ..Store GLE-related variables
+          CALL gleback(ipcurr,.FALSE.,0)
        ENDIF
     ENDDO
-    ! ..Global distribution of occupation numbers
-    ! CALL dcopy(crge%n*nkpt%nkpts,crge%f,1,fall,1)
-    ! CALL global(fall,crge%n*nkpt%nkpts)  ! why call global?
+    ! ..Initialize replica coordinates if requested
+    IF (.NOT.restart1%restart) THEN
+       IF (pimd1%tinit) THEN
+          CALL initrep(pitaup)
+       ELSE
+          CALL stopgm(procedureN,'replica coordinates not read/generated',&
+             __LINE__,__FILE__)
+       ENDIF
+    ENDIF
     ! ..Global distribution of ionic positions
     CALL global(pitaup,3*maxsys%nax*maxsys%nsx)
     CALL mp_bcast(pitaup,SIZE(pitaup),parai%io_source,parai%cp_grp)
-    DO ipcurr=np_low,np_high
-       IF (irec(irec_wf,ipcurr).EQ.0) THEN
-       !  CALL stopgm('PI_DIAG','RESTARTS WITH WAVEFUNCTIONS ONLY',& 
-       !       __LINE__,__FILE__)
-          ipx=ipcurr-np_low+1
-          CALL rinitwf(c0(:,:,ipx:ipx),c2,sc0,crge%n,pitaup(:,:,:,ipcurr),taur,rhoe,psi)
-       ENDIF
-    ENDDO
     IF (paral%parent) THEN
        IF (pimd1%tstage) THEN
           CALL stagetrans(pitaup,stagep,0)
@@ -443,6 +535,29 @@ CONTAINS
     DO ipcurr=np_low,np_high
        ipx=ipcurr-np_low+1
        CALL phfac(pitaup(:,:,:,ipcurr))
+       ! ..Read WF centers & spread from restart file
+       IF (vdwl%vdwd) THEN
+          IF (paral%io_parent) THEN
+             nwfc=crge%n
+             vdwwfl%trwannc=trwanncx(ipx)
+             CALL rwannier(nwfc,tauref(:,:,:,ipx),rwann(:,:,ipx),swann(:,ipx),&
+                  vdwwfl%trwannc)
+             IF (.NOT.vdwwfl%trwannc) THEN
+                CALL dcopy(3*maxsys%nax*maxsys%nsx,pitaup(1,1,1,ipcurr),1,&
+                     tauref(1,1,1,ipx),1)
+             ENDIF
+          ENDIF
+          CALL mp_bcast(tauref(:,:,:,ipx),3*maxsys%nax*maxsys%nsx,&
+               parai%io_source,parai%cp_grp)
+          CALL mp_bcast(rwann(:,:,ipx),3*nwfcx*nfragx,parai%io_source,parai%cp_grp)
+          CALL mp_bcast(swann(:,ipx),nwfcx*nfragx,parai%io_source,parai%cp_grp)
+          CALL mp_bcast(vdwwfl%trwannc,parai%io_source,parai%cp_grp)
+          trwanncx(ipx)=vdwwfl%trwannc
+       ENDIF
+       ! ..Initialization of wavefunction
+       IF (.NOT.restart1%restart) THEN
+          CALL rinitwf(c0(:,:,ipx:ipx),c2,sc0,crge%n,pitaup(:,:,:,ipcurr),taur,rhoe,psi)
+       ENDIF
        ! ..Initialize velocities
        IF (.NOT.restart1%rvel) THEN
           ener_com%ecnstr = 0.0_real_8
@@ -520,36 +635,57 @@ CONTAINS
        ipx=ipcurr-np_low+1
        CALL phfac(pitaup(:,:,:,ipcurr))
        IF (corel%tinlc) CALL copot(rhoe,psi,ropt_mod%calste)
-       IF (pslo_com%tivan) THEN
-          DO ik=1,nkpt%nkpnt
-             CALL rnlsm(c0(:,ipx:ipx+crge%n-1,ik),crge%n,1,ik,.FALSE.)
-          ENDDO
-       ENDIF
-       IF (irec(irec_rho,ipcurr).EQ.0) THEN
-          ! ..Restore occupation numbers
-          CALL dcopy(crge%n*nkpt%nkpts,fall(1,ipx),1,crge%f,1)
-          IF (tkpts%tkpnt) THEN
-             CALL rhoofr_c(c0(:,:,ipx),rhoe,psi(:,1),crge%n)
-          ELSE
-             CALL rhoofr(c0(:,:,ipx),rhoe,psi(:,1),crge%n)
+       ! Initialization of density and potential
+       ! for diagonalization schemes
+       IF (cntl%tdiag) THEN
+          IF (pslo_com%tivan) THEN
+             CALL rnlsm(c0(:,:,ipx),crge%n,1,1,.FALSE.)
           ENDIF
-          CALL dcopy(nnx,rhoe,1,rin0,1)
-       ELSE
-          IF (cntl%tdiag) CALL dcopy(nnx,rall(1,ipx),1,rin0,1)
+          IF (irec(irec_rho,ipcurr).EQ.0) THEN
+             ! ..Restore occupation numbers
+             IF (restart1%restart) THEN
+                CALL dcopy(crge%n*nkpt%nkpts,fall(1,ipx),1,crge%f,1)
+             ENDIF
+             IF (tkpts%tkpnt) THEN
+                CALL rhoofr_c(c0(:,:,ipx),rhoe,psi(:,1),crge%n)
+             ELSE
+                CALL rhoofr(c0(:,:,ipx),rhoe,psi(:,1),crge%n)
+             ENDIF
+             CALL dcopy(nnx,rhoe,1,rin0,1)
+          ELSE
+             CALL dcopy(nnx,rall(1,ipx),1,rin0,1)
+          ENDIF
+          ! NON LOCAL PROJECTOR OVERLAP MATRIX
+          IF (fint1%ttrot) CALL calc_alm
        ENDIF
-       ! NON LOCAL PROJECTOR OVERLAP MATRIX
-       IF (fint1%ttrot) CALL calc_alm
        ! INITIALIZE WF CENTERS & SPREAD
        IF (vdwl%vdwd) THEN
           IF (.NOT.trwanncx(ipx)) THEN
              CALL localize2(pitaup(:,:,:,ipcurr),c0(:,:,ipx),c2,sc0,crge%n)
           ENDIF
        ENDIF
-       CALL forces_diag(crge%n,c0(:,:,ipx:),c2,cm,sc0,cm(nx),vpp,eigv(:,ipx),&
-            rhoe,psi,&
-            pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),&
-            pifion(:,:,:,ipcurr),&
-            ifcalc,irec(:,ipcurr),.TRUE.,.FALSE.)
+       n_inner_steps=0
+       n_large_steps=0
+       mts_large_step=.false.
+       if (cntl%use_mts) then
+          n_inner_steps=MOD(iteropt%nfi,mts%timestep_factor)
+          n_large_steps=iteropt%nfi/mts%timestep_factor
+          if (n_inner_steps==0) mts_large_step=.true.
+          call get_mts_forces(mts_large_step,.true.,n_inner_steps,n_large_steps,&
+             mts_pure_dft,fion_high,c0_high,coldall_high(:,:,:,:,ipx),&
+             nnowall_high(ipx),numcoldall_high(ipx),infi,&
+             crge%n,c0(:,:,ipx:),c2,cm,sc0,cm(nx),vpp,eigv(:,ipx),&
+             rhoe,psi,&
+             pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),&
+             pifion(:,:,:,ipcurr),&
+             ifcalc,irec(:,ipcurr),.true.,.true.)
+       else
+          CALL forces_diag(crge%n,c0(:,:,ipx:),c2,cm,sc0,cm(nx),vpp,eigv(:,ipx),&
+               rhoe,psi,&
+               pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),&
+               pifion(:,:,:,ipcurr),&
+               ifcalc,irec(:,ipcurr),.TRUE.,.TRUE.)
+       endif
        CALL dscal(3*maxsys%nax*maxsys%nsx,1._real_8/rnp,pifion(1,1,1,ipcurr),1)
        CALL dcopy(3*maxsys%nax*maxsys%nsx,pifion(1,1,1,ipcurr),1,&
             fionks(1,1,1,ipcurr),1)
@@ -577,9 +713,9 @@ CONTAINS
           itemp=irec(irec_nop1,ipcurr)+irec(irec_nop2,ipcurr)+irec(irec_nop3,ipcurr)&
                +irec(irec_nop4,ipcurr)
           IF (cntl%tnosep .AND. itemp.EQ.0) CALL nospinit(ipcurr)
-          ! ..Centroid PICPMD: Set thermostat variables to zero in case 
+          ! ..Centroid & Ring-polymer PIMD: Set thermostat variables to zero in case 
           ! ..of a centroid restart from a non-centroid thermosatted run
-          IF (cntl%tnosep.AND.pimd1%tcentro.AND.ipcurr.EQ.1) THEN
+          IF (cntl%tnosep.AND.(pimd1%tcentro.OR.pimd1%tringp).AND.ipcurr.EQ.1) THEN
              nrepl=maxnp
              IF (nosl%tultra) THEN
                 ! ..Not used with PICPMD 
@@ -587,14 +723,20 @@ CONTAINS
                 CALL stopgm('PI_DIAG','LOCAL TEMPERATURE NOT IMPLEMENTET',& 
                      __LINE__,__FILE__)
              ELSEIF (nosl%tmnose) THEN
-                CALL stopgm(procedureN,'Massive NHCs thermostat not available for ip=1',&
-                     __LINE__,__FILE__)
-             !  DO k=1,3*maxsys%nax*maxsys%nsx
-             !     DO l=1,nchx
-             !        etapm(k,l,1)=0._real_8
-             !        etapmdot(k,l,1)=0._real_8
-             !     ENDDO
-             !  ENDDO
+                IF (pimd1%tcentro) THEN
+                   CALL stopgm(procedureN,'Massive NHCs thermostat not available for ip=1',&
+                        __LINE__,__FILE__)
+                ELSE
+                   ! ..Switch off if requested
+                   IF (.NOT.tnosepc) THEN
+                      DO k=1,3*maxsys%nax*maxsys%nsx
+                         DO l=1,nchx
+                            etapm(k,l,1)=0._real_8
+                            etapmdot(k,l,1)=0._real_8
+                         ENDDO
+                      ENDDO
+                   ENDIF
+                ENDIF
              ELSE
                 ! ..Switch off if requested
                 IF (.NOT.tnosepc) THEN
@@ -607,6 +749,27 @@ CONTAINS
           ENDIF
        ENDDO
     ENDIF
+
+    ! Initialize GLE thermostat
+    iprng0=cnti%iprng
+    CALL repprngu_vec(npx,dummies)
+    DO ipcurr=np_low,np_high
+       ipx=ipcurr-np_low+1
+       CALL gleback(ipcurr,.FALSE.,1)
+       IF (.NOT.restart1%rprng.OR.irec(irec_prng,ipcurr).EQ.0) THEN
+          cnti%iprng=FLOOR(dummies(ipcurr)*iprng0)
+          IF (paral%io_parent) WRITE(6,*) 'USING SEED ', cnti%iprng,&
+             'TO REINIT. PSEUDO RANDOM NUMBER GEN.'
+          CALL prnginit
+       ENDIF
+       IF (pimd1%tstage.OR.pimd1%tpinm) THEN
+          CALL gle_init(stagep(:,:,:,ipcurr),vstage(:,:,:,ipcurr),pma0s(1,ipcurr))
+       ELSE
+          CALL gle_init(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),rmass%pma)
+       ENDIF
+       CALL gleback(ipcurr,.TRUE.,0)
+    ENDDO
+
     IF (grandparent) THEN
        IF (pimd3%levprt.GE.5) THEN
           DO ip=1,pimd3%np_total
@@ -637,6 +800,17 @@ CONTAINS
     DO infi=1,cnti%nomore
        time1=m_walltime()
        iteropt%nfi=iteropt%nfi+1
+
+       ! MTS time step counters
+       n_inner_steps=n_inner_steps+1
+       mts_large_step=.false.
+       ! check if it is a large step
+       if (n_inner_steps==mts%timestep_factor) then
+          mts_large_step=.true.
+          n_large_steps=n_large_steps+1
+          n_inner_steps=0
+       endif
+
        ropt_mod%prteig=MOD(iteropt%nfi-1,cprint%iprint_step).EQ.0
        IF (.NOT.paral%parent) ropt_mod%prteig=.FALSE.
        ropt_mod%engpri=MOD(iteropt%nfi-1,cprint%iprint_step).EQ.0
@@ -646,25 +820,36 @@ CONTAINS
        DO ipcurr=np_low,np_high
           ipx=ipcurr-np_low+1
           ! ANNEALING
-          IF (pimd1%tstage.OR.pimd1%tpinm) THEN
-             CALL anneal(vstage(:,:,:,ipcurr),c2,crge%n,scr)
-             CALL berendsen(vstage(:,:,:,ipcurr),c2,crge%n,scr,0.0_real_8,0.0_real_8)
-          ELSE
-             CALL anneal(pivelp(:,:,:,ipcurr),c2,crge%n,scr)
-             CALL berendsen(pivelp(:,:,:,ipcurr),c2,crge%n,scr,0.0_real_8,0.0_real_8)
-          ENDIF
-          ! ..UPDATE NOSE THERMOSTATS
-          nosl%tmnose=pitmnose(MIN(ipcurr,2))
-          IF (reset_gkt.AND.ipcurr==1) THEN
-             scr(1:2)=gkt(1:2,1); gkt(1:2,1)=gkt1(1:2,1)
-          ENDIF
-          IF (pimd1%tstage.OR.pimd1%tpinm) THEN
-             CALL noseup(vstage(:,:,:,ipcurr),c2,crge%n,ipcurr)
-          ELSE
-             CALL noseup(pivelp(:,:,:,ipcurr),c2,crge%n,ipcurr)
-          ENDIF
-          IF (reset_gkt.AND.ipcurr==1) gkt(1:2,1)=scr(1:2)
-          IF (pimd1%tcentro.AND.ipcurr.EQ.1) THEN
+          ! thermostats only if 1) standard dynamics 2) smaller MTS step
+          if ( .not.cntl%use_mts .or. .not.mts_large_step ) then
+             IF (pimd1%tstage.OR.pimd1%tpinm) THEN
+                CALL anneal(vstage(:,:,:,ipcurr),c2,crge%n,scr)
+                CALL berendsen(vstage(:,:,:,ipcurr),c2,crge%n,scr,0.0_real_8,0.0_real_8)
+             ELSE
+                CALL anneal(pivelp(:,:,:,ipcurr),c2,crge%n,scr)
+                CALL berendsen(pivelp(:,:,:,ipcurr),c2,crge%n,scr,0.0_real_8,0.0_real_8)
+             ENDIF
+             ! ..UPDATE NOSE THERMOSTATS
+             nosl%tmnose=pitmnose(MIN(ipcurr,2))
+             IF (reset_gkt.AND.ipcurr==1) THEN
+                scr(1:2)=gkt(1:2,1); gkt(1:2,1)=gkt1(1:2,1)
+             ENDIF
+             IF (pimd1%tstage.OR.pimd1%tpinm) THEN
+                CALL noseup(vstage(:,:,:,ipcurr),c2,crge%n,ipcurr)
+             ELSE
+                CALL noseup(pivelp(:,:,:,ipcurr),c2,crge%n,ipcurr)
+             ENDIF
+             IF (reset_gkt.AND.ipcurr==1) gkt(1:2,1)=scr(1:2)
+             ! FIRST HALF OF GLE EVOLUTION
+             CALL gleback(ipcurr,.TRUE.,1)
+             IF (pimd1%tstage.OR.pimd1%tpinm) THEN
+                CALL gle_step(stagep(:,:,:,ipcurr),vstage(:,:,:,ipcurr),pma0s(1,ipcurr))
+             ELSE
+                CALL gle_step(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),rmass%pma)
+             ENDIF
+             CALL gleback(ipcurr,.TRUE.,0)
+          endif
+          IF ((pimd1%tcentro.OR.pimd1%tringp).AND.ipcurr.EQ.1) THEN
              IF (pimd1%tstage.OR.pimd1%tpinm) THEN
                 ! SUBTRACT CENTER OF MASS VELOCITY
                 IF (paral%parent.AND.comvl%subcom) THEN
@@ -751,11 +936,22 @@ CONTAINS
           IF (cntl%tdavi) nx=cnti%ndavv*nkpt%nkpnt+1
           ! ..CALCULATE THE FORCES
           ropt_mod%calste=cntl%tpres.AND.MOD(iteropt%nfi,cnti%npres).EQ.0
-          CALL forces_diag(crge%n,c0(:,:,ipx:),c2,cm,sc0,cm(nx),&
-               vpp,eigv(:,ipx),rhoe,psi,&
-               pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),taui(:,:,:,1),&
-               pifion(:,:,:,ipcurr),&
-               ifcalc,irec(:,ipcurr),.TRUE.,.FALSE.)
+          if (cntl%use_mts) then
+             call get_mts_forces(mts_large_step,.false.,n_inner_steps,n_large_steps,&
+                mts_pure_dft,fion_high,c0_high,coldall_high(:,:,:,:,ipx),&
+                nnowall_high(ipx),numcoldall_high(ipx),infi,&
+                crge%n,c0(:,:,ipx:),c2,cm,sc0,cm(nx),vpp,eigv(:,ipx),&
+                rhoe,psi,&
+                pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),&
+                pifion(:,:,:,ipcurr),&
+                ifcalc,irec(:,ipcurr),.true.,.false.)
+          else
+             CALL forces_diag(crge%n,c0(:,:,ipx:),c2,cm,sc0,cm(nx),&
+                  vpp,eigv(:,ipx),rhoe,psi,&
+                  pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),&
+                  pifion(:,:,:,ipcurr),&
+                  ifcalc,irec(:,ipcurr),.TRUE.,.FALSE.)
+          endif
           CALL dscal(3*maxsys%nax*maxsys%nsx,1._real_8/rnp,pifion(1,1,1,ipcurr),1)
           CALL dcopy(3*maxsys%nax*maxsys%nsx,pifion(1,1,1,ipcurr),1,&
                fionks(1,1,1,ipcurr),1)
@@ -844,7 +1040,7 @@ CONTAINS
                 ENDIF
              ENDIF
           ENDIF
-          IF (pimd1%tcentro.AND.ipcurr.EQ.1) THEN
+          IF ((pimd1%tcentro.OR.pimd1%tringp).AND.ipcurr.EQ.1) THEN
              IF (pimd1%tstage.OR.pimd1%tpinm) THEN
                 ! SUBTRACT ROTATION AROUND CENTER OF MASS
                 IF (paral%parent.AND.comvl%subrot) THEN
@@ -856,26 +1052,38 @@ CONTAINS
                 ENDIF
              ENDIF
           ENDIF
-          ! ..UPDATE NOSE THERMOSTATS
-          nosl%tmnose=pitmnose(MIN(ipcurr,2))
-          IF (reset_gkt.AND.ipcurr==1) THEN
-             scr(1:2)=gkt(1:2,1); gkt(1:2,1)=gkt1(1:2,1)
-          ENDIF
-          IF (pimd1%tstage.OR.pimd1%tpinm) THEN
-             CALL noseup(vstage(:,:,:,ipcurr),c2,crge%n,ipcurr)
-          ELSE
-             CALL noseup(pivelp(:,:,:,ipcurr),c2,crge%n,ipcurr)
-          ENDIF
-          IF (reset_gkt.AND.ipcurr==1) gkt(1:2,1)=scr(1:2)
-          IF (pimd1%tpinm.OR.pimd1%tstage) THEN
-             CALL berendsen(vstage(:,:,:,ipcurr),c2,crge%n,scr,0.0_real_8,0.0_real_8)
-             ! ANNEALING
-             CALL anneal(vstage(:,:,:,ipcurr),c2,crge%n,scr)
-          ELSE
-             CALL berendsen(pivelp(:,:,:,ipcurr),c2,crge%n,scr,0.0_real_8,0.0_real_8)
-             ! ANNEALING
-             CALL anneal(pivelp(:,:,:,ipcurr),c2,crge%n,scr)
-          ENDIF
+          
+          ! thermostats only if 1) standard dynamics 2) smaller MTS step
+          if ( .not.cntl%use_mts .or. .not.mts_large_step ) then
+             ! SECOND HALF OF GLE EVOLUTION
+             CALL gleback(ipcurr,.TRUE.,1)
+             IF (pimd1%tstage.OR.pimd1%tpinm) THEN
+                 CALL gle_step(stagep(:,:,:,ipcurr),vstage(:,:,:,ipcurr),pma0s(1,ipcurr))
+             ELSE
+                 CALL gle_step(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),rmass%pma)
+             ENDIF
+             CALL gleback(ipcurr,.TRUE.,0)
+             ! ..UPDATE NOSE THERMOSTATS
+             nosl%tmnose=pitmnose(MIN(ipcurr,2))
+             IF (reset_gkt.AND.ipcurr==1) THEN
+                scr(1:2)=gkt(1:2,1); gkt(1:2,1)=gkt1(1:2,1)
+             ENDIF
+             IF (pimd1%tstage.OR.pimd1%tpinm) THEN
+                CALL noseup(vstage(:,:,:,ipcurr),c2,crge%n,ipcurr)
+             ELSE
+                CALL noseup(pivelp(:,:,:,ipcurr),c2,crge%n,ipcurr)
+             ENDIF
+             IF (reset_gkt.AND.ipcurr==1) gkt(1:2,1)=scr(1:2)
+             IF (pimd1%tpinm.OR.pimd1%tstage) THEN
+                CALL berendsen(vstage(:,:,:,ipcurr),c2,crge%n,scr,0.0_real_8,0.0_real_8)
+                ! ANNEALING
+                CALL anneal(vstage(:,:,:,ipcurr),c2,crge%n,scr)
+             ELSE
+                CALL berendsen(pivelp(:,:,:,ipcurr),c2,crge%n,scr,0.0_real_8,0.0_real_8)
+                ! ANNEALING
+                CALL anneal(pivelp(:,:,:,ipcurr),c2,crge%n,scr)
+             ENDIF
+          endif
           IF (paral%parent) THEN
              IF (pimd1%tpinm.OR.pimd1%tstage) THEN
                 CALL s_ekinpp(ekinp,vstage(:,:,:,ipcurr),ipcurr)
@@ -908,7 +1116,7 @@ CONTAINS
              ! ..NOTE: ECNSTR IS ALWAYS ZERO
              econs(ipcurr)=ekinp+etotv(ipcurr)/rnp+&
                   enosp(ipcurr)+&
-                  eharv(ipcurr)+ener_com%ecnstr+ener_com%erestr
+                  eharv(ipcurr)+ener_com%ecnstr+ener_com%erestr+pi_egle(ipcurr)
           ENDIF
        ENDDO
        ! <<<<End of Replica Loop
@@ -930,6 +1138,7 @@ CONTAINS
        CALL global(eham,1)
        CALL global(econs,1)
        CALL global(enosp,1)
+       CALL global(pi_egle,1)
        CALL global(disa,1)
        ! DM C..PRINTOUT the evolution of the accumulators every time step
        IF (grandparent) THEN
@@ -958,14 +1167,14 @@ CONTAINS
              CALL prtgyr
              IF (paral%io_parent)&
                   WRITE(6,'(/,A,A)')&
-                  '    NFI   IP  TEMPP     EHARM         EKS',&
-                  '    ENOSE(P)    ECLASSIC     DIS'
+                  '      NFI   IP  TEMPP     EHARM         EKS',&
+                  '    ENOSE(P)      EGLE    ECLASSIC     DIS'
              DO ip=1,pimd3%np_total
                 IF (paral%io_parent)&
                      WRITE(6,&
-                     '(I7,I5,F7.1,F10.6,F12.5,2X,F10.5,F12.5, F8.2)')&
+                     '(I9,I5,F7.1,F10.6,F12.5,2X,F10.5,F10.5,F12.5, F8.2)')&
                      iteropt%nfi,ip,tempp(ip),eharv(ip),etotv(ip),&
-                     enosp(ip),econs(ip),disa(ip)
+                     enosp(ip),pi_egle(ip),econs(ip),disa(ip)
              ENDDO
           ENDIF
           ! ..Quantum kinetic energy of ions
@@ -994,13 +1203,13 @@ CONTAINS
           tcpu=(time2-time1)*0.001_real_8
           IF ((ropt_mod%engpri).AND.paral%io_parent)&
                WRITE(6,'(/,A,A)')&
-               '    NFI   TEMP   EKINP(PRI)  EKINP(VIR)      EKS/P ',&
+               '      NFI   TEMP   EKINP(PRI)  EKINP(VIR)      EKS/P ',&
                '     EQUANT    ECLASSIC     TCPU'
           IF (paral%io_parent)&
-               WRITE(6,'(I7,F7.1,5F12.5,F9.2)')&
+               WRITE(6,'(I9,F7.1,5F12.5,F9.2)')&
                iteropt%nfi,tempa,qpkinp,qvkinp,etota,equant,econsa,tcpu
           IF (paral%io_parent)&
-               WRITE(3,'(I7,F7.1,5F20.10,F9.2)')&
+               WRITE(3,'(I9,F7.1,5F20.10,F9.2)')&
                iteropt%nfi,tempa,qpkinp,qvkinp,etota,equant,econsa,tcpu
           ! ..Store ionic coordinates and velocities for statistics
           ropt_mod%movie=rout1%mout .AND. MOD(iteropt%nfi-1,cnti%imovie).EQ.0
@@ -1020,7 +1229,7 @@ CONTAINS
        IF (infi.EQ.cnti%nomore) soft_com%exsoft=.TRUE.
 
        nosl%tmnose=pitmnose(2)  ! recover original setup of tmnose
-       IF ((pimd1%tstage.OR.pimd1%tpinm).AND.nosl%tmnose) CALL wr_temps(iteropt%nfi,ekinc,tempp)
+       IF (pimd1%tstage.OR.pimd1%tpinm) CALL wr_temps(iteropt%nfi,ekinc,tempp)
        IF (ropt_mod%calste) THEN
           IF (pimd1%tstage.OR.pimd1%tpinm) THEN
              IF (cntl%tvirial) THEN
@@ -1064,6 +1273,7 @@ CONTAINS
                      coldall(1,1,1,1,ipx),1,cold,1)
                 nnow=nnowall(ipx); numcold=numcoldall(ipx)
              ENDIF
+             CALL gleback(ipcurr,.FALSE.,1)
              nosl%tmnose=pitmnose(MIN(ipcurr,2))
              CALL write_irec(irec(:,ipcurr))
              CALL zhwwf(2,irec(:,ipcurr),c0(:,:,ipx),c2,crge%n,eigv(:,ipx),&
@@ -1157,6 +1367,49 @@ CONTAINS
                __LINE__,__FILE__)
        ENDIF
     ENDIF
+    if (cntl%use_mts) then
+       deallocate(fion_high,stat=ierr)
+       if(ierr/=0) call stopgm(proceduren,'deallocation problem: fion_high',&
+          __LINE__,__FILE__)
+       if (mts_pure_dft) then
+          deallocate(c0_high,stat=ierr)
+          if(ierr/=0) call stopgm(proceduren,'deallocation problem: c0_high',&
+             __LINE__,__FILE__)
+          if (cntl%textrap) then
+             DEALLOCATE(coldall_high,STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+                  __LINE__,__FILE__)
+             DEALLOCATE(nnowall_high,STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+                  __LINE__,__FILE__)
+             DEALLOCATE(numcoldall_high,STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+                  __LINE__,__FILE__)
+          end if
+       end if
+    end if
+    DEALLOCATE(pi_egle,STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+         __LINE__,__FILE__)
+    IF (np_local>1) THEN
+       DEALLOCATE(pi_prng_com,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+            __LINE__,__FILE__)
+       IF (glepar%gle_mode>0) THEN
+          DEALLOCATE(pi_glec,STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+               __LINE__,__FILE__)
+          DEALLOCATE(pi_gles,STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+               __LINE__,__FILE__)
+          DEALLOCATE(pi_glet,STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+               __LINE__,__FILE__)
+          DEALLOCATE(pi_glep,STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+               __LINE__,__FILE__)
+       ENDIF
+    ENDIF
     IF (comvl%tsubrot) THEN
        DEALLOCATE(tauio,STAT=ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
@@ -1184,5 +1437,139 @@ CONTAINS
     RETURN
   END SUBROUTINE pi_diag
   ! ==================================================================
+
+
+  ! Purpose: returns effective ionic forces in MTS algorithm
+  !      The forces are either from the low level or from a 
+  !      combination of high and low levels.
+  !
+  ! Author: Pablo Baudin
+  ! Date: May 2018
+  subroutine get_mts_forces(large_step,initialization,n_inner_steps, n_large_steps,&
+        mts_pure_dft,fion_high,c0_high,cold_high,nnow_high,numcold_high,infi,&
+        nstate,c0,c2,cr,csc0,cscr,vpp,eigv,&
+        rhoe,psi,tau0,velp,taui,fion,ifcalc,irec,tfor,tinfo)
+
+     implicit none
+
+     logical, intent(in) :: large_step, initialization, mts_pure_dft
+     integer, intent(inout) :: n_inner_steps
+     integer, intent(in) :: n_large_steps
+     logical :: tfor, tinfo
+     integer :: nnow_high, numcold_high
+     integer :: infi, nstate
+     integer :: ifcalc, irec(:)
+     real(real_8), allocatable :: fion_high(:,:,:)
+     real(real_8) :: vpp(ncpw%ngw), eigv(*), rhoe(:,:)
+     real(real_8) :: tau0(:,:,:), velp(:,:,:), taui(:,:,:), fion(:,:,:)
+     complex(real_8), allocatable :: c0_high(:,:,:)
+     complex(real_8) :: cold_high(:,:,:,:), c0(:,:,:), c2(nkpt%ngwk,nstate), cr(*)
+     complex(real_8) :: csc0(nkpt%ngwk,nstate), cscr(*)
+     complex(real_8) :: psi(:,:)
+
+     character(*), parameter :: proceduren = 'get_mts_forces'
+     character(len=100) :: title
+     integer :: i, ia, is, x, N
+
+
+     ! GET LOW LEVEL FORCES
+     if (paral%io_parent) write(6,'(1x,3a)') 'MTS: LOW LEVEL FORCES: ', &
+        mts%low_level, mts%low_dft_func
+     select case(mts%low_level)
+     case('EXTERNAL')
+        CALL stopgm(procedureN,'LOW_LEVEL_FORCES EXTERNAL not available',&
+           __LINE__,__FILE__)
+     !  call get_external_forces('EXT_LOW_FORCES', tau0, fion)
+
+     case('DFT')
+        if (initialization .and. mts_pure_dft) then
+           ! copy wf for extrapolation 
+           call dcopy(2*size(c0,1)*size(c0,2)*size(c0,3),c0,1,c0_high,1)
+        end if
+
+        call set_mts_functional('LOW')
+
+        call forces_diag(nstate,c0,c2,cr,csc0,cscr,vpp,eigv,&
+           rhoe,psi,tau0,velp,taui,fion,ifcalc,irec,tfor,tinfo)
+
+     case default
+        if(paral%io_parent) print *, 'Low level forces not available with', mts%low_level
+        call stopgm(proceduren,'wrong option for high level forces',&
+           __LINE__,__FILE__)
+
+     end select
+
+     ! print low level forces to file
+     if (mts%print_forces) then
+        write(title,'(1x,a,i10,10x,a,i10)') 'STEP:',iteropt%nfi,'N_INNER_STEPS:',n_inner_steps
+        call print_mts_forces(fion, title, 'LOW')
+     end if
+
+     if (large_step) then
+        ! GET HIGH LEVEL FORCES
+        if (paral%io_parent) write(6,'(1x,3a)') 'MTS: HIGH LEVEL FORCES: ', &
+           mts%high_level, mts%high_dft_func
+        select case(mts%high_level)
+        case('EXTERNAL')
+           CALL stopgm(procedureN,'HIGH_LEVEL_FORCES EXTERNAL not available',&
+              __LINE__,__FILE__)
+        !  call get_external_forces('EXT_HIGH_FORCES', tau0, fion_high)
+
+        case('DFT')
+
+           call set_mts_functional('HIGH')
+
+           if (mts_pure_dft) then
+
+              ! wf extrapolation
+              if (.not.initialization .and. cntl%textrap) then
+                 call extrapwf(infi,c0_high,cscr,cold_high,nnow_high,numcold_high,nstate,cnti%mextra)
+              end if
+
+              ! get forces
+              call forces_diag(nstate,c0_high,c2,cr,csc0,cscr,vpp,eigv,&
+                 rhoe,psi,tau0,velp,taui,fion_high,ifcalc,irec,tfor,tinfo)
+           else
+
+              ! In this case the wf extrap. is done in the main (outside) routine
+              call forces_diag(nstate,c0,c2,cr,csc0,cscr,vpp,eigv,&
+                 rhoe,psi,tau0,velp,taui,fion_high,ifcalc,irec,tfor,tinfo)
+           end if
+
+        case default
+           if(paral%io_parent) print *, 'High level forces not available with', mts%high_level
+           call stopgm(proceduren,'wrong option for high level forces',&
+              __LINE__,__FILE__)
+
+        end select
+
+        ! print high level forces to file
+        if (mts%print_forces) then
+           write(title,'(1x,a,i10,10x,a,i10)') 'STEP:',iteropt%nfi,'N_LARGE_STEPS:',n_large_steps
+           call print_mts_forces(fion_high, title, 'HIGH')
+        end if
+
+        ! get effective forces from difference between high and low level
+        !
+        !     F = F_low + (F_high - F_low) * N 
+        !     F = F_high * N - F_low * (N - 1)
+        !     
+        !     where N is the MTS time-step factor
+        ! 
+        N = mts%timestep_factor
+        do i=1,ions1%nat
+           ia=iatpt(1,i)
+           is=iatpt(2,i)
+           do x=1,3
+              fion(x,ia,is) = fion_high(x,ia,is) * N - fion(x,ia,is) * (N - 1)
+           end do
+        end do
+
+        ! reinitialize inner counter
+        n_inner_steps = 0
+
+     end if
+
+  end subroutine get_mts_forces
 
 END MODULE pi_diag_utils

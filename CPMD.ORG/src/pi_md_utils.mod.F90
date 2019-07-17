@@ -40,6 +40,13 @@ MODULE pi_md_utils
   USE getfnm_utils,                    ONLY: getfnm
   USE getfu_utils,                     ONLY: getfu
   USE getgyr_utils,                    ONLY: getgyration
+  USE glemod,                          ONLY: glepar,&
+                                             glec,&
+                                             gles,&
+                                             glet,&
+                                             glep
+  USE gle_utils,                       ONLY: gle_init,&
+                                             gle_step
   USE global_utils,                    ONLY: global
   USE ions,                            ONLY: ions1
   USE kinds,                           ONLY: real_8
@@ -71,29 +78,38 @@ MODULE pi_md_utils
   USE pimd,                            ONLY: &
        csumgv, csumrv, egcv, ehar, eharv, ehtv, ekinv, enlv, epseuv, eselfv, &
        esrv, etotv, excv, fionks, grandparent, ipcurr, maxnp, np_high, &
-       np_local, np_low, pimd1, pimd3, supergroup
+       np_local, np_low, pimd1, pimd3, supergroup, pma0s, pi_egle, pi_glec, &
+       pi_gles, pi_glet, pi_glep
   USE pinmtrans_utils,                 ONLY: pinmtrans
   USE pi_stress_utils,                 ONLY: pi_stress_vir,&
                                              pi_stress_pri,&
                                              pi_stress_nmm,&
                                              wr_pi_stress
+  USE pi_wf_utils,                     ONLY: initrep
   USE posupa_utils,                    ONLY: posupa
   USE posupi_utils,                    ONLY: posupi
   USE printave_utils,                  ONLY: paccd
   USE printp_utils,                    ONLY: printp
   USE prmem_utils,                     ONLY: prmem
+  USE prng,                            ONLY: prng_com,&
+                                             pi_prng_com
+  USE prng_utils,                      ONLY: prnginit,&
+                                             repprngu_vec
   USE prtgyr_utils,                    ONLY: prtgyr
   USE pslo,                            ONLY: pslo_com
   USE puttau_utils,                    ONLY: taucl
+  USE quenbo_utils,                    ONLY: quenbo
   USE ranp_utils,                      ONLY: ranp
   USE rattle_utils,                    ONLY: rattle
   USE readsr_utils,                    ONLY: xstring
   USE rekine_utils,                    ONLY: rekine
   USE reshaper,                        ONLY: reshape_inplace
   USE rhopri_utils,                    ONLY: rhopri
+  USE rinitwf_driver,                  ONLY: rinitwf
   USE rinvel_utils,                    ONLY: rinvel,&
                                              rvscal,&
                                              s_rinvel
+  USE rmas,                            ONLY: rmass
   USE ropt,                            ONLY: infi,&
                                              iteropt,&
                                              ropt_mod
@@ -110,7 +126,7 @@ MODULE pi_md_utils
   USE stagetrans_utils,                ONLY: stagetrans
   USE store_types,                     ONLY: &
        cprint, iprint_coor, iprint_force, irec_nop1, irec_nop2, irec_nop3, &
-       irec_nop4, restart1, rout1
+       irec_nop4, irec_wf, irec_prng, restart1, rout1
   USE strs,                            ONLY: paiu
   USE system,                          ONLY: &
        acc, cnti, cntl, cntr, maxsys, nacc, nacx, ncpw, restf
@@ -141,6 +157,7 @@ MODULE pi_md_utils
   PUBLIC :: pi_md
   PUBLIC :: pi_ener
   PUBLIC :: disten
+  PUBLIC :: gleback
 
 CONTAINS
 
@@ -162,11 +179,11 @@ CONTAINS
     CHARACTER(len=30)                        :: tag
     COMPLEX(real_8), ALLOCATABLE             :: psi(:,:)
     INTEGER :: i, i1, i2, ierr, il_psi_1d, il_psi_2d, il_rhoe_1d, il_rhoe_2d, &
-      ip, ipx, isub, itemp, k, l, lscr, n1, n2, npx, nrepl, nwfc
+      ip, ipx, isub, itemp, k, l, lscr, n1, n2, npx, nrepl, nwfc, iprng0
     INTEGER, ALLOCATABLE                     :: irec(:,:)
     LOGICAL                                  :: ferror, reset_gkt, &
                                                 pitmnose(2)
-    REAL(real_8) :: accus(nacx,maxnp), d1, d2, disa(maxnp), dummies(1), &
+    REAL(real_8) :: accus(nacx,maxnp), d1, d2, disa(maxnp), dummies(maxnp), &
       dummy, econs(maxnp), econsa, eham(maxnp), ehama, ekin1, ekin2, ekina, &
       ekinc(maxnp), ekincp, ekinh1, ekinh2, ekinp, enose(maxnp), &
       enosp(maxnp), equant, etota, ff, glib_s, lmio(3), qpkinp, qvkinp, rnp, &
@@ -280,6 +297,29 @@ CONTAINS
     CALL reshape_inplace(fion, (/3,maxsys%nax,maxsys%nsx, npx/), pifion)
     CALL reshape_inplace(taup, (/3,maxsys%nax,maxsys%nsx, npx/), pitaup)
     CALL reshape_inplace(velp, (/3,maxsys%nax,maxsys%nsx, npx/), pivelp)
+
+    ALLOCATE(pi_egle(npx),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    IF (np_local>1) THEN
+       ALLOCATE(pi_prng_com(np_local),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+       IF (glepar%gle_mode>0) THEN
+          ALLOCATE(pi_glec(np_local),STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+               __LINE__,__FILE__)
+          ALLOCATE(pi_gles((glepar%gle_ns+1)*(glepar%gle_ns+1),np_local),STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+               __LINE__,__FILE__)
+          ALLOCATE(pi_glet((glepar%gle_ns+1)*(glepar%gle_ns+1),np_local),STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+               __LINE__,__FILE__)
+          ALLOCATE(pi_glep(3,maxsys%nax,maxsys%nsx,(glepar%gle_ns+1),np_local),STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+               __LINE__,__FILE__)
+       ENDIF
+    ENDIF
     ! ==--------------------------------------------------------------==
     ! SCR ALLOCATION AND PARTITION (SCRATCH ARRAY).
     CALL rhoe_psi_size(il_psi_1d=il_psi_1d,il_psi_2d=il_psi_2d,&
@@ -308,52 +348,53 @@ CONTAINS
     DO ipcurr=np_low,np_high
        nosl%tmnose=pitmnose(MIN(ipcurr,2))
        CALL read_irec(irec(:,ipcurr))
-       ! ..Construct filenames
-       cflbod='RESTART_'
-       IF (paral%io_parent)&
-            WRITE(cipnum,'(I4)') ipcurr
-       CALL xstring(cflbod,n1,n2)
-       CALL xstring(cipnum,i1,i2)
-       filbod=cflbod(n1:n2)//cipnum(i1:i2)//'.1'
-       IF (restart1%rlate) THEN
-          filn=filbod
-       ELSE
-          filn=cflbod(n1:n2)//cipnum(i1:i2)
-       ENDIF
-       ! ..Read restart file
-       ipx=ipcurr-np_low+1
-       CALL zhrwf(1,irec(:,ipcurr),c0(:,:,ipx:ipx),cm(:,:,ipx),crge%n,eigv(:,ipx),&
-            pitaup(:,:,:,ipcurr),&
-            pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),iteropt%nfi)
-       CALL dcopy(nacc,acc,1,accus(1,ipcurr),1)
-       IF (restart1%rgeo) THEN
-          IF (paral%io_parent) CALL geofile(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),'READ')
-          CALL mp_bcast(pitaup(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
-          CALL mp_bcast(pivelp(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
-          restart1%rvel=.TRUE.
-       ENDIF
-       ! ..Randomization of the atomic coordinates
-       IF (cntl%tranp.AND.paral%parent) CALL ranp(pitaup(:,:,:,ipcurr))
-       ! Read WF centers & spread from restart file
-       IF (vdwl%vdwd) THEN
-          IF (paral%io_parent) THEN
-             nwfc=crge%n
-             vdwwfl%trwannc=trwanncx(ipx)
-             CALL rwannier(nwfc,tauref(:,:,:,ipx),rwann(:,:,ipx),swann(:,ipx),&
-                  vdwwfl%trwannc)
-             IF (.NOT.vdwwfl%trwannc) THEN
-                CALL dcopy(3*maxsys%nax*maxsys%nsx,pitaup(1,1,1,ipcurr),&
-                     1,tauref(1,1,1,ipx),1)
-             ENDIF
+       IF (restart1%restart) THEN
+          ! ..Construct filenames
+          cflbod='RESTART_'
+          IF (paral%io_parent)&
+               WRITE(cipnum,'(I4)') ipcurr
+          CALL xstring(cflbod,n1,n2)
+          CALL xstring(cipnum,i1,i2)
+          filbod=cflbod(n1:n2)//cipnum(i1:i2)//'.1'
+          IF (restart1%rlate) THEN
+             filn=filbod
+          ELSE
+             filn=cflbod(n1:n2)//cipnum(i1:i2)
           ENDIF
-          CALL mp_bcast(tauref(:,:,:,ipx),3*maxsys%nax*maxsys%nsx,&
-               parai%io_source,parai%cp_grp)
-          CALL mp_bcast(rwann(:,:,ipx),3*nwfcx*nfragx,parai%io_source,parai%cp_grp)
-          CALL mp_bcast(swann(:,ipx),nwfcx*nfragx,parai%io_source,parai%cp_grp)
-          CALL mp_bcast(vdwwfl%trwannc,parai%io_source,parai%cp_grp)
-          trwanncx(ipx)=vdwwfl%trwannc
+          ! ..Read restart file
+          ipx=ipcurr-np_low+1
+          CALL zhrwf(1,irec(:,ipcurr),c0(:,:,ipx:ipx),cm(:,:,ipx),crge%n,eigv(:,ipx),&
+               pitaup(:,:,:,ipcurr),&
+               pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),iteropt%nfi)
+          CALL dcopy(nacc,acc,1,accus(1,ipcurr),1)
+          IF (restart1%rgeo) THEN
+             IF (paral%io_parent) CALL geofile(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),'READ')
+             CALL mp_bcast(pitaup(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
+             CALL mp_bcast(pivelp(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
+             restart1%rvel=.TRUE.
+          ENDIF
+          ! ..Randomization of the atomic coordinates
+          IF (cntl%tranp.AND.paral%parent) CALL ranp(pitaup(:,:,:,ipcurr))
+          ! ..Initialization of wavefunction
+          IF (irec(irec_wf,ipcurr).EQ.0) THEN
+             CALL rinitwf(c0(:,:,ipx:ipx),cm,sc0,crge%n,pitaup(:,:,:,ipcurr),&
+                  taur,rhoe,psi)
+             cntl%quenchb=.TRUE.
+          ENDIF
+          ! ..Store GLE-related variables
+          CALL gleback(ipcurr,.FALSE.,0)
        ENDIF
     ENDDO
+    ! ..Initialize replica coordinates if requested
+    IF (.NOT.restart1%restart) THEN
+       IF (pimd1%tinit) THEN
+          CALL initrep(pitaup)
+          cntl%quenchb=.TRUE.
+       ELSE
+          CALL stopgm(procedureN,'replica coordinates not read/generated',&
+             __LINE__,__FILE__)
+       ENDIF
+    ENDIF
     ! ..Global distribution of ionic positions
     CALL global(pitaup,3*maxsys%nax*maxsys%nsx)
     CALL mp_bcast(pitaup,SIZE(pitaup),parai%io_source,parai%cp_grp)
@@ -374,6 +415,35 @@ CONTAINS
     DO ipcurr=np_low,np_high
        ipx=ipcurr-np_low+1
        CALL phfac(pitaup(:,:,:,ipcurr))
+       ! ..Read WF centers & spread from restart file
+       IF (vdwl%vdwd) THEN
+          IF (paral%io_parent) THEN
+             nwfc=crge%n
+             vdwwfl%trwannc=trwanncx(ipx)
+             CALL rwannier(nwfc,tauref(:,:,:,ipx),rwann(:,:,ipx),swann(:,ipx),&
+                  vdwwfl%trwannc)
+             IF (.NOT.vdwwfl%trwannc) THEN
+                CALL dcopy(3*maxsys%nax*maxsys%nsx,pitaup(1,1,1,ipcurr),1,&
+                     tauref(1,1,1,ipx),1)
+             ENDIF
+          ENDIF
+          CALL mp_bcast(tauref(:,:,:,ipx),3*maxsys%nax*maxsys%nsx,&
+               parai%io_source,parai%cp_grp)
+          CALL mp_bcast(rwann(:,:,ipx),3*nwfcx*nfragx,parai%io_source,parai%cp_grp)
+          CALL mp_bcast(swann(:,ipx),nwfcx*nfragx,parai%io_source,parai%cp_grp)
+          CALL mp_bcast(vdwwfl%trwannc,parai%io_source,parai%cp_grp)
+          trwanncx(ipx)=vdwwfl%trwannc
+       ENDIF
+       ! ..Initialization of wavefunction
+       IF (.NOT.restart1%restart) THEN
+          CALL rinitwf(c0(:,:,ipx:ipx),cm,sc0,crge%n,pitaup(:,:,:,ipcurr),&
+               taur,rhoe,psi)
+       ENDIF
+       ! ..Quenching to BO surface
+       IF (cntl%quenchb) THEN
+          CALL dcopy(3*maxsys%nax*maxsys%nsx,pitaup(1,1,1,ipcurr),1,tau0,1)
+          CALL quenbo(c0(:,:,ipx),c2(1,1,ipx),sc0,taur,rhoe,psi)
+       ENDIF
        IF (pslo_com%tivan) THEN
           IF (cntl%tlsd) THEN
              CALL deort(ncpw%ngw,spin_mod%nsup,eigm(1,ipx),eigv(1,ipx),&
@@ -478,9 +548,9 @@ CONTAINS
           IF (cntl%tnosep .AND. itemp.EQ.0) CALL nospinit(ipcurr)
           IF (cntl%tnosee .AND. .NOT.restart1%rnoe) CALL noseinit(ipcurr)
           ! DM1
-          ! ..Centroid PICPMD: Set thermostat variables to zero in case 
+          ! ..Centroid & Ring-polymer PICPMD: Set thermostat variables to zero in case 
           ! ..of a centroid restart from a non-centroid thermosatted run
-          IF (cntl%tnosep.AND.pimd1%tcentro.AND.ipcurr.EQ.1) THEN
+          IF (cntl%tnosep.AND.(pimd1%tcentro.OR.pimd1%tringp).AND.ipcurr.EQ.1) THEN
              nrepl=maxnp
              IF (nosl%tultra) THEN
                 ! ..Not used with PICPMD 
@@ -488,14 +558,20 @@ CONTAINS
                 CALL stopgm('PI_MD','LOCAL TEMEPERATURE NOT IMPLEMENTED',& 
                      __LINE__,__FILE__)
              ELSEIF (nosl%tmnose) THEN
-                CALL stopgm(procedureN,'Massive NHCs thermostat not available for ip=1',&
-                     __LINE__,__FILE__)
-             !  DO k=1,3*maxsys%nax*maxsys%nsx
-             !     DO l=1,nchx
-             !        etapm(k,l,1)=0._real_8
-             !        etapmdot(k,l,1)=0._real_8
-             !     ENDDO
-             !  ENDDO
+                IF (pimd1%tcentro) THEN
+                   CALL stopgm(procedureN,'Massive NHCs thermostat not available for ip=1',&
+                        __LINE__,__FILE__)
+                ELSE
+                   ! ..Switch off if requested
+                   IF (.NOT.tnosepc) THEN
+                      DO k=1,3*maxsys%nax*maxsys%nsx
+                         DO l=1,nchx
+                            etapm(k,l,1)=0._real_8
+                            etapmdot(k,l,1)=0._real_8
+                         ENDDO
+                      ENDDO
+                   ENDIF
+                ENDIF
              ELSE
                 ! ..Switch off if requested
                 IF (.NOT.tnosepc) THEN
@@ -509,6 +585,27 @@ CONTAINS
           ! DM2
        ENDDO
     ENDIF
+
+    ! Initialize GLE thermostat
+    iprng0=cnti%iprng
+    CALL repprngu_vec(npx,dummies)
+    DO ipcurr=np_low,np_high
+       ipx=ipcurr-np_low+1
+       CALL gleback(ipcurr,.FALSE.,1)
+       IF (.NOT.restart1%rprng.OR.irec(irec_prng,ipcurr).EQ.0) THEN
+          cnti%iprng=FLOOR(dummies(ipcurr)*iprng0)
+          IF (paral%io_parent) WRITE(6,*) 'USING SEED ', cnti%iprng,&
+             'TO REINIT. PSEUDO RANDOM NUMBER GEN.'
+          CALL prnginit
+       ENDIF
+       IF (pimd1%tstage.OR.pimd1%tpinm) THEN
+          CALL gle_init(stagep(:,:,:,ipcurr),vstage(:,:,:,ipcurr),pma0s(1,ipcurr))
+       ELSE
+          CALL gle_init(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),rmass%pma)
+       ENDIF
+       CALL gleback(ipcurr,.TRUE.,0)
+    ENDDO
+
     IF (grandparent) THEN
        IF (pimd3%levprt.GE.5) THEN
           DO ip=1,pimd3%np_total
@@ -569,7 +666,15 @@ CONTAINS
              CALL noseup(pivelp(:,:,:,ipcurr),cm(1,1,ipx),crge%n,ipcurr)
           ENDIF
           IF (reset_gkt.AND.ipcurr==1) gkt(1:2,1)=scr(1:2)
-          IF (pimd1%tcentro.AND.ipcurr.EQ.1) THEN
+          ! FIRST HALF OF GLE EVOLUTION
+          CALL gleback(ipcurr,.TRUE.,1)
+          IF (pimd1%tstage.OR.pimd1%tpinm) THEN
+             CALL gle_step(stagep(:,:,:,ipcurr),vstage(:,:,:,ipcurr),pma0s(1,ipcurr))
+          ELSE
+             CALL gle_step(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),rmass%pma)
+          ENDIF
+          CALL gleback(ipcurr,.TRUE.,0)
+          IF ((pimd1%tcentro.OR.pimd1%tringp).AND.ipcurr.EQ.1) THEN
              IF (pimd1%tstage.OR.pimd1%tpinm) THEN
                 ! SUBTRACT CENTER OF MASS VELOCITY
                 IF (paral%parent.AND.comvl%subcom) THEN
@@ -740,7 +845,7 @@ CONTAINS
                 ! DM2ra
              ENDIF
           ENDIF
-          IF (pimd1%tcentro.AND.ipcurr.EQ.1) THEN
+          IF ((pimd1%tcentro.OR.pimd1%tringp).AND.ipcurr.EQ.1) THEN
              IF (pimd1%tstage.OR.pimd1%tpinm) THEN
                 ! SUBTRACT ROTATION AROUND CENTER OF MASS
                 IF (paral%parent.AND.comvl%subrot) THEN
@@ -752,6 +857,14 @@ CONTAINS
                 ENDIF
              ENDIF
           ENDIF
+          ! SECOND HALF OF GLE EVOLUTION
+          CALL gleback(ipcurr,.TRUE.,1)
+          IF (pimd1%tstage.OR.pimd1%tpinm) THEN
+              CALL gle_step(stagep(:,:,:,ipcurr),vstage(:,:,:,ipcurr),pma0s(1,ipcurr))
+          ELSE
+              CALL gle_step(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),rmass%pma)
+          ENDIF
+          CALL gleback(ipcurr,.TRUE.,0)
           ! ..UPDATE NOSE THERMOSTATS
           IF (cntl%tnosee.OR.cntl%tc) CALL rekine(cm(1,1,ipx),crge%n,ekinc(ipcurr))
           nosl%tmnose=pitmnose(MIN(ipcurr,2))
@@ -812,7 +925,7 @@ CONTAINS
              ! DM2
              econs(ipcurr)=ekinp+etotv(ipcurr)/rnp+&
                   enose(ipcurr)/rnp+enosp(ipcurr)+&
-                  eharv(ipcurr)+ener_com%ecnstr+ener_com%erestr
+                  eharv(ipcurr)+ener_com%ecnstr+ener_com%erestr+pi_egle(ipcurr)
              eham(ipcurr)=econs(ipcurr)+ekinc(ipcurr)/rnp
           ENDIF
        ENDDO
@@ -837,6 +950,7 @@ CONTAINS
        CALL global(ekinc,1)
        CALL global(enose,1)
        CALL global(enosp,1)
+       CALL global(pi_egle,1)
        CALL global(disa,1)
        ! DM C..PRINTOUT the evolution of the accumulators every time step
        IF (grandparent) THEN
@@ -865,14 +979,14 @@ CONTAINS
              CALL prtgyr
              IF (paral%io_parent)&
                   WRITE(6,'(/,A,A)')&
-                  '    NFI   IP   EKINC  TEMPP     EHARM         EKS',&
-                  '    ENOSE(E)  ENOSE(P)    ECLASSIC        EHAM     DIS'
+                  '      NFI   IP   EKINC  TEMPP     EHARM         EKS',&
+                  '    ENOSE(E)  ENOSE(P)      EGLE    ECLASSIC        EHAM     DIS'
              DO ip=1,pimd3%np_total
                 IF (paral%io_parent)&
                      WRITE(6,&
-                     '(I7,I5,F8.5,F7.1,F10.6,F12.5,2X,2F10.5,2F12.5,F8.2)')&
+                     '(I9,I5,F8.5,F7.1,F10.6,F12.5,2X,3F10.5,2F12.5,F8.2)')&
                      iteropt%nfi,ip,ekinc(ip),tempp(ip),eharv(ip),etotv(ip),&
-                     enose(ip),enosp(ip),econs(ip),eham(ip),disa(ip)
+                     enose(ip),enosp(ip),pi_egle(ip),econs(ip),eham(ip),disa(ip)
              ENDDO
           ENDIF
           ! ..Quantum kinetic energy of ions
@@ -905,13 +1019,13 @@ CONTAINS
           tcpu=(time2-time1)*0.001_real_8
           IF ((ropt_mod%engpri).AND.paral%io_parent)&
                WRITE(6,'(/,A,A)')&
-               '    NFI  EKINC/P  TEMP   EKINP(PRI)  EKINP(VIR)      EKS/P ',&
+               '      NFI  EKINC/P  TEMP   EKINP(PRI)  EKINP(VIR)      EKS/P ',&
                '     EQUANT    ECLASSIC        EHAM     TCPU'
           IF (paral%io_parent)&
-               WRITE(6,'(I7,F8.5,F7.1,6F12.5,F9.2)')&
+               WRITE(6,'(I9,F8.5,F7.1,6F12.5,F9.2)')&
                iteropt%nfi,ekina,tempa,qpkinp,qvkinp,etota,equant,econsa,ehama,tcpu
           IF (paral%io_parent)&
-               WRITE(3,'(I7,F15.10,F7.1,6F20.10,F9.2)')&
+               WRITE(3,'(I9,F15.10,F7.1,6F20.10,F9.2)')&
                iteropt%nfi,ekina,tempa,qpkinp,qvkinp,etota,equant,econsa,ehama,tcpu
           ! ..Store ionic coordinates and velocities for statistics
           ropt_mod%movie=rout1%mout .AND. MOD(iteropt%nfi-1,cnti%imovie).EQ.0
@@ -931,7 +1045,7 @@ CONTAINS
        IF (infi.EQ.cnti%nomore) soft_com%exsoft=.TRUE.
        ! new
        nosl%tmnose=pitmnose(2)  ! recover original setup of tmnose
-       IF ((pimd1%tstage.OR.pimd1%tpinm).AND.nosl%tmnose) CALL wr_temps(iteropt%nfi,ekinc,tempp)
+       IF (pimd1%tstage.OR.pimd1%tpinm) CALL wr_temps(iteropt%nfi,ekinc,tempp)
        ! new
        IF (ropt_mod%calste) THEN
           IF (pimd1%tstage.OR.pimd1%tpinm) THEN
@@ -968,6 +1082,7 @@ CONTAINS
           ipx=ipcurr-np_low+1
           CALL dcopy(nacc,accus(1,ipcurr),1,acc,1)
           IF (teststore(infi).OR.soft_com%exsoft) THEN
+             CALL gleback(ipcurr,.FALSE.,1)
              nosl%tmnose=pitmnose(MIN(ipcurr,2))
              CALL write_irec(irec(:,ipcurr))
              CALL zhwwf(2,irec(:,ipcurr),c0(:,:,ipx),cm(:,:,ipx),crge%n,eigv(:,ipx),&
@@ -1019,6 +1134,28 @@ CONTAINS
        DEALLOCATE(fstage,STAT=ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
             __LINE__,__FILE__)
+    ENDIF 
+    DEALLOCATE(pi_egle,STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+         __LINE__,__FILE__)
+    IF (np_local>1) THEN
+       DEALLOCATE(pi_prng_com,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+            __LINE__,__FILE__)
+       IF (glepar%gle_mode>0) THEN
+          DEALLOCATE(pi_glec,STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+               __LINE__,__FILE__)
+          DEALLOCATE(pi_gles,STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+               __LINE__,__FILE__)
+          DEALLOCATE(pi_glet,STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+               __LINE__,__FILE__)
+          DEALLOCATE(pi_glep,STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+               __LINE__,__FILE__)
+       ENDIF
     ENDIF
     IF (comvl%tsubrot) THEN
        DEALLOCATE(tauio,STAT=ierr)
@@ -1053,7 +1190,7 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     INTEGER                                  :: ipc, iflg
 
-! ==--------------------------------------------------------------==
+    ! ==--------------------------------------------------------------==
 
     IF (iflg.EQ.0) THEN
        etotv(ipc)   = ener_com%etot
@@ -1102,6 +1239,45 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE disten
+  ! ==================================================================
+  SUBROUTINE gleback(ipc,tback,iflg)
+    ! ==--------------------------------------------------------------==
+    ! == Save or restore variables of PRNG and GLE for PIMD           ==
+    ! == iflg 0 -> SAVE                                               ==
+    ! ==      1 -> RESTORE                                            ==
+    ! ==--------------------------------------------------------------==
+    IMPLICIT NONE
+    INTEGER                                  :: ipc, iflg
+    LOGICAL                                  :: tback
+    INTEGER                                  :: ipx
+
+    ipx=ipc-np_low+1
+    IF (iflg==0) THEN
+       pi_egle(ipc)=glepar%egle
+       IF (np_local>1) THEN
+          pi_prng_com(ipx)=prng_com
+          IF (glepar%gle_mode>0) THEN
+             IF (tback) pi_glec(ipx)=glec(1)
+             IF (tback) pi_gles(:,ipx)=gles(:)
+             IF (tback) pi_glet(:,ipx)=glet(:)
+             pi_glep(:,:,:,:,ipx)=glep(:,:,:,:)
+          ENDIF
+       ENDIF
+    ELSE
+       glepar%egle=pi_egle(ipc)
+       IF (np_local>1) THEN
+          prng_com=pi_prng_com(ipx)
+          IF (glepar%gle_mode>0) THEN
+             IF (tback) glec(1)=pi_glec(ipx)
+             IF (tback) gles(:)=pi_gles(:,ipx)
+             IF (tback) glet(:)=pi_glet(:,ipx)
+             glep(:,:,:,:)=pi_glep(:,:,:,:,ipx)
+          ENDIF
+       ENDIF
+    ENDIF
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END SUBROUTINE gleback
   ! ==================================================================
 
 END MODULE pi_md_utils

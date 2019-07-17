@@ -10,8 +10,8 @@ MODULE pimd
   ! == !! NOTE: IF YOU ADD ITEMS TO THE COMMON BLOCKS INCREASE THE  ==
   ! ==          RESPECTIVE PARAMETERS PI_LOG,PI_REL,PI_INT          ==
   ! ==================================================================
-  INTEGER, PARAMETER :: pi_log=9 
-  INTEGER, PARAMETER :: pi_rel=4 
+  INTEGER, PARAMETER :: pi_log=10
+  INTEGER, PARAMETER :: pi_rel=5 
   INTEGER, PARAMETER :: pi_int=4 
   ! ==--------------------------------------------------------------==
   ! == PILOG       Only for broadcasting                            ==
@@ -34,6 +34,7 @@ MODULE pimd
   ! == TCENTRO     Do centroid path integral MD and                 ==
   ! ==             do not thermostat centroid mode,                 ==
   ! ==             i.e., first Trotter slice                        ==
+  ! == TRINGP      Do ring-polymer path integral MD                 ==
   ! == TESTPI      Classical path integral test                     ==
   ! ==--------------------------------------------------------------==
 
@@ -55,6 +56,9 @@ MODULE pimd
   ! ==             The fictitious non-centroid masses are           ==
   ! ==             FACSTAGE times lighter than the centroid mass    ==
   ! ==             (which has the physical mass as fictitious mass) ==
+  ! == GLE_LAMBDA  Friction coefficient of GLE thermostat is        ==
+  ! ==             GLE_LAMBDA times larger than the frequency       ==
+  ! ==             of the harmonic potential                        ==
   ! ==--------------------------------------------------------------==
 
   ! ==--------------------------------------------------------------==
@@ -195,6 +199,13 @@ MODULE pimd
   REAL(real_8), ALLOCATABLE :: fcorr(:,:,:)
 
 
+  REAL(real_8) :: pi_omega(maxnp)
+  REAL(real_8), ALLOCATABLE :: pi_egle(:)
+  REAL(real_8), ALLOCATABLE :: pi_glec(:)
+  REAL(real_8), ALLOCATABLE :: pi_gles(:,:)
+  REAL(real_8), ALLOCATABLE :: pi_glet(:,:)
+  REAL(real_8), ALLOCATABLE :: pi_glep(:,:,:,:,:)
+
   ! ==================================================================
 
   TYPE :: pimd1_t
@@ -206,6 +217,7 @@ MODULE pimd
      LOGICAL :: tinit
      LOGICAL :: repread
      LOGICAL :: tcentro
+     LOGICAL :: tringp
      LOGICAL :: testpi
   END TYPE pimd1_t
   TYPE(pimd1_t) :: pimd1
@@ -214,6 +226,7 @@ MODULE pimd
      REAL(real_8) :: tempb
      REAL(real_8) :: wmass
      REAL(real_8) :: facstage
+     REAL(real_8) :: gle_lambda
   END TYPE pimd2_t
   TYPE(pimd2_t) :: pimd2
   TYPE :: pimd3_t

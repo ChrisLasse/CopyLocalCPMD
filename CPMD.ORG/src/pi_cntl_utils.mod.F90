@@ -2,6 +2,7 @@ MODULE pi_cntl_utils
   USE cotr,                            ONLY: cotc0,&
                                              lskcor
   USE error_handling,                  ONLY: stopgm
+  USE glemod,                          ONLY: glepar
   USE inscan_utils,                    ONLY: inscan
   USE ions,                            ONLY: ions1
   USE kinds,                           ONLY: real_8
@@ -46,6 +47,7 @@ CONTAINS
     ! ==    TROTTER DIMENSION                                         ==
     ! ==      np_total                                                ==
     ! ==    CENTROID DYNAMICS                                         ==
+    ! ==    RING-POLYMER DYNAMICS                                     ==
     ! ==    CLASSICAL TEST                                            == 
     ! ==    STAGING                                                   ==
     ! ==      facstage                                                ==
@@ -64,6 +66,8 @@ CONTAINS
     ! ==    OUTPUT [ALL,GROUPS,PARENT]                                ==
     ! ==    PRINT LEVEL                                               ==
     ! ==       levprt                                                 ==
+    ! ==    GLE_LAMBDA                                                ==
+    ! ==       gle_lambda                                             ==
     ! ==--------------------------------------------------------------==
     ! Variables
     CHARACTER(*), PARAMETER                  :: procedureN = 'pi_cntl'
@@ -94,11 +98,13 @@ CONTAINS
        pimd1%tpinm = .FALSE.
        pimd1%tinit = .FALSE.
        pimd1%tcentro = .FALSE.
+       pimd1%tringp = .FALSE.
        pimd1%testpi = .FALSE.
        pimd3%np_total  =  1
        pimd2%tempb  =  500._real_8
        pimd2%wmass  =  1._real_8
        pimd2%facstage = 1._real_8
+       pimd2%gle_lambda = 0.5_real_8
        pc_groups = 0
        repfname = ' '
        pimd3%levprt = 0
@@ -131,11 +137,14 @@ CONTAINS
                    something_went_wrong = .TRUE.
                    go_on_reading        = .FALSE.
                 ENDIF
-             ELSEIF ( keyword_contains(line,'CENTROID',and='DYNAMICS') ) THEN
+             ELSEIF ( keyword_contains(line,'CENTROID',and='DYNAMICS',alias='CMD') ) THEN
                 ! do centroid path integral cntl%md and
                 ! DM C do centroid path integral cntl%md (only together with normal modes) and
                 ! do not thermostat centroid mode, i.e., first Trotter slice
                 pimd1%tcentro=.TRUE.
+             ELSEIF ( keyword_contains(line,'RING-POLYMER',and='DYNAMICS',alias='RPMD') ) THEN
+                ! do ring-polymer path integral md 
+                pimd1%tringp=.TRUE.
              ELSEIF ( keyword_contains(line,'CLASSICAL',and='TEST') ) THEN
                 pimd1%testpi=.TRUE.
              ELSEIF ( keyword_contains(line,'STAGING') ) THEN
@@ -258,6 +267,13 @@ CONTAINS
                 IF ( keyword_contains(line,'PARENT') ) pimd3%loutfn=0
                 IF ( keyword_contains(line,'GROUPS',alias='GROUP') ) pimd3%loutfn=1
                 IF ( keyword_contains(line,'ALL') ) pimd3%loutfn=2
+             ELSEIF ( keyword_contains(line,'GLE_LAMBDA') ) THEN
+                READ(iunit,*,iostat=ierr) pimd2%gle_lambda
+                IF (ierr /= 0) THEN
+                   error_message        = 'ERROR WHILE READING LINE'
+                   something_went_wrong = .TRUE.
+                   go_on_reading        = .FALSE.
+                ENDIF
              ELSE
                 ! Dummy line
                 IF (' ' /= line) THEN
@@ -340,17 +356,17 @@ CONTAINS
           ENDIF
        ENDIF
        IF (cntl%md) THEN
-          pimd1%rrep=.FALSE.
-          pimd1%repread=.FALSE.
+       !  pimd1%rrep=.FALSE.
+       !  pimd1%repread=.FALSE.
           IF (cntr%tempw.LE.1.0e-5_real_8) CALL stopgm(procedureN,&
                'PIMD: You have to set temperature or use a thermostat',& 
                __LINE__,__FILE__)
           IF ((cntl%trane).AND.paral%io_parent) CALL stopgm(procedureN,&
                'RANDOMIZE WAVEFUNCTIONS not implemented with PIMD.',&
                __LINE__,__FILE__)
-          IF (cntl%quenchb) CALL stopgm(procedureN,&
-               'QUENCH BO  not implemented with PIMD.',& 
-               __LINE__,__FILE__)
+       !  IF (cntl%quenchb) CALL stopgm(procedureN,&
+       !       'QUENCH BO  not implemented with PIMD.',& 
+       !       __LINE__,__FILE__)
           ! check selected number of pc_groups not negative 
           IF (pc_groups < 0) CALL stopgm(procedureN,'Negative number for PI PC_GROUPS',&
                __LINE__,__FILE__)
@@ -361,6 +377,11 @@ CONTAINS
              IF (.NOT.(pimd1%tpinm.OR.pimd1%tstage)) CALL stopgm(procedureN,&
                 'NPT PIMD needs staging or normal mode representation',&
                 __LINE__,__FILE__)
+          ENDIF
+          IF (.NOT.restart1%restart) THEN
+             pimd1%tinit=.TRUE.
+             IF (.NOT.cntl%tmdbo) cntl%quenchb=.TRUE.
+             IF (.NOT.(pimd1%rrep.OR.pimd1%repread)) pimd1%rrep=.TRUE.
           ENDIF
        ELSEIF (cntl%wfopt) THEN
           pc_groups = 1
@@ -399,6 +420,14 @@ CONTAINS
                 ' WARNING: FACSTAGE SHOULD BE UNITY, PLEASE VERIFY YOUR INPUT'
        ENDIF
        ! DM2
+       IF (pimd1%tringp) THEN
+          IF (pimd1%tstage) CALL stopgm(procedureN,&
+             'STAGING representation not yet supported for RING-POLYMER DYNAMICS',&
+             __LINE__,__FILE__)
+       ENDIF
+       IF (pimd2%gle_lambda < 0.0_real_8) CALL stopgm(procedureN,&
+          'Negative GLE_LAMBDA not acceptable',&
+          __LINE__,__FILE__)
 
     END SUBROUTINE check_options
     ! ==--------------------------------------------------------------==
@@ -425,6 +454,10 @@ CONTAINS
                ' YIELDING THE CANONICAL BOLTZMANN DISTRIBUTION'
           IF (pimd1%tstage) WRITE(output_unit,'(A)')&
                ' YIELDING THE WIGNER DISTRIBUTION'
+       ENDIF
+       IF (pimd1%tringp) THEN
+          WRITE(output_unit,'(A)')&
+               ' QUASICLASSICAL RING-POLYMER DYNAMICS'
        ENDIF
        ! DM2
        WRITE(output_unit,'(A,7x,I4)') ' TROTTER DIMENSION:',pimd3%np_total
@@ -458,11 +491,14 @@ CONTAINS
           WRITE(output_unit,'(A)') ' USE PRIMITIVE VARIABLES '
        ENDIF
        ! DM2
-       IF (pimd1%tpinm .OR. pimd1%tstage) THEN
+       IF ((pimd1%tpinm .OR. pimd1%tstage).AND.(.NOT.pimd1%tringp)) THEN
           ! DM        WRITE(output_unit,'(A,G12.6)') ' >>>> FACMASS : ',WMASS
           WRITE(output_unit,'(A,4x,G12.6)') ' SCALING FACTOR FACMASS:',pimd2%wmass
           ! DM        WRITE(output_unit,'(A,G12.6)') ' >>>> FACSTAGE: ',FACSTAGE
           WRITE(output_unit,'(A,3x,G12.6)') ' MASS DISPARITY FACSTAGE:',pimd2%facstage
+       ENDIF
+       IF (glepar%gle_mode>0) THEN
+          WRITE(output_unit,'(A,2x,G12.6)') ' SCALING FACTOR GLE_LAMBDA:',pimd2%gle_lambda
        ENDIF
        WRITE(output_unit,'(A,13x,I4)') ' PRINT LEVEL:',pimd3%levprt
 

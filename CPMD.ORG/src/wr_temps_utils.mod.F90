@@ -13,7 +13,8 @@ MODULE wr_temps_utils
                                              qnosee,&
                                              qnospm,&
                                              qnospc,&
-                                             etap1dot
+                                             etap1dot,&
+                                             nosl
   USE parac,                           ONLY: paral
   USE pimd,                            ONLY: grandparent,&
                                              maxnp,&
@@ -57,14 +58,16 @@ CONTAINS
     IF (paral%parent) THEN
        DO ip=np_low,np_high
           ipp=MIN(2,ip)
-          IF (.NOT.(pimd1%tcentro.AND.ip==1)) THEN
-             DO k=1,ntherm(ipp)
-                etptemp(ip)=etptemp(ip)+factem*qnospm(k,1,ip)*&
-                     etapmdot(k,1,ip)**2
-             ENDDO
-             etptemp(ip)=etptemp(ip)/REAL(ntherm(ipp),kind=real_8)
-          ELSE
-             etptemp(ip)=etptemp(ip)+factem*qnospc(1,ip)*etap1dot(1,ip)**2
+          IF (cntl%tnosep) THEN
+             IF (nosl%tmnose.AND..NOT.(pimd1%tcentro.AND.ip==1)) THEN
+                DO k=1,ntherm(ipp)
+                   etptemp(ip)=etptemp(ip)+factem*qnospm(k,1,ip)*&
+                        etapmdot(k,1,ip)**2
+                ENDDO
+                etptemp(ip)=etptemp(ip)/REAL(ntherm(ipp),kind=real_8)
+             ELSE
+                etptemp(ip)=etptemp(ip)+factem*qnospc(1,ip)*etap1dot(1,ip)**2
+             ENDIF
           ENDIF
           IF (cntl%tnosee)&
              etetemp(ip)=etetemp(ip)+0.5_real_8*qnosee(1)*etadot(1,ip)**2
@@ -107,7 +110,7 @@ CONTAINS
        ! ETE1  temperature of electronic thermostat of IP=1 (centroid)
        ! ETEM  temperature of electronic thermostat averaged over IP=2,NP
        IF (paral%io_parent)&
-            WRITE(4,'(I7,F7.1,F7.1,F10.5,F10.5,F7.1,F7.1,F10.5,F10.5)')&
+            WRITE(4,'(I9,F7.1,F7.1,F10.5,F10.5,F7.1,F7.1,F10.5,F10.5)')&
             nfi,tp1,tpm,et1,etm,etp1,etpm,ete1,etem
        IF (paral%io_parent)&
             CALL fileclose(4)

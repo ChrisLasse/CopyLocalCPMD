@@ -525,7 +525,7 @@ CONTAINS
     ENDIF
 
     ! INITIALIZE GLE THERMO
-    CALL gle_init
+    CALL gle_init(tau0,velp,rmass%pma)
 
     CALL write_irec(irec)
     ! ==--------------------------------------------------------------==
@@ -598,7 +598,7 @@ CONTAINS
           ! UPDATE NOSE THERMOSTATS
           CALL noseup(velp,c2,nstate,1)
           ! FIRST HALF OF GLE EVOLUTION
-          CALL gle_step
+          CALL gle_step(tau0,velp,rmass%pma)
 
           ! SUBTRACT CENTER OF MASS VELOCITY
           IF (paral%io_parent.AND.comvl%subcom) CALL comvel(velp,vcmio,.TRUE.)
@@ -745,7 +745,7 @@ CONTAINS
           IF (paral%io_parent.AND.comvl%subcom) CALL comvel(velp,vcmio,.FALSE.)
 
           ! SECOND HALF OF GLE EVOLUTION
-          CALL gle_step
+          CALL gle_step(tau0,velp,rmass%pma)
 
           ! UPDATE NOSE THERMOSTATS
           CALL noseup(velp,c2,nstate,1)

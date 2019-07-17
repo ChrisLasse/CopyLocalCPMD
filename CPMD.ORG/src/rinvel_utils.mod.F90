@@ -17,7 +17,9 @@ MODULE rinvel_utils
                                              tempwr
   USE parac,                           ONLY: parai,&
                                              paral
-  USE pimd,                            ONLY: pma0s
+  USE pimd,                            ONLY: pma0s,&
+                                             pimd1,&
+                                             ipcurr
   USE prng_utils,                      ONLY: repprngu,&
                                              repprngu_vec
   USE puttau_utils,                    ONLY: taucl
@@ -328,7 +330,11 @@ CONTAINS
     IF (paral%parent) THEN
        ! RESCALE VELOCITIES
        IF (.NOT.tcafes) THEN
-          CALL ekinpp(ekinp,vel)
+          IF (cntl%tpath.AND.cntl%tpimd.AND.(pimd1%tpinm.OR.pimd1%tstage)) THEN
+             CALL s_ekinpp(ekinp,vel,ipcurr)
+          ELSE
+             CALL ekinpp(ekinp,vel)
+          ENDIF
           tempp=ekinp*factem*2._real_8/glib
           IF (paral%io_parent)&
                WRITE(6,'(A,F13.5,A,F13.5)') ' RVSCAL| RESCALING IONIC '&

@@ -1,7 +1,5 @@
 MODULE gle_utils
   USE cnst,                            ONLY: factem
-  USE coor,                            ONLY: tau0,&
-                                             velp
   USE cotr,                            ONLY: lskcor
   USE error_handling,                  ONLY: stopgm
   USE glemod,                          ONLY: &
@@ -11,13 +9,17 @@ MODULE gle_utils
   USE isos,                            ONLY: isos1
   USE kinds,                           ONLY: int_4,&
                                              real_8
+  USE meta_multiple_walkers_utils,     ONLY: mw_filename
   USE mp_interface,                    ONLY: mp_bcast
   USE parac,                           ONLY: parai,&
                                              paral
+  USE pimd,                            ONLY: pimd1,&
+                                             ipcurr,&
+                                             pi_omega
   USE prng_utils,                      ONLY: repprngg
-  USE rmas,                            ONLY: rmass
   USE store_types,                     ONLY: restart1
   USE system,                          ONLY: cntr,&
+                                             cntl,&
                                              maxsys
   USE zeroing_utils,                   ONLY: zeroing
 
@@ -31,10 +33,12 @@ MODULE gle_utils
 
 CONTAINS
 
-  SUBROUTINE gle_init()
+  SUBROUTINE gle_init(tau0,velp,pmx)
 
+    REAL(real_8)                             :: tau0(:,:,:), velp(:,:,:), pmx(*)
     INTEGER                                  :: i, ia, id, iostat, is, msglen
     INTEGER(int_4)                           :: gleok
+    CHARACTER(len=80)                        :: filen
     REAL(real_8) :: lglea(glepar%gle_ns+1,glepar%gle_ns+1), &
       lglec(glepar%gle_ns+1,glepar%gle_ns+1), &
       lgles(glepar%gle_ns+1,glepar%gle_ns+1), &
@@ -55,19 +59,28 @@ CONTAINS
     ! initializes friction matrix, using presets or custom file
     gleok = 0
     IF (glepar%gle_mode .EQ. gle_white) THEN
+       IF (cntl%tpath.AND.cntl%tpimd) glepar%gle_omega=pi_omega(ipcurr)
        lglea(1,1)=glepar%gle_omega*icm2au
     ELSEIF (glepar%gle_mode .EQ. gle_opt) THEN
+       IF (cntl%tpath.AND.cntl%tpimd) glepar%gle_omega=pi_omega(ipcurr)
        lglea=gle_opt_a*glepar%gle_omega*0.01_real_8*icm2au
     ELSEIF (glepar%gle_mode .EQ. gle_cpmd) THEN
+       IF (cntl%tpath.AND.cntl%tpimd) glepar%gle_omega=pi_omega(ipcurr)
        lglea=gle_cp_a*glepar%gle_omega*icm2au
     ELSEIF (glepar%gle_mode .EQ. gle_smart) THEN
+       IF (cntl%tpath.AND.cntl%tpimd) glepar%gle_omega=pi_omega(ipcurr)
        lglea=gle_smart_a*glepar%gle_omega*icm2au     
     ELSEIF (glepar%gle_mode .EQ. gle_cust) THEN 
        ! reads custom parameters on root & broadcasts 
        IF (paral%parent) THEN
           ! the A matrix is read from GLE-A file
           IF (paral%io_parent) THEN
-             OPEN(444,file="GLE-A",status="OLD",iostat=iostat)
+             IF (cntl%tpath.AND.cntl%tpimd) THEN
+                CALL mw_filename("GLE-A",filen,ipcurr)
+                OPEN(444,file=filen,status="OLD",iostat=iostat)
+             ELSE
+                OPEN(444,file="GLE-A",status="OLD",iostat=iostat)
+             ENDIF
              IF (iostat==0) THEN
                 DO i=1,glepar%gle_ns+1              
                    READ(444,*) lglea(i,:)
@@ -77,7 +90,12 @@ CONTAINS
                 gleok=1
              ENDIF
              ! the C matrix is read from GLE-C file, if it exists
-             OPEN(444,file="GLE-C",status="OLD",iostat=iostat)
+             IF (cntl%tpath.AND.cntl%tpimd) THEN
+                CALL mw_filename("GLE-C",filen,ipcurr)
+                OPEN(444,file=filen,status="OLD",iostat=iostat)
+             ELSE
+                OPEN(444,file="GLE-C",status="OLD",iostat=iostat)
+             ENDIF
              IF (iostat==0) THEN
                 DO i=1,glepar%gle_ns+1
                    READ(444,*) lglec(i,:)
@@ -132,7 +150,7 @@ CONTAINS
           IF (lglec(1,1).NE.0.0_real_8) THEN
              CALL scholesky(lglec,ltmp,glepar%gle_ns+1)! used for initialization of velocities
              DO is=1,maxsys%nsx
-                sqrtm=SQRT(rmass%pma(is))
+                sqrtm=SQRT(pmx(is))
                 DO ia=1,ions0%na(is)
                    DO id=1,3
                       DO i=1,glepar%gle_ns+1
@@ -148,14 +166,14 @@ CONTAINS
           ELSE
              CALL zeroing(glep)!,maxsys%nsx*maxsys%nax*3*(glepar%gle_ns+1))
           ENDIF
-          IF (glepar%gle_com.GT.0) CALL gle_rmcom()
-          IF (glepar%gle_com.GT.0 .AND. isos1%tisos) CALL gle_rmrot(tau0)
+          IF (glepar%gle_com.GT.0) CALL gle_rmcom(pmx)
+          IF (glepar%gle_com.GT.0 .AND. isos1%tisos) CALL gle_rmrot(tau0,pmx)
        ENDIF
 
        ! if not restarting velocities, initializes them
        IF (.NOT. restart1%rvel) THEN
           DO is=1,maxsys%nsx
-             sqrtm=SQRT(rmass%pma(is))
+             sqrtm=SQRT(pmx(is))
              DO ia=1,ions0%na(is)
                 velp(:,ia,is)=glep(:,ia,is,1)/sqrtm
              ENDDO
@@ -174,8 +192,9 @@ CONTAINS
     CALL dcopy((glepar%gle_ns+1)*(glepar%gle_ns+1),lglet,1,glet,1)
   END SUBROUTINE gle_init
 
-  SUBROUTINE gle_step
+  SUBROUTINE gle_step(tau0,velp,pmx)
 
+    REAL(real_8)                             :: tau0(:,:,:), velp(:,:,:), pmx(*)
     INTEGER                                  :: i, ia, iat, id, is, l
     REAL(real_8) :: degle, lgles(glepar%gle_ns+1,glepar%gle_ns+1), &
       lglet(glepar%gle_ns+1,glepar%gle_ns+1), rv(glepar%gle_ns+1), sqrtm, &
@@ -190,7 +209,7 @@ CONTAINS
     degle=0
     iat = 0
     DO is=1,maxsys%nsx
-       sqrtm=SQRT(rmass%pma(is))
+       sqrtm=SQRT(pmx(is))
        DO ia=1,ions0%na(is)
           iat = iat+1
           DO l=1,3
@@ -233,12 +252,12 @@ CONTAINS
     ENDDO
 
     ! removes COM velocity
-    IF (glepar%gle_com.GT.0) CALL gle_rmcom()
-    IF (glepar%gle_com.GT.0 .AND. isos1%tisos) CALL gle_rmrot(tau0)
+    IF (glepar%gle_com.GT.0) CALL gle_rmcom(pmx)
+    IF (glepar%gle_com.GT.0 .AND. isos1%tisos) CALL gle_rmrot(tau0,pmx)
     ! scale back velocities & updates Dconserved      
     iat = 0
     DO is=1,maxsys%nsx
-       sqrtm=SQRT(rmass%pma(is))
+       sqrtm=SQRT(pmx(is))
        DO ia=1,ions0%na(is) 
           iat = iat+1
           DO l=1,3   ! skips coordinates that are fixed
@@ -278,8 +297,9 @@ CONTAINS
          __LINE__,__FILE__)
   END SUBROUTINE gle_alloc
 
-  SUBROUTINE gle_rmcom()
+  SUBROUTINE gle_rmcom(pmx)
 
+    REAL(real_8)                             :: pmx(*)
     INTEGER                                  :: i, ia, is
     REAL(real_8)                             :: com(3), mm, sqrtm
 
@@ -287,15 +307,15 @@ CONTAINS
        com=0.0_real_8
        mm=0.0_real_8
        DO is=1,maxsys%nsx
-          sqrtm=SQRT(rmass%pma(is))
-          mm=mm+rmass%pma(is)*ions0%na(is)
+          sqrtm=SQRT(pmx(is))
+          mm=mm+pmx(is)*ions0%na(is)
           DO ia=1,ions0%na(is)
              com(:)=com(:)+glep(:,ia,is,i)*sqrtm
           ENDDO
        ENDDO
        com=com/mm! COM velocity
        DO is=1,maxsys%nsx
-          sqrtm=SQRT(rmass%pma(is))
+          sqrtm=SQRT(pmx(is))
           DO ia=1,ions0%na(is)
              glep(:,ia,is,i)=glep(:,ia,is,i)-com(:)*sqrtm
           ENDDO
@@ -304,9 +324,9 @@ CONTAINS
   END SUBROUTINE gle_rmcom
 
   ! removes rotational velocities, to additional momenta as well. assumes no COM velocity is present
-  SUBROUTINE gle_rmrot(tau0)
+  SUBROUTINE gle_rmrot(tau0,pmx)
 
-    REAL(real_8)                             :: tau0(:,:,:)
+    REAL(real_8)                             :: tau0(:,:,:), pmx(*)
 
     INTEGER                                  :: i, ia, info, ipiv(3), is, j, &
                                                 work(9)
@@ -318,9 +338,9 @@ CONTAINS
     com=0.0_real_8
     tm=0.0_real_8
     DO is=1,maxsys%nsx
-       tm=tm+ions0%na(is)*rmass%pma(is)
+       tm=tm+ions0%na(is)*pmx(is)
        DO ia=1,ions0%na(is)
-          com=com+taum(:,ia,is)*rmass%pma(is)
+          com=com+taum(:,ia,is)*pmx(is)
        ENDDO
     ENDDO
     com=com*(1./tm)
@@ -333,9 +353,9 @@ CONTAINS
        DO ia=1,ions0%na(is)
           rm=(taum(1,ia,is)**2+taum(2,ia,is)**2+taum(3,ia,is)**2)
           DO i=1,3
-             im(i,i)=im(i,i)+rmass%pma(is)*(rm-taum(i,ia,is)**2)
+             im(i,i)=im(i,i)+pmx(is)*(rm-taum(i,ia,is)**2)
              DO j=i+1,3
-                im(i,j)=im(i,j)-rmass%pma(is)*taum(i,ia,is)*taum(j,ia,is)
+                im(i,j)=im(i,j)-pmx(is)*taum(i,ia,is)*taum(j,ia,is)
                 im(j,i)=im(i,j)
              ENDDO
           ENDDO
@@ -350,7 +370,7 @@ CONTAINS
        ! get angular momentum
        lm=0.0_real_8
        DO is=1,maxsys%nsx
-          rm=SQRT(rmass%pma(is))
+          rm=SQRT(pmx(is))
           DO ia=1,ions0%na(is)
              lm(1)=lm(1)+rm*&
                   (taum(2,ia,is)*glep(3,ia,is,i)-&
@@ -365,7 +385,7 @@ CONTAINS
        ENDDO
        wm=MATMUL(im1,lm)! angular velocity
        DO is=1,maxsys%nsx
-          rm=SQRT(rmass%pma(is))
+          rm=SQRT(pmx(is))
           DO ia=1,ions0%na(is)
              ! gets velocity
              lm(1)=(wm(2)*taum(3,ia,is)-wm(3)*taum(2,ia,is))

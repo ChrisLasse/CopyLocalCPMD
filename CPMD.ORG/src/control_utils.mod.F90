@@ -33,7 +33,7 @@ MODULE control_utils
                                              glocr
   USE glemod,                          ONLY: &
        gle_cp_ns, gle_cpmd, gle_cust, gle_opt, gle_opt_ns, gle_smart, &
-       gle_smart_ns, gle_white, glepar
+       gle_smart_ns, gle_white, glepar, tglepc
   USE header_utils,                    ONLY: header
   USE hubbardu,                        ONLY: hubbu
   USE inscan_utils,                    ONLY: inscan
@@ -1185,6 +1185,7 @@ CONTAINS
                 CALL readsi(line,first,last,cnti%iprng,erread)
              ELSEIF ( keyword_contains(line,'LANGEVIN') ) THEN
                 IF ( keyword_contains(line,'MOVECM',alias='MOVECOM')) glepar%gle_com=0
+                IF ( keyword_contains(line,'CENTROIDOFF')) tglepc=.FALSE.
                 IF ( keyword_contains(line,'WHITE') ) THEN
                    glepar%gle_mode=gle_white
                    glepar%gle_ns=0
@@ -3439,7 +3440,7 @@ CONTAINS
              ELSEIF ( keyword_contains(line,'RHOOUT') ) THEN
                 ! Store density
                 rout1%rhoout=.TRUE.
-                IF ( keyword_contains(line,'SAMPLE',cut_at='=') ) THEN
+                IF ( keyword_contains(line,'SAMPLE') ) THEN
                    first = index_of_delimiter(line,'SAMPLE','=')
                    CALL readsi(line,first,last,rout1%nrhoout,erread)
                    IF (erread) THEN

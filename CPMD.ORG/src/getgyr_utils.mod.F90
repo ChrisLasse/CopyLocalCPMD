@@ -1,6 +1,7 @@
 MODULE getgyr_utils
   USE cnst,                            ONLY: factem
   USE ekinpp_utils,                    ONLY: ekinpp
+  USE glemod,                          ONLY: glepar
   USE ions,                            ONLY: ions0,&
                                              ions1
   USE kinds,                           ONLY: real_8
@@ -47,7 +48,7 @@ CONTAINS
     ! If we're doing PI with NVE we need to use the instantaneous
     ! temperature here. For details, see:
     ! http://cpmd.org/mailman/htdig/cpmd-list/2008-April/004350.html
-    IF (cntl%tnosep) THEN
+    IF (cntl%tnosep.OR.glepar%gle_mode>0) THEN
        tempp1=cntr%tempw
     ELSE
        CALL ekinpp(ekinp1,velp(:,:,:,1))

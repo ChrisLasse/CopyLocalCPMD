@@ -3,7 +3,10 @@ MODULE pi_wf_utils
   USE error_handling,                  ONLY: stopgm
   USE filnmod,                         ONLY: filbod,&
                                              filn
-  USE parac,                           ONLY: paral
+  USE kinds,                           ONLY: real_8
+  USE mp_interface,                    ONLY: mp_bcast
+  USE parac,                           ONLY: paral,&
+                                             parai
   USE pimd,                            ONLY: ipcurr,&
                                              np_high,&
                                              np_low,&
@@ -26,6 +29,7 @@ MODULE pi_wf_utils
   PRIVATE
 
   PUBLIC :: pi_wf
+  PUBLIC :: initrep
 
 CONTAINS
 
@@ -105,6 +109,57 @@ CONTAINS
     RETURN
     CALL tihalt(procedureN,isub)
   END SUBROUTINE pi_wf
+  ! ==================================================================
+  SUBROUTINE initrep(pitaup)
+    ! ==--------------------------------------------------------------==
+    ! == initialize replica coordinates in the initialization process ==
+    ! == of path integral MD runs                                     ==
+    ! ==--------------------------------------------------------------==
+    ! Variables
+    REAL(real_8)                             :: pitaup(:,:,:,:)
+    CHARACTER(*), PARAMETER                  :: procedureN = 'initrep'
+    INTEGER                                  :: ierr
+    ! ==--------------------------------------------------------------==
+    ! ..Generate Replica coordinates
+    ALLOCATE(trep(3,maxsys%nax,maxsys%nsx,pimd3%np_total),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    IF (pimd1%tread_cent.OR.pimd1%tpinm) THEN
+       ALLOCATE(trepnm(3,maxsys%nax,maxsys%nsx,pimd3%np_total),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+            __LINE__,__FILE__)
+    ENDIF
+    IF (pimd1%rrep) THEN
+       CALL repgen(tau0)
+       ! DM1
+       ! ..Classical test
+       IF (pimd1%testpi) THEN
+          CALL dcopy(3*maxsys%nax*maxsys%nsx,tau0,1,trep(1,1,1,1),1)
+       ENDIF
+       ! DM2
+    ELSEIF (pimd1%repread) THEN
+       CALL rreadf
+    ENDIF
+    ! ..Copy trep to pitaup and broadcast in cp_grp 
+    DO ipcurr=np_low,np_high
+       IF (paral%io_parent) THEN
+          CALL dcopy(3*maxsys%nax*maxsys%nsx,trep(1,1,1,ipcurr),1,&
+             pitaup(1,1,1,ipcurr),1)
+       ENDIF
+       CALL mp_bcast(pitaup(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,&
+          parai%io_source,parai%cp_grp)
+    ENDDO
+    DEALLOCATE(trep,STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+         __LINE__,__FILE__)
+    IF (pimd1%tread_cent.OR.pimd1%tpinm) THEN
+       DEALLOCATE(trepnm,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+            __LINE__,__FILE__)
+    ENDIF
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END SUBROUTINE initrep
   ! ==================================================================
 
 END MODULE pi_wf_utils

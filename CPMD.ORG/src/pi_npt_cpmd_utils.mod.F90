@@ -84,6 +84,7 @@ MODULE pi_npt_cpmd_utils
   USE pinmtrans_utils,                 ONLY: pinmtrans
   USE pi_stress_utils,                 ONLY: pi_stress_vir,&
                                              wr_pi_stress
+  USE pi_wf_utils,                     ONLY: initrep
   USE posupa_utils,                    ONLY: posupa
   USE posupi_utils,                    ONLY: posupi,&
                                              posupih,&
@@ -97,12 +98,14 @@ MODULE pi_npt_cpmd_utils
   USE prtgyr_utils,                    ONLY: prtgyr
   USE pslo,                            ONLY: pslo_com
   USE puttau_utils,                    ONLY: taucl
+  USE quenbo_utils,                    ONLY: quenbo
   USE ranp_utils,                      ONLY: ranp
   USE rattle_utils,                    ONLY: rattle
   USE readsr_utils,                    ONLY: xstring
   USE rekine_utils,                    ONLY: rekine
   USE reshaper,                        ONLY: reshape_inplace
   USE rhopri_utils,                    ONLY: rhopri
+  USE rinitwf_driver,                  ONLY: rinitwf
   USE rinvel_utils,                    ONLY: rinvel,&
                                              rvscal,&
                                              s_rinvel
@@ -332,52 +335,41 @@ CONTAINS
        nosl%tmnose=pitmnose(MIN(ipcurr,2))
        cntl%tnosec=pitnosec(MIN(ipcurr,2))
        CALL read_irec(irec(:,ipcurr))
-       ! ..Construct filenames
-       cflbod='RESTART_'
-       IF (paral%io_parent)&
-            WRITE(cipnum,'(I4)') ipcurr
-       CALL xstring(cflbod,n1,n2)
-       CALL xstring(cipnum,i1,i2)
-       filbod=cflbod(n1:n2)//cipnum(i1:i2)//'.1'
-       IF (restart1%rlate) THEN
-          filn=filbod
-       ELSE
-          filn=cflbod(n1:n2)//cipnum(i1:i2)
-       ENDIF
-       ! ..Read restart file
-       ipx=ipcurr-np_low+1
-       CALL zhrwf(1,irec(:,ipcurr),c0(:,:,ipx:ipx),cm(:,:,ipx),crge%n,eigv(:,ipx),&
-            pitaup(:,:,:,ipcurr),&
-            pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),iteropt%nfi)
-       CALL dcopy(nacc,acc,1,accus(1,ipcurr),1)
-       IF (restart1%rgeo) THEN
-          IF (paral%io_parent) CALL geofile(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),'READ')
-          CALL mp_bcast(pitaup(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
-          CALL mp_bcast(pivelp(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
-          CALL mp_bcast(metr_com%ht,SIZE(metr_com%ht),parai%io_source,parai%cp_grp)
-          CALL mp_bcast(metr_com%htvel,SIZE(metr_com%htvel),parai%io_source,parai%cp_grp)
-          restart1%rcell=.TRUE.; restart1%rvel=.TRUE.
-       ENDIF
-       ! ..Randomization of the atomic coordinates
-       IF (cntl%tranp.AND.paral%parent) CALL ranp(pitaup(:,:,:,ipcurr))
-       ! Read WF centers & spread from restart file
-       IF (vdwl%vdwd) THEN
-          IF (paral%io_parent) THEN
-             nwfc=crge%n
-             vdwwfl%trwannc=trwanncx(ipx)
-             CALL rwannier(nwfc,tauref(:,:,:,ipx),rwann(:,:,ipx),swann(:,ipx),&
-                  vdwwfl%trwannc)
-             IF (.NOT.vdwwfl%trwannc) THEN
-                CALL dcopy(3*maxsys%nax*maxsys%nsx,pitaup(1,1,1,ipcurr),&
-                     1,tauref(1,1,1,ipx),1)
-             ENDIF
+       IF (restart1%restart) THEN
+          ! ..Construct filenames
+          cflbod='RESTART_'
+          IF (paral%io_parent)&
+               WRITE(cipnum,'(I4)') ipcurr
+          CALL xstring(cflbod,n1,n2)
+          CALL xstring(cipnum,i1,i2)
+          filbod=cflbod(n1:n2)//cipnum(i1:i2)//'.1'
+          IF (restart1%rlate) THEN
+             filn=filbod
+          ELSE
+             filn=cflbod(n1:n2)//cipnum(i1:i2)
           ENDIF
-          CALL mp_bcast(tauref(:,:,:,ipx),3*maxsys%nax*maxsys%nsx,&
-               parai%io_source,parai%cp_grp)
-          CALL mp_bcast(rwann(:,:,ipx),3*nwfcx*nfragx,parai%io_source,parai%cp_grp)
-          CALL mp_bcast(swann(:,ipx),nwfcx*nfragx,parai%io_source,parai%cp_grp)
-          CALL mp_bcast(vdwwfl%trwannc,parai%io_source,parai%cp_grp)
-          trwanncx(ipx)=vdwwfl%trwannc
+          ! ..Read restart file
+          ipx=ipcurr-np_low+1
+          CALL zhrwf(1,irec(:,ipcurr),c0(:,:,ipx:ipx),cm(:,:,ipx),crge%n,eigv(:,ipx),&
+               pitaup(:,:,:,ipcurr),&
+               pivelp(:,:,:,ipcurr),taui(:,:,:,ipcurr),iteropt%nfi)
+          CALL dcopy(nacc,acc,1,accus(1,ipcurr),1)
+          IF (restart1%rgeo) THEN
+             IF (paral%io_parent) CALL geofile(pitaup(:,:,:,ipcurr),pivelp(:,:,:,ipcurr),'READ')
+             CALL mp_bcast(pitaup(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
+             CALL mp_bcast(pivelp(:,:,:,ipcurr),3*maxsys%nax*maxsys%nsx,parai%io_source,parai%cp_grp)
+             CALL mp_bcast(metr_com%ht,SIZE(metr_com%ht),parai%io_source,parai%cp_grp)
+             CALL mp_bcast(metr_com%htvel,SIZE(metr_com%htvel),parai%io_source,parai%cp_grp)
+             restart1%rcell=.TRUE.; restart1%rvel=.TRUE.
+          ENDIF
+          ! ..Randomization of the atomic coordinates
+          IF (cntl%tranp.AND.paral%parent) CALL ranp(pitaup(:,:,:,ipcurr))
+          ! ..Initialization of wavefunction
+          IF (irec(irec_wf,ipcurr).EQ.0) THEN
+             CALL rinitwf(c0(:,:,ipx:ipx),cm,sc0,crge%n,pitaup(:,:,:,ipcurr),&
+                  taur,rhoe,psi)
+             cntl%quenchb=.TRUE.
+          ENDIF
        ENDIF
     ENDDO
     ! ..Update cell
@@ -394,6 +386,16 @@ CONTAINS
        ENDDO
        CALL ihmat(metr_com%ht,metr_com%htm1,parm%omega)
        CALL newcell
+    ENDIF
+    ! ..Initialize replica coordinates if requested
+    IF (.NOT.restart1%restart) THEN
+       IF (pimd1%tinit) THEN
+          CALL initrep(pitaup)
+          cntl%quenchb=.TRUE.
+       ELSE
+          CALL stopgm(procedureN,'replica coordinates not read/generated',&
+             __LINE__,__FILE__)
+       ENDIF
     ENDIF
     ! ..Global distribution of ionic positions
     CALL global(pitaup,3*maxsys%nax*maxsys%nsx)
@@ -413,14 +415,37 @@ CONTAINS
        glib=1._real_8
     ENDIF
     DO ipcurr=np_low,np_high
-       IF (irec(irec_wf,ipcurr).EQ.0) THEN
-          CALL stopgm(procedureN,'RESTARTS WITH WAVEFUNCTIONS ONLY',&
-               __LINE__,__FILE__)
-       ENDIF
-    ENDDO
-    DO ipcurr=np_low,np_high
        ipx=ipcurr-np_low+1
        CALL phfac(pitaup(:,:,:,ipcurr))
+       ! ..Read WF centers & spread from restart file
+       IF (vdwl%vdwd) THEN
+          IF (paral%io_parent) THEN
+             nwfc=crge%n
+             vdwwfl%trwannc=trwanncx(ipx)
+             CALL rwannier(nwfc,tauref(:,:,:,ipx),rwann(:,:,ipx),swann(:,ipx),&
+                  vdwwfl%trwannc)
+             IF (.NOT.vdwwfl%trwannc) THEN
+                CALL dcopy(3*maxsys%nax*maxsys%nsx,pitaup(1,1,1,ipcurr),1,&
+                     tauref(1,1,1,ipx),1)
+             ENDIF
+          ENDIF
+          CALL mp_bcast(tauref(:,:,:,ipx),3*maxsys%nax*maxsys%nsx,&
+               parai%io_source,parai%cp_grp)
+          CALL mp_bcast(rwann(:,:,ipx),3*nwfcx*nfragx,parai%io_source,parai%cp_grp)
+          CALL mp_bcast(swann(:,ipx),nwfcx*nfragx,parai%io_source,parai%cp_grp)
+          CALL mp_bcast(vdwwfl%trwannc,parai%io_source,parai%cp_grp)
+          trwanncx(ipx)=vdwwfl%trwannc
+       ENDIF
+       ! ..Initialization of wavefunction
+       IF (.NOT.restart1%restart) THEN
+          CALL rinitwf(c0(:,:,ipx:ipx),cm,sc0,crge%n,pitaup(:,:,:,ipcurr),&
+               taur,rhoe,psi)
+       ENDIF
+       ! ..Quenching to BO surface
+       IF (cntl%quenchb) THEN
+          CALL dcopy(3*maxsys%nax*maxsys%nsx,pitaup(1,1,1,ipcurr),1,tau0,1)
+          CALL quenbo(c0(:,:,ipx),c2(1,1,ipx),sc0,taur,rhoe,psi)
+       ENDIF
        IF (pslo_com%tivan) THEN
           IF (cntl%tlsd) THEN
              CALL deort(ncpw%ngw,spin_mod%nsup,eigm(1,ipx),eigv(1,ipx),&
@@ -532,9 +557,9 @@ CONTAINS
           IF (cntl%tnosee .AND. .NOT.restart1%rnoe) CALL noseinit(ipcurr)
           IF (cntl%tnosec .AND. irec(irec_noc,ipcurr).EQ.0) CALL noscinit(ipcurr)
           ! DM1
-          ! ..Centroid PICPMD: Reset thermostat variables in case of 
+          ! ..Centroid & Ring-polmer PIMD: Reset thermostat variables in case of 
           ! ..a centroid restart from a non-centroid thermosatted run
-          IF (cntl%tnosep.AND.pimd1%tcentro.AND.ipcurr.EQ.1) THEN
+          IF (cntl%tnosep.AND.(pimd1%tcentro.OR.pimd1%tringp).AND.ipcurr.EQ.1) THEN
              nrepl=maxnp
              IF (nosl%tultra) THEN
                 ! ..Not used with PICPMD 
@@ -544,8 +569,20 @@ CONTAINS
                 CALL stopgm(procedureN,'LOCAL TEMEPERATURE NOT IMPLEMENTED',& 
                      __LINE__,__FILE__)
              ELSEIF (nosl%tmnose) THEN
-                CALL stopgm(procedureN,'Massive NHCs thermostat not available for ip=1',&
-                     __LINE__,__FILE__)
+                IF (pimd1%tcentro) THEN
+                   CALL stopgm(procedureN,'Massive NHCs thermostat not available for ip=1',&
+                        __LINE__,__FILE__)
+                ELSE
+                   ! ..Switch off if requested
+                   IF (.NOT.tnosepc) THEN
+                      DO k=1,3*maxsys%nax*maxsys%nsx
+                         DO l=1,nchx
+                            etapm(k,l,1)=0._real_8
+                            etapmdot(k,l,1)=0._real_8
+                         ENDDO
+                      ENDDO
+                   ENDIF
+                ENDIF
              ELSE
                 ! ..Switch off if requested
                 IF (.NOT.tnosepc) THEN
@@ -661,7 +698,7 @@ CONTAINS
                   __LINE__,__FILE__)
           ENDIF
           IF (reset_gkt.AND.ipcurr==1) gkt(1:2,1)=scr(1:2)
-          IF (pimd1%tcentro.AND.ipcurr.EQ.1) THEN
+          IF ((pimd1%tcentro.OR.pimd1%tringp).AND.ipcurr.EQ.1) THEN
              IF (pimd1%tstage.OR.pimd1%tpinm) THEN
                 ! SUBTRACT CENTER OF MASS VELOCITY
                 IF (paral%parent.AND.comvl%subcom) THEN
@@ -860,7 +897,7 @@ CONTAINS
                 ! DM2ra
              ENDIF
           ENDIF
-          IF (pimd1%tcentro.AND.ipcurr.EQ.1) THEN
+          IF ((pimd1%tcentro.OR.pimd1%tringp).AND.ipcurr.EQ.1) THEN
              IF (pimd1%tstage.OR.pimd1%tpinm) THEN
                 ! SUBTRACT ROTATION AROUND CENTER OF MASS
                 IF (paral%parent.AND.comvl%subrot) THEN
@@ -995,12 +1032,12 @@ CONTAINS
              CALL prtgyr
              IF (paral%io_parent)&
                   WRITE(6,'(/,A,A)')&
-                  '    NFI   IP   EKINC  TEMPP     EHARM         EKS',&
+                  '      NFI   IP   EKINC  TEMPP     EHARM         EKS',&
                   '  ENOSE(C)  ENOSE(E)  ENOSE(P)    ECLASSIC        EHAM     DIS'
              DO ip=1,pimd3%np_total
                 IF (paral%io_parent)&
                      WRITE(6,&
-                     '(I7,I5,F8.5,F7.1,F10.6,F12.5,3F10.5,2F12.5,F8.2)')&
+                     '(I9,I5,F8.5,F7.1,F10.6,F12.5,3F10.5,2F12.5,F8.2)')&
                      iteropt%nfi,ip,ekinc(ip),tempp(ip),eharv(ip),etotv(ip),&
                      enosc(ip),enose(ip),enosp(ip),econs(ip),eham(ip),disa(ip)
              ENDDO
@@ -1041,13 +1078,13 @@ CONTAINS
           tcpu=(time2-time1)*0.001_real_8
           IF ((ropt_mod%engpri).AND.paral%io_parent)&
                WRITE(6,'(/,A,A)')&
-               '    NFI  EKINC/P    EKINH  TEMP  EKINP(P)  EKINP(V)       EKS/P',&
+               '      NFI  EKINC/P    EKINH  TEMP  EKINP(P)  EKINP(V)       EKS/P',&
                '       EQUANT     ECLASSIC         EHAM     TCPU'
           IF (paral%io_parent)&
-               WRITE(6,'(I7,2F9.5,F7.1,2F9.5,4F13.5,F9.2)')&
+               WRITE(6,'(I9,2F9.5,F7.1,2F9.5,4F13.5,F9.2)')&
                iteropt%nfi,ekina,ekinh,tempa,qpkinp,qvkinp,etota,equant,econsa,ehama,tcpu
           IF (paral%io_parent)&
-               WRITE(3,'(I7,2F15.10,F7.1,6F20.10,F9.2)')&
+               WRITE(3,'(I9,2F15.10,F7.1,6F20.10,F9.2)')&
                iteropt%nfi,ekina,ekinh,tempa,qpkinp,qvkinp,etota,equant,econsa,ehama,tcpu
           ! ..Store ionic coordinates and velocities for statistics
           ropt_mod%movie=rout1%mout .AND. MOD(iteropt%nfi-1,cnti%imovie).EQ.0
@@ -1067,7 +1104,7 @@ CONTAINS
        IF (infi.EQ.cnti%nomore) soft_com%exsoft=.TRUE.
        ! new
        nosl%tmnose=pitmnose(2)  ! recover original setup of tmnose
-       IF ((pimd1%tstage.OR.pimd1%tpinm).AND.nosl%tmnose) CALL wr_temps(iteropt%nfi,ekinc,tempp)
+       IF (pimd1%tstage.OR.pimd1%tpinm) CALL wr_temps(iteropt%nfi,ekinc,tempp)
        ! new
        ! ..Recompute velocity-dependent part of pipaiu
        IF (pimd1%tstage.OR.pimd1%tpinm) THEN

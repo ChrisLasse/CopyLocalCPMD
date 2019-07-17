@@ -1,5 +1,6 @@
 MODULE nosepa_utils
-  USE cnst,                            ONLY: factem
+  USE cnst,                            ONLY: factem,&
+                                             pi
   USE cotr,                            ONLY: cotc0,&
                                              lskcor,&
                                              ntcnst
@@ -27,7 +28,9 @@ MODULE nosepa_utils
   USE parac,                           ONLY: paral
   USE pimd,                            ONLY: grandparent,&
                                              pimd1,&
-                                             pimd3
+                                             pimd2,&
+                                             pimd3,&
+                                             flnm
   USE prcp,                            ONLY: prcpl
   USE system,                          ONLY: cnti,&
                                              cntl,&
@@ -60,7 +63,7 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     INTEGER                                  :: np1, np2
 
-    REAL(real_8), PARAMETER                  :: wntau = 7.26e-7_real_8 
+    REAL(real_8), PARAMETER                  :: wntau = 7.26e-7_real_8
 
     INTEGER                                  :: i, ia, iat, imatch, intt, ip, &
                                                 ipp, is, j, k, l, m, n1, nc, &
@@ -226,6 +229,9 @@ CONTAINS
           IF (cntl%tpath.AND.cntl%tpimd) THEN
              wnosep2 = (drnp*cntr%tempw/factem)**2
              IF ((pimd1%tpinm.OR.pimd1%tstage).AND.ip.EQ.1) wnosep2 = wnosep*wnosep
+             IF (pimd1%tringp.AND.pimd1%tpinm.AND.ip.GT.1) wnosep2 = wnosep2*flnm(ip)
+             IF (pimd1%tcentro.AND.(pimd1%tpinm.OR.pimd1%tstage)&
+                 .AND.ip.GT.1) wnosep2 = wnosep2*pimd2%facstage
              ipp=MIN(ip,2)
              ! DM1
              ! ..Classical test
@@ -367,23 +373,43 @@ CONTAINS
                      WRITE(6,'(A,A)')&
                      '    NO THERMOSTAT ON FIRST BEAD  IP=1 '
                 ELSE 
-                   wdum=wnosep/wntau
+                   wdum=wnosep/(wntau*2._real_8*pi)
                    IF (paral%io_parent)&
                      WRITE(6,'(A,F9.2,A)')&
                      '    CHARACTERISTIC FREQUENCY FOR IP=1 :',wdum,' CM**-1 (SINGLE)'
                 ENDIF
-                wdum=(drnp*cntr%tempw/factem)/wntau
+                wdum=(drnp*cntr%tempw/factem*SQRT(pimd2%facstage))/(wntau*2._real_8*pi)
                 IF (paral%io_parent)&
                      WRITE(6,'(A,F9.2,A)')&
                      '    CHARACTERISTIC FREQUENCY FOR IP>1 :',wdum,' CM**-1 '
+             ELSE IF (pimd1%tringp) THEN
+                IF (paral%io_parent)&
+                     WRITE(6,'(A,A)') ' FOR NORMAL MODE PROPAGATOR',&
+                     ' WITH RING-POLYMER DYNAMICS'
+                IF (.NOT.tnosepc) THEN
+                   IF (paral%io_parent)&
+                     WRITE(6,'(A,A)')&
+                     '    NO THERMOSTAT ON FIRST BEAD  IP=1 '
+                ELSE
+                   wdum=wnosep/(wntau*2._real_8*pi)
+                   IF (paral%io_parent)&
+                     WRITE(6,'(A,F9.2,A)')&
+                     '    CHARACTERISTIC FREQUENCY FOR IP=1 :',wdum,' CM**-1 '
+                ENDIF
+                DO ip=2,pimd3%np_total
+                   wdum=(drnp*cntr%tempw/factem*SQRT(flnm(ip)))/(wntau*2._real_8*pi)
+                   IF (paral%io_parent) &
+                   WRITE(6,'(A,I3,A,F9.2,A)') &
+                   '    CHARACTERISTIC FREQUENCY FOR IP=',ip ,':',wdum,' CM**-1 '
+                ENDDO
              ELSE
                 IF (paral%io_parent)&
                      WRITE(6,'(A)') ' FOR STAGING OR NORMAL MODE PROPAGATOR'
-                wdum=wnosep/wntau
+                wdum=wnosep/(wntau*2._real_8*pi)
                 IF (paral%io_parent)&
                      WRITE(6,'(A,F12.2,A)')&
                      '    CHARACTERISTIC FREQUENCY FOR IP=1 :',wdum,' CM**-1 '
-                wdum=(drnp*cntr%tempw/factem)/wntau
+                wdum=(drnp*cntr%tempw/factem)/(wntau*2._real_8*pi)
                 IF (paral%io_parent)&
                      WRITE(6,'(A,F12.2,A)')&
                      '    CHARACTERISTIC FREQUENCY FOR IP>1 :',wdum,' CM**-1 '
@@ -391,14 +417,19 @@ CONTAINS
           ELSE
              IF (paral%io_parent)&
                   WRITE(6,'(A)') ' FOR PRIMITIVE PROPAGATOR'
-             wdum=(drnp*cntr%tempw/factem)/wntau
+             wdum=(drnp*cntr%tempw/factem)/(wntau*2._real_8*pi)
              IF (paral%io_parent)&
                   WRITE(6,'(A,F12.2,A)')&
                   '    CHARACTERISTIC FREQUENCY FOR IP=1 :',wdum,' CM**-1 '
-             wdum=(drnp*cntr%tempw/factem)/wntau
+             wdum=(drnp*cntr%tempw/factem)/(wntau*2._real_8*pi)
              IF (paral%io_parent)&
                   WRITE(6,'(A,F12.2,A)')&
                   '    CHARACTERISTIC FREQUENCY FOR IP>1 :',wdum,' CM**-1 '
+             IF (pimd1%tringp.AND..NOT.tnosepc) THEN
+                IF (paral%io_parent)&
+                    WRITE(6,'(A)')&
+                    '    WARNING FROM NOSEPA: CENTROIDOFF IS MEANINGFUL ONLY FOR NORMAL MODE PROPAGATOR'
+             ENDIF
           ENDIF
           IF (paral%io_parent)&
                WRITE(6,'(A,A)') ' *********************************',&

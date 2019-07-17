@@ -149,6 +149,7 @@ MODULE md_driver
   USE rinitwf_utils,                   ONLY: give_scr_rinitwf
   USE rinvel_utils,                    ONLY: rinvel,&
                                              rvscal
+  USE rmas,                            ONLY: rmass
   USE rnlsm_utils,                     ONLY: give_scr_rnlsm
   USE ropt,                            ONLY: infi,&
                                              iteropt,&
@@ -613,6 +614,8 @@ CONTAINS
           if(ierr/=0) call stopgm(proceduren,'allocation problem: cold_high',&
                __LINE__,__FILE__)
           call zeroing(cold_high)
+          numcold_high=0 
+          nnow_high=0
           rmem=rmem*2._real_8
        endif
 
@@ -938,7 +941,7 @@ CONTAINS
     ENDIF
 
     ! INITIALIZE GLE THERMO
-    CALL gle_init
+    CALL gle_init(tau0,velp,rmass%pma)
 
     CALL write_irec(irec)
     ! ==--------------------------------------------------------------==
@@ -1012,7 +1015,7 @@ CONTAINS
           ! UPDATE NOSE THERMOSTATS
           CALL noseup(velp,c2,nstate,ipwalk)
           ! FIRST HALF OF GLE EVOLUTION
-          CALL gle_step
+          CALL gle_step(tau0,velp,rmass%pma)
        endif 
        ! SUBTRACT CENTER OF MASS VELOCITY
        IF (paral%io_parent.AND.comvl%subcom) CALL comvel(velp,vcmio,.TRUE.)
@@ -1239,7 +1242,7 @@ CONTAINS
        ! thermostats only if 1) standard dynamics 2) larger MTS step
        if ( .not.cntl%use_mts .or. mts_large_step ) then
           ! SECOND HALF OF GLE EVOLUTION
-          CALL gle_step
+          CALL gle_step(tau0,velp,rmass%pma)
 
           ! UPDATE NOSE THERMOSTATS
           CALL noseup(velp,c2,nstate,ipwalk)
@@ -1277,7 +1280,7 @@ CONTAINS
             rhoe,psi,nstate,nkpt%nkpnt,iteropt%nfi,infi)
        ! PRINTOUT the evolution of the accumulators every time step
        IF (paral%io_parent) THEN
-          econs=ekinp+ener_com%etot+enose+enosp+ener_com%ecnstr+ekincv+vharm+glepar%egle
+          econs=ekinp+ener_com%etot+enose+enosp+ener_com%ecnstr+ekincv+vharm+glepar%egle 
           IF (cntl%cdft)THEN
              econs=econs+cdftcom%cdft_v(1)*(cdftcom%cdft_nc+cdftcom%vgrad(1))
           ENDIF

@@ -1,7 +1,11 @@
 MODULE pi_init_utils
   USE adat,                            ONLY: elem
-  USE cnst,                            ONLY: scmass
+  USE cnst,                            ONLY: scmass,&
+                                             factem
   USE error_handling,                  ONLY: stopgm
+  USE glemod,                          ONLY: glepar,&
+                                             icm2au,&
+                                             tglepc
   USE ions,                            ONLY: ions0,&
                                              ions1
   USE kinds,                           ONLY: real_8
@@ -11,7 +15,7 @@ MODULE pi_init_utils
   USE pimd,                            ONLY: &
        fcorr, flnm, grandparent, ifcorr, ircorr, maxnp, pcg_pos, pimd1, &
        pimd2, pimd3, pma0s, pmar, pmar0, pmars, rcor, rcora, rcorr, rgyr, &
-       rgyra, rsus, rsusa, tnm, tnmi
+       rgyra, rsus, rsusa, tnm, tnmi, pi_omega
   USE rmas,                            ONLY: rmass
   USE system,                          ONLY: cntr,&
                                              maxsys
@@ -235,6 +239,43 @@ CONTAINS
           ! DM2
        ENDDO
     ENDIF
+    ! MASS SETTINGS FOR RING-POLYMER DYNAMICS
+    IF (pimd1%tringp) THEN
+       npx=pimd3%np_total
+       rnp=REAL(npx,kind=real_8)
+
+       rmass%pmat0=0._real_8
+       rmass%pmatot=0._real_8
+       DO is=1,ions1%nsp
+          ! STORE REAL IONIC MASS (IN CHEMICAL UNITS) IN PMAR0
+          pmar0(is)=rmass%pma0(is)
+          ! STORE REAL IONIC MASS (IN ATOMIC UNITS) IN PMAR
+          pmar(is)=pmar0(is)*scmass
+          ! STORE FICTITIOUS IONIC MASS (IN CHEMICAL UNITS) IN PMA0
+          rmass%pma0(is)=pmar0(is)/rnp
+          ! STORE TOTAL FICTITIOUS MASS (IN CHEMICAL UNITS) IN PMAT0
+          rmass%pmat0=rmass%pmat0+rmass%pma0(is)*ions0%na(is)
+          ! STORE FICTITIOUS IONIC MASS (IN ATOMIC UNITS) IN PMA
+          rmass%pma(is)=rmass%pma0(is)*scmass
+          ! STORE TOTAL FICTITIOUS MASS (IN ATOMIC UNITS) IN PMATOT
+          rmass%pmatot=rmass%pmatot+rmass%pma(is)*ions0%na(is)
+       ENDDO
+       IF (pimd1%tpinm) THEN
+          ! MASS SETTINGS FOR NORMAL MODE REPRESENTATION
+          ! NORMAL MODE TRAFO FOR REAL PHYSICAL MASSES (FOR POTENTIAL ENERGY)
+          DO is=1,ions1%nsp
+             pmars(is,1)=pmar(is)
+             DO ip=2,npx
+                pmars(is,ip)=pmar(is)*flnm(ip)
+             ENDDO
+             ! FICTITIOUS NORMAL MODE MASSES (FOR FICTICIOUS KINETIC ENERGY)
+             ! ARE PHYSICAL MASSES FOR ALL NORMAL MODES
+             DO ip=1,npx
+                pma0s(is,ip)=pmar(is)
+             ENDDO
+          ENDDO
+       ENDIF
+    ENDIF
     ! DM1
     ! ..print detailed information about final mass settings in PI case
     IF (grandparent) THEN
@@ -321,6 +362,28 @@ CONTAINS
        IF (wan05%loc_npgrp>parai%cp_nproc) wan05%loc_npgrp=parai%cp_nproc
     ENDIF
 
+    ! Friction coefficient for GLE thermostat
+    IF (glepar%gle_mode>0) THEN
+       npx=pimd3%np_total
+       rnp=REAL(npx,kind=real_8)
+       DO ip=1,npx
+          pi_omega(ip)=2._real_8*SQRT(rnp)*cntr%tempw/factem*pimd2%gle_lambda/icm2au
+          IF ((pimd1%tpinm.OR.pimd1%tstage).AND.ip.EQ.1) THEN
+             IF ((pimd1%tcentro.OR.pimd1%tringp).AND..NOT.tglepc) THEN
+                pi_omega(ip) = 0._real_8
+             ELSE
+                pi_omega(ip) = 2._real_8*glepar%gle_omega*pimd2%gle_lambda
+             ENDIF
+          ENDIF
+          IF (pimd1%tringp.AND.pimd1%tpinm.AND.ip.GT.1) THEN
+             pi_omega(ip) = pi_omega(ip)*SQRT(flnm(ip))
+          ENDIF
+          IF (pimd1%tcentro.AND.(pimd1%tpinm.OR.pimd1%tstage).AND.ip.GT.1) THEN
+             pi_omega(ip) = pi_omega(ip)*SQRT(pimd2%facstage)
+          ENDIF
+       ENDDO
+    ENDIF
+ 
     CALL tihalt(procedureN,isub)
     RETURN
   END SUBROUTINE pi_init

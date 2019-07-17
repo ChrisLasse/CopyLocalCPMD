@@ -8,5 +8,6 @@ MODULE prng
      REAL(real_8) :: paraseed(2,3)  = 0.0_real_8
   END TYPE prng_com_t
   TYPE(prng_com_t), SAVE :: prng_com
+  TYPE(prng_com_t), SAVE, ALLOCATABLE :: pi_prng_com(:)
 
 END MODULE prng
