@@ -31,6 +31,7 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff )
   dfft%tscale_gamma = 0.5d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
   rem_size = mod( (nbnd+1)/2, batch_size )
 
+  ALLOCATE( dfft%time_adding( 100 ) )
   ALLOCATE( dfft%first_step( num_buff ) )
   ALLOCATE( dfft%first_loading( num_buff ) )
   ALLOCATE( dfft%buffer_sequence( num_buff ) )

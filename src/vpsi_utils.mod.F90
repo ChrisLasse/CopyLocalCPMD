@@ -1029,6 +1029,7 @@ CONTAINS
     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
 
     COMPLEX(real_8)                          :: fm, fp, psii, psin
+    COMPLEX(DP)                              :: psi_comp( dfft%nnr, nstate )
     COMPLEX(real_8), POINTER __CONTIGUOUS &
                            , ASYNCHRONOUS    :: wfn_r1(:)
     INTEGER :: i, iclpot = 0, id, ierr, ig, &
