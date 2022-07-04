@@ -72,13 +72,13 @@ SUBROUTINE Overlapp_FFT( dfft, psi, hpsi, v, ngms, nbnd )
      CALL create_shared_memory_window_2d( comm_send, i, dfft, sendsize*dfft%nodes_numb, buffer_size ) 
      CALL create_shared_memory_window_2d( comm_recv, i, dfft, sendsize*dfft%nodes_numb, buffer_size ) 
    
-     CALL create_shared_locks_2d( locks_calc_inv, i, dfft, dfft%node_task_size, ( nbnd / batch_size ) + 1 )
-     CALL create_shared_locks_2d( locks_calc_fw,  i, dfft, dfft%node_task_size, ( nbnd / batch_size ) + 1 )
-     CALL create_shared_locks_1d( locks_com_inv,  i, dfft, ( nbnd / batch_size ) + 1 )
-     CALL create_shared_locks_1d( locks_com_fw,   i, dfft, ( nbnd / batch_size ) + 1 )
-     
-     CALL create_shared_locks_2d( locks_calc_1  , i, dfft, dfft%node_task_size, nbnd + batch_size + (buffer_size-1)*batch_size )
-     CALL create_shared_locks_2d( locks_calc_2  , i, dfft, dfft%node_task_size, nbnd + batch_size + (buffer_size-1)*batch_size )
+!     CALL create_shared_locks_2d( locks_calc_inv, i, dfft, dfft%node_task_size, ( nbnd / batch_size ) + 1 )
+!     CALL create_shared_locks_2d( locks_calc_fw,  i, dfft, dfft%node_task_size, ( nbnd / batch_size ) + 1 )
+!     CALL create_shared_locks_1d( locks_com_inv,  i, dfft, ( nbnd / batch_size ) + 1 )
+!     CALL create_shared_locks_1d( locks_com_fw,   i, dfft, ( nbnd / batch_size ) + 1 )
+!     
+!     CALL create_shared_locks_2d( locks_calc_1  , i, dfft, dfft%node_task_size, nbnd + batch_size + (buffer_size-1)*batch_size )
+!     CALL create_shared_locks_2d( locks_calc_2  , i, dfft, dfft%node_task_size, nbnd + batch_size + (buffer_size-1)*batch_size )
 
   END IF
 
@@ -127,8 +127,8 @@ SUBROUTINE Autotune_Batchsize( dfft, psi, hpsi, nthreads, nested_threads, ngms, 
   IF( dfft%my_node .eq. 0 .and. dfft%my_node_rank .eq. 0 ) write(6,*) "Trying the variable way:"
   total_time = 0
   total_time_MASK = .true.
-  CALL clean_up_shared( dfft )
-  CALL MapVals_CleanUp( dfft )
+!  CALL clean_up_shared( dfft )
+!  CALL MapVals_CleanUp( dfft )
   CALL SYSTEM_CLOCK( count_rate = cr )
 
   DO num_buff = max_buffer_size, max_buffer_size
@@ -149,13 +149,13 @@ SUBROUTINE Autotune_Batchsize( dfft, psi, hpsi, nthreads, nested_threads, ngms, 
         CALL create_shared_memory_window_2d( comm_recv, tr, dfft, sendsize*dfft%nodes_numb, num_buff ) 
         sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * rem_size
 
-        CALL create_shared_locks_2d( locks_calc_inv, tr, dfft, dfft%node_task_size, ( nbnd / i ) + 1 )
-        CALL create_shared_locks_2d( locks_calc_fw , tr, dfft, dfft%node_task_size, ( nbnd / i ) + 1 )
-        CALL create_shared_locks_1d( locks_com_inv , tr, dfft, ( nbnd / i ) + 1 )
-        CALL create_shared_locks_1d( locks_com_fw  , tr, dfft, ( nbnd / i ) + 1 )
-
-        CALL create_shared_locks_2d( locks_calc_1  , tr, dfft, dfft%node_task_size, nbnd + i + (num_buff-1)*i )
-        CALL create_shared_locks_2d( locks_calc_2  , tr, dfft, dfft%node_task_size, nbnd + i + (num_buff-1)*i )
+!        CALL create_shared_locks_2d( locks_calc_inv, tr, dfft, dfft%node_task_size, ( nbnd / i ) + 1 )
+!        CALL create_shared_locks_2d( locks_calc_fw , tr, dfft, dfft%node_task_size, ( nbnd / i ) + 1 )
+!        CALL create_shared_locks_1d( locks_com_inv , tr, dfft, ( nbnd / i ) + 1 )
+!        CALL create_shared_locks_1d( locks_com_fw  , tr, dfft, ( nbnd / i ) + 1 )
+!
+!        CALL create_shared_locks_2d( locks_calc_1  , tr, dfft, dfft%node_task_size, nbnd + i + (num_buff-1)*i )
+!        CALL create_shared_locks_2d( locks_calc_2  , tr, dfft, dfft%node_task_size, nbnd + i + (num_buff-1)*i )
 
         DO k = 1, 4
 
@@ -304,8 +304,6 @@ SUBROUTINE Placeholder_Name( dfft, psi, hpsi, v, comm_send, comm_recv, locks_cal
   ELSE
      max_nbnd = ( nbnd / batch_size )
   END IF
-
-  CALL start_clock('plac_loop')
 
   DO WHILE( .not. finished_all )
 
@@ -627,16 +625,15 @@ SUBROUTINE Placeholder_Name( dfft, psi, hpsi, v, comm_send, comm_recv, locks_cal
 
 END SUBROUTINE Placeholder_Name
 
-SUBROUTINE Compare_invffts( dfft, c0, ngms, nbnd)
+SUBROUTINE Compare_invffts( dfft, c0, psi, ngms, nbnd)
   IMPLICIT NONE
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(IN)  :: c0 (ngms, nbnd)
+  COMPLEX(DP), INTENT(IN)  :: c0 ( ngms, nbnd )
   INTEGER, INTENT(IN)    :: ngms, nbnd
 
   COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: comm_send(:,:), comm_recv(:,:)
 
-  COMPLEX(DP) :: psi( dfft%nnr )
-  COMPLEX(DP) :: alt_aux( dfft%nnr )
+  COMPLEX(DP) :: psi( dfft%nnr, 2 )
   INTEGER, SAVE :: rem_size
   INTEGER :: sendsize, sendsize_rem, nthreads, nested_threads
   INTEGER :: i, j, iter, ierr, buffer_size, batch_size
@@ -654,11 +651,13 @@ SUBROUTINE Compare_invffts( dfft, c0, ngms, nbnd)
   CALL create_shared_memory_window_2d( comm_send, i, dfft, sendsize*dfft%nodes_numb, buffer_size ) 
   CALL create_shared_memory_window_2d( comm_recv, i, dfft, sendsize*dfft%nodes_numb, buffer_size ) 
 
-  CALL Prepare_Psi_single( dfft, c0(:,1) )
+  CALL Prepare_Psi_single( dfft, c0( : ,1:2 ) )
+  
+  CALL invfft_single( dfft, psi( :, 1 ), comm_send(:,1), comm_recv(:,1), sendsize)
 
-  alt_aux = dfft%aux
-
-  CALL invfft_single( dfft, psi, comm_send(:,1), comm_recv(:,1), sendsize)
+  CALL Prepare_Psi_single( dfft, c0( : ,3:4 ) )
+  
+  CALL invfft_single( dfft, psi( :, 2 ), comm_send(:,1), comm_recv(:,1), sendsize)
 
 END SUBROUTINE Compare_invffts
 

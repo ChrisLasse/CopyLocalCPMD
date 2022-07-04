@@ -1062,6 +1062,7 @@ CONTAINS
     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
 
     COMPLEX(real_8)                          :: fm, fp, psii, psin
+    COMPLEX(DP)                              :: psi_comp( dfft%nnr, nstate )
     COMPLEX(real_8), POINTER __CONTIGUOUS &
                            , ASYNCHRONOUS    :: wfn_r1(:)
     INTEGER :: i, iclpot = 0, id, ierr, ig, &
@@ -1327,6 +1328,7 @@ CONTAINS
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop1,int_mod)+1
                    CALL invfftn_batch(wfn_r1,bsize,swap,3,ibatch-start_loop1)
+                   CALL Compare_invffts( dfft, c0, psi_comp, jgw, nstate )
                 END IF
              END IF
           END IF

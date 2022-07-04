@@ -19,32 +19,82 @@ MODULE fftpw_single_calls
 
 CONTAINS
 
-SUBROUTINE Prepare_Psi_single( dfft, c0 )
+SUBROUTINE Prepare_Psi_single( dfft, psi )
   IMPLICIT NONE
 
-  COMPLEX(DP), INTENT(IN)  :: c0( : )
+  COMPLEX(DP), INTENT(IN)  :: psi( : , : )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
 
-  INTEGER :: j, i
+  INTEGER :: j, i, howmany
   INTEGER :: offset
 
-  !$omp parallel do private( i, j, offset )
-  DO i = 1, dfft%nsw( dfft%mype+1 )
-     offset = (i-1)*dfft%nr3
-     !$omp simd
-     DO j = 1, dfft%zero_prep_start(i,1)-1
-        dfft%aux( offset + j ) = c0( dfft%nl_r( offset + j ) )
+  howmany = 2
+
+  IF( howmany .eq. 2 ) THEN
+     !$omp parallel do private( i, j, offset )
+     DO i = 1, dfft%nsw( dfft%mype+1 )
+        offset = (i-1)*dfft%nr3
+        !$omp simd
+        DO j = 1, dfft%zero_prep_start(i,1)-1
+           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), 2 )
+        ENDDO
+        !$omp simd
+        DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
+           dfft%aux( offset + j ) = (0.d0, 0.d0)
+        ENDDO
+        !$omp simd
+        DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
+           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), 2 )
+        ENDDO
      ENDDO
-     !$omp simd
-     DO j = dfft%zero_prep_start(i,1), dfft%zero_prep_end(i,1)
-        dfft%aux( offset + j ) = (0.d0, 0.d0)
+     !$omp end parallel do
+  
+     !$omp parallel do private( i, j, offset )
+     DO i = 1, dfft%nsw( dfft%mype+1 )
+        offset = (i-1)*dfft%nr3
+        !$omp simd
+        DO j = 1, dfft%zero_prep_start(i,3)-1
+           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), 2 ) )
+        ENDDO
+        !$omp simd
+        DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
+           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), 2 ) )
+        ENDDO
      ENDDO
-     !$omp simd
-     DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
-        dfft%aux( offset + j ) = c0( dfft%nl_r( offset + j ) )
+     !$omp end parallel do
+  ELSE
+     !$omp parallel do private( i, j, offset )
+     DO i = 1, dfft%nsw( dfft%mype+1 )
+        offset = (i-1)*dfft%nr3
+        !$omp simd
+        DO j = 1, dfft%zero_prep_start(i,1)-1
+           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
+        ENDDO
+        !$omp simd
+        DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
+           dfft%aux( offset + j ) = (0.d0, 0.d0)
+        ENDDO
+        !$omp simd
+        DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
+           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
+        ENDDO
      ENDDO
-  ENDDO
-  !$omp end parallel do
+     !$omp end parallel do
+  
+     !$omp parallel do private( i, j, offset )
+     DO i = 1, dfft%nsw( dfft%mype+1 )
+        offset = (i-1)*dfft%nr3
+        !$omp simd
+        DO j = 1, dfft%zero_prep_start(i,3)-1
+           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) )
+        ENDDO
+        !$omp simd
+        DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
+           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) )
+        ENDDO
+     ENDDO
+     !$omp end parallel do
+  END IF
 
 END SUBROUTINE Prepare_Psi_single
 
@@ -60,8 +110,8 @@ SUBROUTINE invfft_single( dfft, psi, comm_send, comm_recv, sendsize )
   
 
   CALL invfft_pre_com( dfft, comm_send, comm_recv, 1, 1 )
-  CALL fft_com( dfft, comm_send, comm_recv, sendsize, dfft%my_node_rank, &
-                dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+!  CALL fft_com( dfft, comm_send, comm_recv, sendsize, dfft%my_node_rank, &
+!                dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
   CALL invfft_after_com( dfft, psi, comm_recv, 1 )
 
 END SUBROUTINE invfft_single

@@ -222,8 +222,6 @@ SUBROUTINE fft_com( dfft, comm_mem_send, comm_mem_recv, sendsize, intra_me, inte
    
         CALL mpi_alltoall( comm_mem_send, sendsize, MPI_DOUBLE_COMPLEX, comm_mem_recv, &
                            sendsize, MPI_DOUBLE_COMPLEX, inter_node_comm, ierr)
-   
-        IF( abs(ierr) /= 0 ) CALL fftx_error__ ('fft_scatter', 'info<>0', abs(ierr) )
  
      ELSE
 
