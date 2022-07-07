@@ -438,6 +438,7 @@ CONTAINS
        ENDIF
     ENDIF
     ! ==--------------------------------------------------------------==
+    cntl%overlapp_comm_comp = .false.
     ! INITIALIZE BATCH FFT ALGORITHM
     IF(batch_fft)THEN
        nstate = crge%n

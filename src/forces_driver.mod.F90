@@ -15,7 +15,8 @@ MODULE forces_driver
   USE error_handling,                  ONLY: stopgm
   USE fft_maxfft,                      ONLY: maxfft
   USE fft,                             ONLY: batch_fft,&
-                                             fft_tune_max_it
+                                             fft_tune_max_it,&
+                                             jgw
   USE fftprp_utils,                    ONLY: autotune_fftbatchsize
   USE fnonloc_utils,                   ONLY: fnonloc
   USE func,                            ONLY: func1
@@ -84,7 +85,8 @@ MODULE forces_driver
   USE utils,                           ONLY: zclean,&
                                              zclean_k
   USE vpsi_utils,                      ONLY: vpsi,&
-                                             vpsi_batchfft
+                                             vpsi_batchfft,&
+                                             do_the_vpsi_thing
 !!use rotate_utils, only : rotate_c
 !!use ovlap_utils, only : ovlap_c
   USE zeroing_utils,                   ONLY: zeroing
@@ -344,8 +346,9 @@ CONTAINS
 
     DO ik=1,nkpoint
        IF(batch_fft.AND..NOT.tkpts%tkpnt)THEN
-          CALL vpsi_batchfft(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
-               clsd%nlsd,redist_c2)
+!          CALL vpsi_batchfft(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
+!               clsd%nlsd,redist_c2)
+          CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,jgw,nstate)
        ELSE
           CALL vpsi(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,&
                redist_c2)

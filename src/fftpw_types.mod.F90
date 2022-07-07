@@ -110,6 +110,16 @@ MODULE fftpw_types
     LOGICAL :: autotune = .false.
     TYPE(MPI_WIN) :: mpi_window(99)
     INTEGER :: batch_size = 1
+
+    LOGICAL :: overlapp = .true.
+    INTEGER :: rem_size = 0
+    INTEGER :: batch_size_save = 1
+    INTEGER :: num_buff = 1
+    INTEGER :: ngms
+    INTEGER :: sendsize
+    INTEGER :: max_nbnd
+    LOGICAL :: uneven = .false.
+
     COMPLEX(DP), ALLOCATABLE :: temp_psic(:,:)
     COMPLEX(DP), ALLOCATABLE :: temp_aux(:,:)
     COMPLEX(DP), ALLOCATABLE :: aux(:)
@@ -154,9 +164,9 @@ MODULE fftpw_types
                     !    ngm = ( dfftp%ngl( dfftp%mype + 1 ) + 1 ) / 2
 
     INTEGER :: ngw  ! my no. of non zero wave function plane components
-                    !    ngw = dffts%nwl( dffts%mype + 1 )
+                    !    ngw = dfft%nwl( dfft%mype + 1 )
                     ! with gamma sym.
-                    !    ngw = ( dffts%nwl( dffts%mype + 1 ) + 1 ) / 2
+                    !    ngw = ( dfft%nwl( dfft%mype + 1 ) + 1 ) / 2
 
     INTEGER, ALLOCATABLE :: iplp(:) ! if > 0 is the iproc2 processor owning the active "X" value ( potential )
     INTEGER, ALLOCATABLE :: iplw(:) ! if > 0 is the iproc2 processor owning the active "X" value ( wave func )
@@ -202,6 +212,8 @@ MODULE fftpw_types
   PUBLIC :: fft_type_init
   PUBLIC :: create_mpi_communicators
   PUBLIC :: create_shared_memory_window_2d
+  PUBLIC :: create_shared_locks_2d
+  PUBLIC :: create_shared_locks_1d
 
 CONTAINS
 
@@ -1209,6 +1221,113 @@ CONTAINS
     CALL mpi_win_unlock_all( dfft%mpi_window( window_number ), ierr )
   
   END SUBROUTINE create_shared_memory_window_2d
+
+  SUBROUTINE create_shared_locks_2d( result_pointer, window_number, dfft, win_size1, win_size2 )
+    IMPLICIT NONE
+  
+    TYPE (PW_fft_type_descriptor), INTENT(inout) :: dfft
+    INTEGER, INTENT(in) :: win_size1, win_size2
+    LOGICAL,  POINTER, CONTIGUOUS, INTENT(out)   :: result_pointer( :, : )
+    INTEGER, INTENT(out) :: window_number
+  
+    INTEGER :: ierr
+    INTEGER, SAVE :: counter = 0
+    INTEGER, DIMENSION(2) :: arrayshape
+    INTEGER :: displ
+    INTEGER(KIND=MPI_ADDRESS_KIND) :: windowsize
+    INTEGER ::mpi_logical_in_bytes, pre_windowsize
+    TYPE(C_PTR), ALLOCATABLE :: baseptr( : )
+    TYPE CONTAINER
+       COMPLEX(DP),  POINTER, CONTIGUOUS   :: temp( : )
+    END TYPE CONTAINER
+    TYPE(CONTAINER),ALLOCATABLE :: cont(:)
+  
+    dfft%window_counter = dfft%window_counter + 1
+    window_number = dfft%window_counter
+    arrayshape( 1 ) = win_size1
+    arrayshape( 2 ) = win_size2
+  
+    CALL mpi_type_size( mpi_logical, mpi_logical_in_bytes, ierr)
+    IF ( dfft%my_node_rank .eq. 0 ) then
+       windowsize = win_size1 * win_size2 * mpi_logical_in_bytes
+    ELSE
+       windowsize = 0
+    END IF
+    ALLOCATE( baseptr( dfft%node_task_size ) )
+    displ = mpi_logical_in_bytes
+  
+    CALL MPI_WIN_allocate_shared( windowsize , displ, MPI_INFO_NULL,  &
+         dfft%node_comm, baseptr( dfft%my_node_rank + 1 ), dfft%mpi_window( window_number ), ierr)
+  
+    IF ( dfft%my_node_rank .ne. 0 ) then
+       CALL mpi_win_shared_query( dfft%mpi_window( window_number ), 0, windowsize, &
+            displ, baseptr(1), ierr)
+    END IF
+  
+    Allocate( cont( dfft%node_task_size ) )
+  
+    CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( window_number ), ierr )
+  
+    CALL C_F_POINTER( baseptr(1), result_pointer, arrayshape )
+  
+    result_pointer = .true.
+  
+    call mpi_win_unlock_all( dfft%mpi_window( window_number ), ierr )
+  
+  END SUBROUTINE create_shared_locks_2d
+  
+  SUBROUTINE create_shared_locks_1d( result_pointer, window_number, dfft, win_size )
+    IMPLICIT NONE
+  
+    TYPE (PW_fft_type_descriptor), INTENT(inout) :: dfft
+    INTEGER, INTENT(in) :: win_size
+    LOGICAL,  POINTER, CONTIGUOUS, INTENT(out)   :: result_pointer( : )
+    INTEGER, INTENT(out) :: window_number
+  
+    INTEGER :: ierr
+    INTEGER, SAVE :: counter = 0
+    INTEGER, DIMENSION(1) :: arrayshape
+    INTEGER :: displ
+    INTEGER(KIND=MPI_ADDRESS_KIND) :: windowsize
+    INTEGER ::mpi_logical_in_bytes, pre_windowsize
+    TYPE(C_PTR), ALLOCATABLE :: baseptr( : )
+    TYPE CONTAINER
+       COMPLEX(DP),  POINTER, CONTIGUOUS   :: temp( : )
+    END TYPE CONTAINER
+    TYPE(CONTAINER),ALLOCATABLE :: cont(:)
+  
+    dfft%window_counter = dfft%window_counter + 1
+    window_number = dfft%window_counter
+    arrayshape( 1 ) = win_size
+  
+    CALL mpi_type_size( mpi_logical, mpi_logical_in_bytes, ierr)
+    IF ( dfft%my_node_rank .eq. 0 ) then
+       windowsize = win_size * mpi_logical_in_bytes
+    ELSE
+       windowsize = 0
+    END IF
+    ALLOCATE( baseptr( dfft%node_task_size ) )
+    displ = mpi_logical_in_bytes
+  
+    CALL MPI_WIN_allocate_shared( windowsize , displ, MPI_INFO_NULL,  &
+         dfft%node_comm, baseptr( dfft%my_node_rank + 1 ), dfft%mpi_window( window_number ), ierr)
+  
+    IF ( dfft%my_node_rank .ne. 0 ) then
+       CALL mpi_win_shared_query( dfft%mpi_window( window_number ), 0, windowsize, &
+            displ, baseptr(1), ierr)
+    END IF
+  
+    Allocate( cont( dfft%node_task_size ) )
+  
+    CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( window_number ), ierr )
+  
+    CALL C_F_POINTER( baseptr(1), result_pointer, arrayshape )
+  
+    result_pointer = .true.
+  
+    call mpi_win_unlock_all( dfft%mpi_window( window_number ), ierr )
+  
+  END SUBROUTINE create_shared_locks_1d
 
 !  SUBROUTINE Initialize_PWFFT( desc )
 !    IMPLICIT NONE

@@ -50,6 +50,9 @@ MODULE fftmain_utils
                                              pack_x2y_n,&
                                              unpack_y2x,&
                                              unpack_y2x_n
+  USE fftpw_param
+  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
+  USE fftpw_batching
   USE kinds,                           ONLY: real_8,&
                                              int_8
   USE machine,                         ONLY: m_walltime
@@ -83,6 +86,28 @@ MODULE fftmain_utils
   PUBLIC :: fwfftn
   PUBLIC :: invfftn_batch
   PUBLIC :: fwfftn_batch
+
+
+  COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: comm_send(:,:)
+  COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: comm_recv(:,:)
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_inv(:,:)
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_inv(:)
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_fw(:,:)
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_fw(:)
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_1(:,:)
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_2(:,:)
+
+  PUBLIC :: comm_send
+  PUBLIC :: comm_recv
+  PUBLIC :: locks_calc_inv
+  PUBLIC :: locks_com_inv
+  PUBLIC :: locks_calc_fw
+  PUBLIC :: locks_com_fw
+  PUBLIC :: locks_calc_1
+  PUBLIC :: locks_calc_2
+
+  PUBLIC :: invfft_pwbatch
+  PUBLIC :: fwfft_pwbatch
   !public :: fftnew
 
 
@@ -725,5 +750,184 @@ CONTAINS
     END IF
     ! ==--------------------------------------------------------------==
   END SUBROUTINE invfftn_batch
+
+  SUBROUTINE invfft_pwbatch( dfft, step, batch_size, counter, work_buffer, f_in, f_inout1, f_inout2 )
+    IMPLICIT NONE
+  
+    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer
+    COMPLEX(DP), INTENT(IN) :: f_in(:,:)
+    COMPLEX(DP), INTENT(INOUT) :: f_inout1(:,:)
+  
+    COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:)
+  
+    IF( step .eq. 1 ) THEN
+       CALL fftpw_batch( dfft, -1, step, batch_size, counter, work_buffer, f_in, f_inout1, f_inout2 )
+    ELSE IF( step .eq. 2 ) THEN                                          
+       CALL fftpw_batch( dfft, -1, step, batch_size, counter, work_buffer, f_in, f_inout1 )
+    ELSE IF( step .eq. 3 ) THEN                                          
+       CALL fftpw_batch( dfft, -1, step, batch_size, counter, work_buffer, f_in, f_inout1 )
+    END IF
+  
+  END SUBROUTINE invfft_pwbatch
+  
+  SUBROUTINE fwfft_pwbatch( dfft, step, batch_size, counter, work_buffer, f_in, f_inout1, f_inout2 )
+    IMPLICIT NONE
+  
+    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer
+    COMPLEX(DP), INTENT(IN) :: f_in(:,:)
+    COMPLEX(DP), INTENT(INOUT) :: f_inout1(:,:)
+  
+    COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:)
+  
+    IF( step .eq. 1 ) THEN
+       CALL fftpw_batch( dfft, 1, step, batch_size, counter, work_buffer, f_in, f_inout1, f_inout2)
+    ELSE IF( step .eq. 2 ) THEN
+       CALL fftpw_batch( dfft, 1, step, batch_size, counter, work_buffer, f_in, f_inout1 )
+    ELSE IF( step .eq. 3 ) THEN
+       CALL fftpw_batch( dfft, 1, step, batch_size, counter, work_buffer, f_in, f_inout1 )
+    END IF
+  
+  END SUBROUTINE fwfft_pwbatch
+
+  SUBROUTINE fftpw_batch( dfft, isign, step, batch_size, counter, work_buffer, f_in, f_inout1, f_inout2 )
+    IMPLICIT NONE
+  
+    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    INTEGER, INTENT(IN) :: isign, step, batch_size, counter, work_buffer
+    COMPLEX(DP), INTENT(IN) :: f_in(:,:)
+    COMPLEX(DP), INTENT(INOUT) :: f_inout1(:,:)
+  
+    COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:)
+  
+    INTEGER :: ibatch, current
+  
+    current = (counter-1)*dfft%batch_size_save
+  
+    IF( isign .eq. -1 ) THEN !!  invfft
+  
+       IF( step .eq. 1 ) THEN
+  
+          DO ibatch = 1, batch_size
+  
+             IF( batch_size .eq. dfft%rem_size ) THEN
+                !$omp flush( locks_calc_1 )
+                !$  DO WHILE( ANY(locks_calc_1( :, 1+current:dfft%batch_size_save+current ) ) )
+                !$omp flush( locks_calc_1 )
+                !$  END DO
+             ELSE
+                !$omp flush( locks_calc_1 )
+                !$  DO WHILE( ANY(locks_calc_1( :, ibatch+current ) ) )
+                !$omp flush( locks_calc_1 )
+                !$  END DO
+             END IF
+  
+             IF( counter .eq. dfft%max_nbnd .and. ibatch .eq. batch_size .and. dfft%uneven ) THEN
+                CALL Prepare_Psi_overlapp( dfft, f_in(:,1+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 1 )
+             ELSE
+                CALL Prepare_Psi_overlapp( dfft, f_in(:,1+((ibatch-1)+current)*2:2+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 2 )
+             END IF
+             CALL invfft_pre_com( dfft, f_inout1(:,work_buffer), f_inout2, ibatch, batch_size )
+          ENDDO
+  
+          !$  locks_calc_inv( dfft%my_node_rank+1, counter ) = .false.
+          !$omp flush( locks_calc_inv )
+  
+       ELSE IF( step .eq. 2 ) THEN
+  
+          !$omp flush( locks_calc_inv )
+          !$  DO WHILE( ANY( locks_calc_inv( :, counter ) ) )
+          !$omp flush( locks_calc_inv )
+          !$  END DO
+  
+          CALL fft_com( dfft, f_in(:,work_buffer), f_inout1(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
+                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+  
+          !$  locks_com_inv( counter ) = .false.
+          !$omp flush( locks_com_inv )
+  
+       ELSE IF( step .eq. 3 ) THEN
+  
+          !$omp flush( locks_com_inv )
+          !$  DO WHILE( locks_com_inv( counter ) .and. .not. dfft%single_node )
+          !$omp flush( locks_com_inv )
+          !$  END DO
+  
+          DO ibatch = 1, batch_size
+  !           CALL invfft_after_com( dfft, dfft%bench_aux(:,ibatch), comm_recv, ibatch )
+             CALL invfft_after_com( dfft, f_inout1(:,work_buffer), f_in(:,ibatch), ibatch )
+  
+             !$  locks_calc_2( dfft%my_node_rank+1, ibatch+current ) = .false.
+             !$omp flush( locks_calc_2 )
+  
+          ENDDO
+  
+       END IF
+  
+    ELSE !! fw fft
+  
+       IF( step .eq. 1 ) THEN
+  
+          DO ibatch = 1, batch_size
+  
+             IF( batch_size .eq. dfft%rem_size ) THEN
+                !$omp flush( locks_calc_2 )
+                !$  DO WHILE( ANY(locks_calc_2( :, 1+current:batch_size+current ) ) )
+                !$omp flush( locks_calc_2 )
+                !$  END DO
+             ELSE
+                !$omp flush( locks_calc_2 )
+                !$  DO WHILE( ANY(locks_calc_2( :, ibatch+current ) ) )
+                !$omp flush( locks_calc_2 )
+                !$  END DO
+             END IF
+  
+  !           CALL fwfft_pre_com( dfft, f_in(:,ibatch), f_inout1(:,1), f_inout2, ibatch, batch_size )
+             CALL fwfft_pre_com( dfft, dfft%bench_aux(:,ibatch), f_inout1(:,work_buffer), f_inout2, ibatch, batch_size )
+          ENDDO
+  
+          !$  locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
+          !$omp flush( locks_calc_fw )
+  
+       ELSE IF( step .eq. 2 ) THEN
+  
+          !$omp flush( locks_calc_fw )
+          !$  DO WHILE( ANY( locks_calc_fw( :, counter ) ) )
+          !$omp flush( locks_calc_fw )
+          !$  END DO
+     
+          CALL fft_com( dfft, f_in(:,work_buffer), f_inout1(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
+                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+  
+          !$  locks_com_fw( counter ) = .false.
+          !$omp flush( locks_com_fw )
+  
+       ELSE IF( step .eq. 3 ) THEN
+  
+          !$omp flush( locks_com_fw )
+          !$  DO WHILE( locks_com_fw( counter ) .and. .not. dfft%single_node )
+          !$omp flush( locks_com_fw )
+          !$  END DO
+  
+          DO ibatch = 1, batch_size
+             CALL fwfft_after_com( dfft, f_in(:,work_buffer), ibatch, batch_size )
+             IF( counter .eq. dfft%max_nbnd .and. ibatch .eq. batch_size .and. dfft%uneven ) THEN
+                CALL Accumulate_Psi_overlapp( dfft, f_inout1(:,1+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 1 )
+             ELSE
+                CALL Accumulate_Psi_overlapp( dfft, f_inout1(:,1+((ibatch-1)+current)*2:2+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 2 )
+             END IF
+  
+             !$  locks_calc_1( dfft%my_node_rank+1, ibatch+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
+             !$omp flush( locks_calc_1 )
+  
+          ENDDO
+  
+       END IF
+  
+    END IF
+  
+  
+  END SUBROUTINE fftpw_batch
 
 END MODULE fftmain_utils
