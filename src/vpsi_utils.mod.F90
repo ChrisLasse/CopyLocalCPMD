@@ -60,12 +60,26 @@ MODULE vpsi_utils
                                              invfftn,&
                                              fwfftn_batch,&
                                              fwfftn_batch_com,&
-                                             invfftn_batch
+                                             invfftn_batch,&
+                                             comm_send,&
+                                             comm_recv,&
+                                             locks_calc_inv,&
+                                             locks_calc_fw,&
+                                             locks_com_inv,&
+                                             locks_com_fw,&
+                                             locks_calc_1,&
+                                             locks_calc_2,&
+                                             invfft_pwbatch,&
+                                             fwfft_pwbatch
   USE fftnew_utils,                    ONLY: setfftn
   USE fftpw_base,                      ONLY: dfft
-  USE fftpw_overlapp,                  ONLY: Compare_invffts
+  USE fftpw_batching,                  ONLY: Apply_v
+  USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
+                                             Set_Req_Vals 
   USE fftpw_param,                     ONLY: DP
-  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
+  USE fftpw_types,                     ONLY: create_shared_memory_window_2d,&
+                                             create_shared_locks_2d,&
+                                             create_shared_locks_1d
   USE geq0mod,                         ONLY: geq0
   USE kinds,                           ONLY: real_8,&
                                              int_8
@@ -143,6 +157,7 @@ MODULE vpsi_utils
   PUBLIC :: vpsi
   PUBLIC :: vpsi_batchfft
   PUBLIC :: vpsimt
+  PUBLIC :: do_the_vpsi_thing
   !public :: movepsid
 
 CONTAINS
@@ -1062,7 +1077,7 @@ CONTAINS
     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
 
     COMPLEX(real_8)                          :: fm, fp, psii, psin
-    COMPLEX(DP)                              :: psi_comp( dfft%nnr, nstate )
+    COMPLEX(DP)                              :: psi_comp( dfft%nnr, nstate/2 )
     COMPLEX(real_8), POINTER __CONTIGUOUS &
                            , ASYNCHRONOUS    :: wfn_r1(:)
     INTEGER :: i, iclpot = 0, id, ierr, ig, &
@@ -1328,7 +1343,6 @@ CONTAINS
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop1,int_mod)+1
                    CALL invfftn_batch(wfn_r1,bsize,swap,3,ibatch-start_loop1)
-                   CALL Compare_invffts( dfft, c0, psi_comp, jgw, nstate )
                 END IF
              END IF
           END IF
@@ -1797,5 +1811,279 @@ CONTAINS
     END DO
     !$omp end parallel
   END SUBROUTINE calc_c2
+
+  SUBROUTINE do_the_vpsi_thing( psi, hpsi, v, ngms, nbnd_source )
+  
+    IMPLICIT NONE
+    COMPLEX(DP), INTENT(IN)  :: psi (ngms, nbnd_source)
+    COMPLEX(DP), INTENT(INOUT) :: hpsi(ngms, nbnd_source)
+    INTEGER, INTENT(IN)    :: ngms, nbnd_source
+    REAL(DP), INTENT(IN) :: v(dfft%nnr)
+  
+    LOGICAL, SAVE :: first = .true.
+  
+    INTEGER, SAVE :: sendsize_rem, nthreads, nested_threads, nbnd, my_thread_num
+    INTEGER :: i, j, iter, ierr, buffer_size, batch_size
+  
+    INTEGER :: counter( 2 , 3)
+    LOGICAL :: finished( 2 , 3 )
+    INTEGER :: sendsize_save, next, last_buffer, ibatch, work_buffer
+    LOGICAL :: do_calc, do_com, finished_all, last_start, last_start_triggered
+  
+  !  buffer_size = 3
+    buffer_size = 1
+    batch_size  = 1
+  
+    IF( first ) THEN
+  
+       first = .false.
+       dfft%ngms = ngms
+       CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size )
+       CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size )
+  
+       dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
+       sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
+     
+       CALL create_shared_memory_window_2d( comm_send, i, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
+       CALL create_shared_memory_window_2d( comm_recv, i, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
+     
+       CALL create_shared_locks_2d( locks_calc_inv, i, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_2d( locks_calc_fw,  i, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_1d( locks_com_inv,  i, dfft, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_1d( locks_com_fw,   i, dfft, ( nbnd_source / batch_size ) + 1 )
+       
+       CALL create_shared_locks_2d( locks_calc_1  , i, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
+       CALL create_shared_locks_2d( locks_calc_2  , i, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
+  
+       !$omp parallel
+       dfft%cpus_per_task = omp_get_num_threads()
+       !$omp end parallel
+       nthreads = MIN( 2, dfft%cpus_per_task )
+       nested_threads = MAX( 1, dfft%cpus_per_task - 1 )
+       do_calc = .false.
+       dfft%uneven  = .false.
+       dfft%num_buff = buffer_size
+  
+       IF( dfft%my_node_rank .ne. 0 .or. dfft%single_node ) THEN
+          nthreads = 1
+  !     CALL omp_set_num_threads( 5 )
+          my_thread_num = 1
+          do_calc = .true.
+       END IF
+       
+       nbnd = ( nbnd_source + 1 ) / 2
+       IF( mod( nbnd_source, 2 ) .ne. 0 ) dfft%uneven = .true.
+  
+       IF( dfft%rem_size .ne. 0 ) THEN
+          dfft%max_nbnd = ( nbnd / batch_size ) + 1
+       ELSE
+          dfft%max_nbnd = ( nbnd / batch_size )
+       END IF
+  
+    END IF
+  
+    batch_size = dfft%batch_size_save
+    sendsize_save = dfft%sendsize
+    next = -1
+    counter = 0
+    finished = .false.
+    last_buffer = 0
+    do_com  = .false.
+    dfft%first_step = .true.
+    finished_all = .false.
+    last_start = .true.
+    last_start_triggered = .false.
+  
+    locks_calc_inv = .true.
+    locks_calc_fw  = .true.
+    locks_com_inv  = .true.
+    locks_com_fw   = .true.
+  
+    locks_calc_1   = .true.
+    DO i = 1, batch_size*buffer_size
+       locks_calc_1( : , i ) = .false.
+    ENDDO
+    locks_calc_2   = .true.
+  
+    dfft%first_loading = .true.
+    dfft%rem = .false.
+  
+    CALL MPI_BARRIER(dfft%comm, ierr)
+  
+    !!! Initializiation finished
+  
+    !$omp parallel IF( nthreads .eq. 2 ) num_threads( nthreads ) &
+    !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, work_buffer, finished ) &
+    !$omp proc_bind( close )
+    !$  IF( nthreads .eq. 2 ) THEN
+    !$     my_thread_num = omp_get_thread_num()
+    !$     IF( my_thread_num .eq. 1 ) THEN
+    !$        CALL omp_set_max_active_levels( 2 )
+    !$        CALL omp_set_num_threads( nested_threads )
+    !$        CALL mkl_set_dynamic(0) 
+    !$        ierr = mkl_set_num_threads_local( nested_threads )
+    !$        do_calc = .true.
+    !$     ELSE
+    !$        do_com  = .true.
+    !$     END IF
+    !$  END IF
+  
+    IF( .not. dfft%overlapp .and. dfft%my_node_rank .eq. 0 .and. .not. dfft%single_node ) do_com = .true.
+   
+    DO WHILE( .not. finished_all )
+  
+       next = mod( next, buffer_size ) + 1
+       IF( next .eq. 0 ) THEN
+          work_buffer = 1
+       ELSE
+          work_buffer = dfft%buffer_sequence( next )
+       END IF
+  
+       IF( dfft%rem_size .ne. 0 .and. ( ( dfft%first_step( work_buffer ) .and. last_buffer .eq. 0 .and. ( counter( 1, 1 ) .eq. dfft%max_nbnd - 1 .or. counter( 2, 1 ) .eq. dfft%max_nbnd - 1 ) ) .or. last_buffer .eq. work_buffer ) ) THEN
+          last_buffer = work_buffer
+          batch_size = dfft%rem_size
+          dfft%sendsize = sendsize_rem
+          IF( do_calc ) dfft%rem = .true.
+       END IF
+    
+       IF( dfft%first_step( work_buffer ) ) THEN
+  
+          ! Last and First Step
+  
+          IF( do_calc ) THEN
+  
+             ! Last Step
+  
+             IF( dfft%first_loading( work_buffer ) ) THEN
+                dfft%first_loading( work_buffer ) = .false.
+             ELSE
+  
+                counter( 1, 3 ) = counter( 1, 3 ) + 1
+  
+                IF( batch_size .ne. dfft%batch_size_save .and. last_start ) THEN
+                   last_start = .false.
+                   last_start_triggered = .true.
+                   batch_size = dfft%batch_size_save
+                END IF
+  
+                CALL fwfft_pwbatch( dfft, 3, batch_size, counter( 1, 3 ), work_buffer, comm_recv, hpsi )
+  
+                IF( last_start_triggered ) batch_size = dfft%rem_size
+  
+                IF( counter( 1, 3 ) .eq. dfft%max_nbnd ) finished_all = .true.
+  
+             END IF
+  
+             ! First Step
+  
+             IF( finished( 1, 1 ) ) THEN
+                CONTINUE
+             ELSE
+  
+                counter( 1, 1 ) = counter( 1, 1 ) + 1
+  
+                CALL invfft_pwbatch( dfft, 1, batch_size, counter( 1, 1 ), work_buffer, psi, comm_send, comm_recv(:,work_buffer) )
+  
+                IF( counter( 1, 1 ) .eq. dfft%max_nbnd ) finished( 1, 1 ) = .true.
+  
+             END IF
+     
+          END IF
+     
+          IF( do_com ) THEN
+     
+             IF( finished( 2, 1 ) ) THEN
+                CONTINUE
+             ELSE
+  
+                counter( 2, 1 ) = counter( 2, 1 ) + 1
+  
+                CALL invfft_pwbatch( dfft, 2, batch_size, counter( 2, 1 ), work_buffer, comm_send, comm_recv )
+  
+                IF( counter( 2, 1 ) .eq. dfft%max_nbnd ) finished( 2, 1 ) = .true.
+  
+             END IF
+     
+          END IF
+  
+          IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr) 
+  
+          dfft%first_step( work_buffer ) = .false.
+  
+       ELSE
+  
+          ! Middle Step
+  
+          IF( do_calc ) THEN
+     
+             IF( finished( 1, 2 ) ) THEN
+                CONTINUE
+             ELSE
+  
+                counter( 1, 2 ) = counter( 1, 2 ) + 1
+  
+                CALL invfft_pwbatch( dfft, 3, batch_size, counter( 1, 2 ), work_buffer, comm_recv, dfft%bench_aux )
+  
+                DO ibatch = 1, batch_size
+                   CALL Apply_V( dfft, dfft%bench_aux(:,ibatch), v )
+                ENDDO
+  
+                CALL fwfft_pwbatch( dfft, 1, batch_size, counter( 1, 2 ), work_buffer, dfft%bench_aux, comm_send, comm_recv(:,work_buffer) )
+  
+                IF( counter( 1, 2 ) .eq. dfft%max_nbnd ) finished( 1, 2 ) = .true.
+  
+             END IF
+  
+          END IF
+  
+          IF( do_com ) THEN
+  
+             IF( finished( 2, 2 ) ) THEN
+                CONTINUE
+             ELSE
+  
+                counter( 2, 2 ) = counter( 2, 2 ) + 1
+  
+                CALL fwfft_pwbatch( dfft, 2, batch_size, counter( 2, 2 ), work_buffer, comm_send, comm_recv )
+  
+                IF( counter( 2, 2 ) .eq. dfft%max_nbnd ) THEN
+                   finished( 2, 2 ) = .true.
+                   IF( .not. do_calc ) THEN
+                      finished_all = .true.
+                   END IF
+                END IF
+  
+             END IF
+     
+          END IF
+  
+          IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr) 
+  
+          dfft%first_step( work_buffer ) = .true.
+  
+       END IF
+  
+       IF( batch_size .ne. dfft%batch_size_save ) THEN
+          batch_size = dfft%batch_size_save
+          dfft%sendsize = sendsize_save
+          IF( do_calc ) dfft%rem = .false.
+       END IF
+   
+  
+    ENDDO 
+  
+    !$  IF( my_thread_num .eq. 1 ) THEN
+    !$     CALL omp_set_max_active_levels( 1 )
+    !$     CALL omp_set_num_threads( dfft%cpus_per_task )
+    !$     CALL mkl_set_dynamic(1) 
+    !$     ierr = mkl_set_num_threads_local( dfft%cpus_per_task )
+    !$  END IF
+    !$omp barrier
+    !$omp end parallel
+  
+  !  CALL clean_up_shared( dfft )
+  !  CALL MapVals_CleanUp( dfft )
+  
+  END SUBROUTINE do_the_vpsi_thing
 
 END MODULE vpsi_utils

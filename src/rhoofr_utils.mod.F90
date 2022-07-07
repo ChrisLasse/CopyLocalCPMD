@@ -66,10 +66,6 @@ MODULE rhoofr_utils
                                              invfftn_batch,&
                                              invfftn_batch_com
   USE fftnew_utils,                    ONLY: setfftn
-  USE fftpw_base,                      ONLY: dfft
-  USE fftpw_overlapp,                  ONLY: Compare_invffts
-  USE fftpw_param,                     ONLY: DP
-  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE geq0mod,                         ONLY: geq0
   USE ions,                            ONLY: ions0,&
                                              ions1
@@ -790,7 +786,6 @@ CONTAINS
     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
     COMPLEX(real_8), POINTER __CONTIGUOUS &
                            , ASYNCHRONOUS    :: wfn_r1(:)
-    COMPLEX(DP)                              :: psi_comp( dfft%nnr, nstate/2 )
     REAL(real_8), POINTER __CONTIGUOUS       :: rhoe_p(:,:,:)
     REAL(real_8), PARAMETER                  :: delta = 1.e-6_real_8, &
                                                 o3 = 0.33333333333333333_real_8
@@ -1013,7 +1008,6 @@ CONTAINS
                 swap=mod(ibatch-start_loop,int_mod)+1
                 IF(rsactive) wfn_r1=>wfn_r(:,ibatch-start_loop)
                 CALL invfftn_batch(wfn_r1,bsize,swap,3,ibatch-start_loop)
-                CALL Compare_invffts( dfft, c0, psi_comp, jgw, nstate )
                 ! Compute the charge density from the wave functions
                 ! in real space
                 ! Decode fft batch, setup (lsd) spin settings                     
