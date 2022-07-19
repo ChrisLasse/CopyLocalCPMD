@@ -2,8 +2,12 @@
 MODULE fftpw_make_maps
 !=----------------------------------------------------------------------=
 
+  USE fft,                            ONLY: wfn_r,&
+                                            fft_batchsize,&
+                                            fft_numbatches
   USE fftpw_base,                     ONLY: dfft
   USE fftpw_param
+  USE rswfmod,                        ONLY: rsactive
   USE fftpw_types,                    ONLY: PW_fft_type_descriptor
   IMPLICIT NONE
 
@@ -20,8 +24,9 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff )
   INTEGER, INTENT(OUT) :: rem_size
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
 
-  INTEGER :: i
+  INTEGER :: i, j, k, l, f
 
+  dfft%rsactive = rsactive
   dfft%nr3px = MAXVAL ( dfft%nr3p )
   dfft%my_nr1p = count ( dfft%ir1w > 0 )
   dfft%small_chunks = dfft%nr3px * MAXVAL( dfft%nsw )
@@ -47,6 +52,20 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff )
   ALLOCATE( dfft%bench_aux( dfft%nnr, batch_size ) )
   ALLOCATE( dfft%bench_aux_rem( dfft%nnr, rem_size ) )
 
+  IF( .not. allocated( dfft%wfn_keep ) .and. dfft%rsactive ) THEN
+     ALLOCATE( dfft%wfn_keep( dfft%nnr, ( nbnd / 2 ) + 1 ) )
+     f = 0
+     DO k = 1, fft_numbatches
+        DO l = 1, fft_batchsize
+           f = f + 1
+           DO i = 1, dfft%nr1
+              DO j = 1, dfft%nr2 * dfft%nr3
+                 dfft%wfn_keep( (i-1)*dfft%nr2*dfft%nr3 + j, f ) = wfn_r( j + (i-1)*fft_batchsize*dfft%nr2*dfft%nr3 + (l-1)*dfft%nr2*dfft%nr3, k )
+              ENDDO
+           ENDDO
+        ENDDO
+     ENDDO
+  END IF
 
 END SUBROUTINE Set_Req_Vals
 
@@ -69,7 +88,7 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size )
   CALL Make_inv_yzCOM_Maps( dfft, batch_size, rem_size )
 
   !FW_Pre_Com
-  ALLOCATE( dfft%map_pcfw( dfft%nproc * dfft%small_chunks ) )
+  ALLOCATE( dfft%map_pcfw( dfft%nproc3 * dfft%small_chunks ) )
   CALL Make_fw_yzCOM_Map( dfft )
 
 END SUBROUTINE Prep_Copy_Maps
@@ -257,7 +276,7 @@ SUBROUTINE Make_inv_yzCOM_Maps( dfft, batch_size, rem_size )
   dfft%zero_acinv_end = dfft%nr2
   first = .true.
   
-  IF( dfft%mype .eq. 0 ) THEN 
+  IF( dfft%mype3 .eq. 0 ) THEN 
      DO j = 1, dfft%my_nr1p
         first = .true.
         DO l = 1, dfft%nr2
@@ -296,7 +315,7 @@ SUBROUTINE Make_fw_yzCOM_Map( dfft )
   dfft%map_pcfw = 0
 
   !$omp parallel private( iproc3, i, it, mc, m1, m2, i1, k )
-  DO iproc3 = 1, dfft%nproc
+  DO iproc3 = 1, dfft%nproc3
      !$omp do
      DO i = 1, dfft%nsw( iproc3 )
         it = ( iproc3 - 1 ) * dfft%small_chunks + dfft%nr3px * (i-1)

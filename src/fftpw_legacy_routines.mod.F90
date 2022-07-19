@@ -155,9 +155,9 @@
    
      !
      if ( abs (isgn) == 1 ) then          ! It's a potential FFT
-        CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc, desc%my_nr2p, desc%nr1p, desc%indp, desc%iplp )
+        CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc2, desc%my_nr2p, desc%nr1p, desc%indp, desc%iplp )
      else if ( abs (isgn) == 2 ) then     ! It's a wavefunction FFT
-        CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc, desc%my_nr2p, desc%nr1w, desc%indw, desc%iplw )
+        CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc2, desc%my_nr2p, desc%nr1w, desc%indw, desc%iplw )
      end if
      !
    
@@ -178,7 +178,7 @@
      Integer, save :: zero_start, zero_end
      Logical :: first
      !
-     me2    = desc%mype + 1
+     me2    = desc%mype2 + 1
      ncpx = MAXVAL(nr1p_) * desc%my_nr3p       ! maximum number of Y columns to be disributed
      ! calculate the message size
      sendsize = ncpx * nr2px       ! dimension of the scattered chunks (safe value)
