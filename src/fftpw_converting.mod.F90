@@ -55,8 +55,50 @@ CONTAINS
     CALL fft_type_init( dfft, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
   
     CALL create_mpi_communicators( dfft )
+
+!    IF( dfft%rsactive ) THEN
+!       DO i = 1, dfft%nr1
+!          DO j = 1, dfft%nr2 * dfft%nr3
+!             
+!          ENDDO
+!       ENDDO
   
   END SUBROUTINE Create_PwFFT_datastructure
 
+  SUBROUTINE ConvertFFTCoeffs( dfft, c0, c0_pw )
+    IMPLICIT NONE
+
+    TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
+    COMPLEX(DP), INTENT(IN) :: c0
+    COMPLEX(DP), INTENT(OUT) :: c0_pw
+    
+    
+    inyh_pw = inyh
+
+    ind = 0
+
+    DO i = 1, dfft%ngw
+       
+       IF( dfft%isind .eq. 0 .or. dfft%isind .gt. dfft%ngw ) CYCLE
+
+       y = position bestimmen anhand von position array (maybe in smap)
+       z = position bestimmen anhand von position array (maybe in smap)
+
+       DO j = 1, dfft%... 506
+       
+          IF( g(2,j) .eq. y .and. g(3,j) .eq. z ) THEN
+          
+             ind = ind + 1
+             g_pw(1,ind) = g(1,j)
+             g_pw(2,ind) = g(2,j)
+             g_pw(3,ind) = g(3,j)
+
+          END IF
+
+       ENDDO
+
+    ENDDO
+
+  END SUBROUTINE ConvertFFTCoeffs
 
 END MODULE fftpw_converting

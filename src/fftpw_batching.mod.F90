@@ -2,10 +2,12 @@
 MODULE fftpw_batching
 !=----------------------------------------------------------------------=
 
+  USE cppt,                                     ONLY: hg
   USE fftpw_legacy_routines,                    ONLY: fft_1D,&
                                                       fft_scatter_xy
   USE fftpw_param
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
+  USE system,                                   ONLY: parm
   USE iso_fortran_env
   IMPLICIT NONE
   PRIVATE
@@ -34,76 +36,96 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany )
 
   INTEGER(INT64) :: time(2)
 
-  dfft%counter = dfft%counter + 1
+ dfft%counter = dfft%counter + 1
 
   CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !----------Prepare_Psi Start---------------------------
 
-  IF( howmany .eq. 2 ) THEN
+  IF( dfft%singl ) THEN
      !$omp parallel do private( i, j, offset )
      DO i = 1, dfft%nsw( dfft%mype+1 )
         offset = (i-1)*dfft%nr3
         !$omp simd
         DO j = 1, dfft%zero_prep_start(i,1)-1
-           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), 2 )
+           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
         ENDDO
         !$omp simd
-        DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
+        DO j = dfft%zero_prep_start(i,1), dfft%zero_prep_end(i,1)
            dfft%aux( offset + j ) = (0.d0, 0.d0)
         ENDDO
         !$omp simd
         DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
-           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), 2 )
-        ENDDO
-     ENDDO
-     !$omp end parallel do
-  
-     !$omp parallel do private( i, j, offset )
-     DO i = 1, dfft%nsw( dfft%mype+1 )
-        offset = (i-1)*dfft%nr3
-        !$omp simd
-        DO j = 1, dfft%zero_prep_start(i,3)-1
-           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), 2 ) )
-        ENDDO
-        !$omp simd
-        DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
-           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), 2 ) )
+           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
         ENDDO
      ENDDO
      !$omp end parallel do
   ELSE
-     !$omp parallel do private( i, j, offset )
-     DO i = 1, dfft%nsw( dfft%mype+1 )
-        offset = (i-1)*dfft%nr3
-        !$omp simd
-        DO j = 1, dfft%zero_prep_start(i,1)-1
-           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
+     IF( howmany .eq. 2 ) THEN
+        !$omp parallel do private( i, j, offset )
+        DO i = 1, dfft%nsw( dfft%mype+1 )
+           offset = (i-1)*dfft%nr3
+           !$omp simd
+           DO j = 1, dfft%zero_prep_start(i,1)-1
+              dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), 2 )
+           ENDDO
+           !$omp simd
+           DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
+              dfft%aux( offset + j ) = (0.d0, 0.d0)
+           ENDDO
+           !$omp simd
+           DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
+              dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), 2 )
+           ENDDO
         ENDDO
-        !$omp simd
-        DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
-           dfft%aux( offset + j ) = (0.d0, 0.d0)
+        !$omp end parallel do
+     
+        !$omp parallel do private( i, j, offset )
+        DO i = 1, dfft%nsw( dfft%mype+1 )
+           offset = (i-1)*dfft%nr3
+           !$omp simd
+           DO j = 1, dfft%zero_prep_start(i,3)-1
+              dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), 2 ) )
+           ENDDO
+           !$omp simd
+           DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
+              dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), 2 ) )
+           ENDDO
         ENDDO
-        !$omp simd
-        DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
-           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
+        !$omp end parallel do
+     ELSE
+        !$omp parallel do private( i, j, offset )
+        DO i = 1, dfft%nsw( dfft%mype+1 )
+           offset = (i-1)*dfft%nr3
+           !$omp simd
+           DO j = 1, dfft%zero_prep_start(i,1)-1
+              dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
+           ENDDO
+           !$omp simd
+           DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
+              dfft%aux( offset + j ) = (0.d0, 0.d0)
+           ENDDO
+           !$omp simd
+           DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
+              dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
+           ENDDO
         ENDDO
-     ENDDO
-     !$omp end parallel do
-  
-     !$omp parallel do private( i, j, offset )
-     DO i = 1, dfft%nsw( dfft%mype+1 )
-        offset = (i-1)*dfft%nr3
-        !$omp simd
-        DO j = 1, dfft%zero_prep_start(i,3)-1
-           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) )
+        !$omp end parallel do
+     
+        !$omp parallel do private( i, j, offset )
+        DO i = 1, dfft%nsw( dfft%mype+1 )
+           offset = (i-1)*dfft%nr3
+           !$omp simd
+           DO j = 1, dfft%zero_prep_start(i,3)-1
+              dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) )
+           ENDDO
+           !$omp simd
+           DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
+              dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) )
+           ENDDO
         ENDDO
-        !$omp simd
-        DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
-           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) )
-        ENDDO
-     ENDDO
-     !$omp end parallel do
+        !$omp end parallel do
+     END IF
   END IF
 
 !----------Prepare_Psi End-----------------------------
@@ -331,7 +353,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, ibatch )
 !------------------------------------------------------
 !------------y-FFT Start-------------------------------
 
-  CALL fft_1D( dfft%aux, dfft%nr1w(dfft%mype+1) * dfft%my_nr3p, dfft%nr2, 2 )
+  CALL fft_1D( dfft%aux, dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p, dfft%nr2, 2 )
 
 !-------------y-FFT End--------------------------------
 !------------------------------------------------------
@@ -360,12 +382,13 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, ibatch )
 
 END SUBROUTINE invfft_after_com
 
-SUBROUTINE Apply_V( dfft, f, v )
+SUBROUTINE Apply_V( dfft, f, v, ibatch ) 
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   COMPLEX(DP), INTENT(INOUT) :: f( : )
   REAL(DP), INTENT(IN) :: v( : )
+  INTEGER, INTENT(IN)  :: ibatch
 
   INTEGER :: j
 
@@ -375,11 +398,19 @@ SUBROUTINE Apply_V( dfft, f, v )
 !------------------------------------------------------
 !-----------Apply V Start------------------------------
 
-  !$omp parallel do private ( j )
-  DO j = 1, dfft%nnr
-     f( j )= f( j ) * v(j)
-  END DO
-  !$omp end parallel do
+  IF( .not. dfft%rsactive ) THEN
+     !$omp parallel do private ( j )
+     DO j = 1, dfft%nnr
+        f( j )= - f( j ) * v(j)
+     END DO
+     !$omp end parallel do
+  ELSE
+     !$omp parallel do private ( j )
+     DO j = 1, dfft%nnr
+        f( j )= dfft%wfn_keep( j, ibatch ) * v(j)
+     END DO
+     !$omp end parallel do
+  END IF
 
 !------------Apply V End-------------------------------
 !------------------------------------------------------
@@ -423,7 +454,7 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
 !------------------------------------------------------
 !------------y-FFT Start-------------------------------
 
-  CALL fft_1D( dfft%aux, dfft%nr1w(dfft%mype+1) * dfft%my_nr3p, dfft%nr2, -2 )
+  CALL fft_1D( dfft%aux, dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p, dfft%nr2, -2 )
 
 !-------------y-FFT End--------------------------------
 !------------------------------------------------------
@@ -536,7 +567,7 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size )
      DO l = 1, dfft%node_task_size
         offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * dfft%big_chunks
         !$omp do
-        DO k = 0, dfft%nsw(dfft%mype+1)-1
+        DO k = 0, dfft%nsw(dfft%mype3+1)-1
            kfrom = offset + dfft%nr3px * k
            kdest = dfft%nr3p_offset( (j-1)*dfft%node_task_size + l ) + dfft%nr3 * k
            !$omp simd
@@ -569,11 +600,12 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size )
 
 END SUBROUTINE fwfft_after_com
 
-SUBROUTINE Accumulate_Psi_overlapp( dfft, hpsi, ibatch, ngms, batch_size, howmany )
+SUBROUTINE Accumulate_Psi_overlapp( dfft, psi, hpsi, ibatch, ngms, batch_size, howmany )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: ibatch, batch_size, ngms, howmany
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  COMPLEX(DP), INTENT(IN) :: psi( ngms, howmany )
   COMPLEX(DP), INTENT(INOUT) :: hpsi( ngms, howmany )
 
   COMPLEX(DP) :: fp, fm
@@ -586,25 +618,36 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, hpsi, ibatch, ngms, batch_size, howman
 !------------------------------------------------------
 !--------Accumulate_Psi Start--------------------------
 
-  IF( howmany .eq. 2 ) THEN
-  
-     !$omp parallel do private( j, fp, fm )
-     DO j = 1, ngms
-        fp = ( dfft%aux( dfft%nl(j) ) + dfft%aux( dfft%nlm(j) ) ) * dfft%tscale_gamma
-        fm = ( dfft%aux( dfft%nl(j) ) - dfft%aux( dfft%nlm(j) ) ) * dfft%tscale_gamma
-        hpsi ( j, 1 ) = hpsi ( j, 1 ) + cmplx(  dble(fp),  aimag(fm), KIND=DP )
-        hpsi ( j, 2 ) = hpsi ( j, 2 ) + cmplx( aimag(fp), - dble(fm), KIND=DP )        
-     END DO
-     !$omp end parallel do
-  
-  ELSE
-  
+  IF( dfft%singl ) THEN
+
      !$omp parallel do private( j )
      DO j = 1, ngms
         hpsi( j, 1 ) = hpsi ( j, 1 ) + dfft%aux( dfft%nl( j ) ) * dfft%tscale
      END DO
      !$omp end parallel do
-    
+
+  ELSE
+     IF( howmany .eq. 2 ) THEN
+     
+        dfft%aux = dfft%aux * (- dfft%tscale )
+        !$omp parallel do private( j, fp, fm )
+        DO j = 1, ngms
+           fp = ( dfft%aux( dfft%nl(j) ) + dfft%aux( dfft%nlm(j) ) )! * dfft%tscale_gamma
+           fm = ( dfft%aux( dfft%nl(j) ) - dfft%aux( dfft%nlm(j) ) )! * dfft%tscale_gamma
+           hpsi ( j, 1 ) = -1 * ((parm%tpiba2*hg(j))*psi( j, 1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
+           hpsi ( j, 2 ) = -1 * ((parm%tpiba2*hg(j))*psi( j, 2 ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
+        END DO
+        !$omp end parallel do
+     
+     ELSE
+     
+        !$omp parallel do private( j )
+        DO j = 1, ngms
+           hpsi( j, 1 ) = hpsi ( j, 1 ) + dfft%aux( dfft%nl( j ) ) * dfft%tscale
+        END DO
+        !$omp end parallel do
+       
+     END IF
   END IF
 
 !---------Accumulate_Psi End---------------------------

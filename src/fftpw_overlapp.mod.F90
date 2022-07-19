@@ -369,9 +369,9 @@ SUBROUTINE Placeholder_Name( dfft, psi, hpsi, v, comm_send, comm_recv, locks_cal
 !                    CALL Accumulate_Psi_overlapp( dfft, hpsi(:,ibatch+((counter(1,3)-1)*batch_size_save)), ibatch, ngms, batch_size, 1 )
 !                 ELSE
                     IF( counter( 1, 3 ) .eq. max_nbnd .and. ibatch .eq. batch_size .and. uneven ) THEN
-                       CALL Accumulate_Psi_overlapp( dfft, hpsi(:,1+((ibatch-1)+((counter(1,3)-1)*batch_size_save))*2), ibatch, ngms, batch_size, 1 )
+!                       CALL Accumulate_Psi_overlapp( dfft, hpsi(:,1+((ibatch-1)+((counter(1,3)-1)*batch_size_save))*2), ibatch, ngms, batch_size, 1 )
                     ELSE
-                       CALL Accumulate_Psi_overlapp( dfft, hpsi(:,1+((ibatch-1)+((counter(1,3)-1)*batch_size_save))*2:2+((ibatch-1)+((counter(1,3)-1)*batch_size_save))*2), ibatch, ngms, batch_size, 2 )
+!                       CALL Accumulate_Psi_overlapp( dfft, hpsi(:,1+((ibatch-1)+((counter(1,3)-1)*batch_size_save))*2:2+((ibatch-1)+((counter(1,3)-1)*batch_size_save))*2), ibatch, ngms, batch_size, 2 )
                     END IF
 !                 END IF
 
@@ -510,7 +510,7 @@ SUBROUTINE Placeholder_Name( dfft, psi, hpsi, v, comm_send, comm_recv, locks_cal
 
               DO ibatch = 1, batch_size
                  CALL invfft_after_com( dfft, dfft%bench_aux(:,ibatch), comm_recv(:,work_buffer), ibatch )
-                 CALL Apply_V( dfft, dfft%bench_aux(:,ibatch), v )
+!                 CALL Apply_V( dfft, dfft%bench_aux(:,ibatch), v )
 
                  !$  locks_calc_2( dfft%my_node_rank+1, ibatch+((counter(1,2)-1)*batch_size_save) ) = .false.
                  !$omp flush( locks_calc_2 )

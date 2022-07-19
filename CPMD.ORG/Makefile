@@ -3078,7 +3078,8 @@ fftmain_utils.mod.o:fftmain_utils.mod.f90 cp_cuda_types.mod \
                 cp_cufft_types.mod cp_cufft_utils.mod cublas_types.mod \
                 cuda_types.mod cuda_utils.mod cufft_types.mod \
                 error_handling.mod fft.mod fft_maxfft.mod fftcu_methods.mod \
-                fftutil_utils.mod fftpw_batching.mod fftpw_param.mod fftpw_types.mod \
+                fftutil_utils.mod fftpw_base.mod fftpw_batching.mod fftpw_make_maps.mod \
+                fftpw_param.mod fftpw_types.mod \
                 kinds.mod machine.mod mltfft_utils.mod \
                 parac.mod system.mod thread_view_types.mod \
                 timer.mod
@@ -3122,7 +3123,8 @@ fftpw_ggen.mod.f90:$(SRCDIR)/fftpw_ggen.mod.F90
 fftpw_ggen.mod.o:fftpw_ggen.mod.f90 fftpw_param.mod fftpw_types.mod
 
 fftpw_make_maps.mod.f90:$(SRCDIR)/fftpw_make_maps.mod.F90
-fftpw_make_maps.mod.o:fftpw_make_maps.mod.f90 fftpw_base.mod fftpw_param.mod fftpw_types.mod
+fftpw_make_maps.mod.o:fftpw_make_maps.mod.f90 fft.mod fftpw_base.mod fftpw_param.mod \
+                rswfmod.mod fftpw_types.mod
 
 fftpw_overlapp.mod.f90:$(SRCDIR)/fftpw_overlapp.mod.F90
 fftpw_overlapp.mod.o::fftpw_overlapp.mod.f90 fftpw_batching.mod fftpw_make_maps.mod \

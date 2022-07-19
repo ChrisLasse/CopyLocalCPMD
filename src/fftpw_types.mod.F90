@@ -37,7 +37,11 @@ MODULE fftpw_types
     INTEGER :: root   = 0 ! root processor
     TYPE(MPI_COMM) :: comm! communicator for the main fft group
     INTEGER :: nproc  = 1 ! number of processor in the main fft group
+    INTEGER :: nproc2  = 1 ! number of processor in the main fft group
+    INTEGER :: nproc3  = 1 ! number of processor in the main fft group
     INTEGER :: mype   = 0 ! my processor id (starting from 0) in the fft main communicator
+    INTEGER :: mype2   = 0 ! my processor id (starting from 0) in the fft main communicator
+    INTEGER :: mype3   = 0 ! my processor id (starting from 0) in the fft main communicator
     REAL(DP):: bg(3,3)
 
     INTEGER, ALLOCATABLE :: iproc(:,:) , iproc2(:), iproc3(:) ! subcommunicators proc mapping (starting from 1)
@@ -119,10 +123,13 @@ MODULE fftpw_types
     INTEGER :: sendsize
     INTEGER :: max_nbnd
     LOGICAL :: uneven = .false.
+    LOGICAL :: rsactive = .false.
+    LOGICAL :: singl = .false.
 
     COMPLEX(DP), ALLOCATABLE :: temp_psic(:,:)
     COMPLEX(DP), ALLOCATABLE :: temp_aux(:,:)
     COMPLEX(DP), ALLOCATABLE :: aux(:)
+    COMPLEX(DP), ALLOCATABLE :: wfn_keep(:,:)
     COMPLEX(DP), ALLOCATABLE :: bench_aux(:,:)
     COMPLEX(DP), ALLOCATABLE :: bench_aux_rem(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_calc_inv(:,:)
@@ -131,6 +138,8 @@ MODULE fftpw_types
     LOGICAL, POINTER, CONTIGUOUS :: locks_com_fw(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_overtake(:,:)
 
+    INTEGER :: ngm_gl
+    INTEGER :: ngm_l
     INTEGER :: cpus_per_task = 1
     INTEGER :: my_node_rank = 0
     INTEGER :: my_inter_node_rank = 0
@@ -240,57 +249,61 @@ CONTAINS
     CALL MPI_COMM_SIZE( comm, nproc, ierr )
 !#endif
     desc%root    = root 
-    desc%mype    = mype 
+    desc%mype     = mype 
+    desc%mype2    = 0 
+    desc%mype3    = mype 
     desc%nproc   = nproc
+    desc%nproc2  = 1
+    desc%nproc3  = nproc
 
-    ALLOCATE ( desc%iproc(desc%nproc,desc%nproc) )
+    ALLOCATE ( desc%iproc(desc%nproc2,desc%nproc3) )
     ALLOCATE ( desc%iproc2(desc%nproc) )
     ALLOCATE ( desc%iproc3(desc%nproc) )
     do iproc = 1, desc%nproc
-       iproc2 = MOD(iproc-1, desc%nproc) + 1 ; iproc3 = (iproc-1)/desc%nproc + 1
+       iproc2 = MOD(iproc-1, desc%nproc2) + 1 ; iproc3 = (iproc-1)/desc%nproc2 + 1
        desc%iproc2(iproc) = iproc2 ; desc%iproc3(iproc) = iproc3
        desc%iproc(iproc2,iproc3) = iproc
     end do
 
 !    CALL realspace_grid_init( desc, at, bg, gcutm, fft_fact )
 
-    ALLOCATE( desc%nr2p ( desc%nproc ) ) ;    desc%nr2p = 0 
-    ALLOCATE( desc%i0r2p( desc%nproc ) ) ;    desc%i0r2p = 0
-    ALLOCATE( desc%nr2p_offset ( desc%nproc ) ) ;    desc%nr2p_offset = 0
-    ALLOCATE( desc%nr3p ( desc%nproc ) ) ;    desc%nr3p = 0 
-    ALLOCATE( desc%i0r3p( desc%nproc ) ) ;    desc%i0r3p = 0
-    ALLOCATE( desc%nr3p_offset ( desc%nproc ) ) ;    desc%nr3p_offset = 0
-    ALLOCATE( desc%nstates ( desc%nproc ) ) ;     desc%nstates = 0 
-    ALLOCATE( desc%nstates_offset ( desc%nproc ) ) ;    desc%nstates_offset = 0
+    ALLOCATE( desc%nr2p ( desc%nproc2 ) ) ;    desc%nr2p = 0 
+    ALLOCATE( desc%i0r2p( desc%nproc2 ) ) ;    desc%i0r2p = 0
+    ALLOCATE( desc%nr2p_offset ( desc%nproc2 ) ) ;    desc%nr2p_offset = 0
+    ALLOCATE( desc%nr3p ( desc%nproc3 ) ) ;    desc%nr3p = 0 
+    ALLOCATE( desc%i0r3p( desc%nproc3 ) ) ;    desc%i0r3p = 0
+    ALLOCATE( desc%nr3p_offset ( desc%nproc3 ) ) ;    desc%nr3p_offset = 0
+    ALLOCATE( desc%nstates ( desc%nproc3 ) ) ;     desc%nstates = 0 
+    ALLOCATE( desc%nstates_offset ( desc%nproc3 ) ) ;    desc%nstates_offset = 0
 
     nx = desc%nr1
     ny = desc%nr2
 
     ALLOCATE( desc%nsp( desc%nproc ) ) ; desc%nsp   = 0
-    ALLOCATE( desc%nsp_offset( desc%nproc, desc%nproc ) ) ; desc%nsp_offset = 0
+    ALLOCATE( desc%nsp_offset( desc%nproc2, desc%nproc3 ) ) ; desc%nsp_offset = 0
     ALLOCATE( desc%nsw( desc%nproc ) ) ; desc%nsw   = 0
-    ALLOCATE( desc%nsw_offset( desc%nproc, desc%nproc ) ) ; desc%nsw_offset = 0
+    ALLOCATE( desc%nsw_offset( desc%nproc2, desc%nproc3 ) ) ; desc%nsw_offset = 0
     ALLOCATE( desc%nsw_tg( desc%nproc ) ) ; desc%nsw_tg   = 0
     ALLOCATE( desc%ngl( desc%nproc ) ) ; desc%ngl   = 0
     ALLOCATE( desc%nwl( desc%nproc ) ) ; desc%nwl   = 0
     ALLOCATE( desc%iss( desc%nproc ) ) ; desc%iss   = 0
     ALLOCATE( desc%isind( nx * ny ) ) ; desc%isind = 0
     ALLOCATE( desc%ismap( nx * ny ) ) ; desc%ismap = 0
-    ALLOCATE( desc%nr1p( desc%nproc ) ) ; desc%nr1p  = 0
-    ALLOCATE( desc%nr1w( desc%nproc ) ) ; desc%nr1w  = 0
+    ALLOCATE( desc%nr1p( desc%nproc2 ) ) ; desc%nr1p  = 0
+    ALLOCATE( desc%nr1w( desc%nproc2 ) ) ; desc%nr1w  = 0
     ALLOCATE( desc%ir1p( desc%nr1 ) ) ; desc%ir1p  = 0
-    ALLOCATE( desc%indp( desc%nr1,desc%nproc ) ) ; desc%indp  = 0
+    ALLOCATE( desc%indp( desc%nr1,desc%nproc2 ) ) ; desc%indp  = 0
     ALLOCATE( desc%ir1w( desc%nr1 ) ) ; desc%ir1w  = 0
     ALLOCATE( desc%ir1w_tg( desc%nr1 ) ) ; desc%ir1w_tg  = 0
-    ALLOCATE( desc%indw( desc%nr1, desc%nproc ) ) ; desc%indw  = 0
+    ALLOCATE( desc%indw( desc%nr1, desc%nproc2 ) ) ; desc%indw  = 0
     ALLOCATE( desc%indw_tg( desc%nr1 ) ) ; desc%indw_tg  = 0
     ALLOCATE( desc%iplp( nx ) ) ; desc%iplp  = 0
     ALLOCATE( desc%iplw( nx ) ) ; desc%iplw  = 0
 
-    ALLOCATE( desc%tg_snd( desc%nproc) ) ; desc%tg_snd = 0
-    ALLOCATE( desc%tg_rcv( desc%nproc) ) ; desc%tg_rcv = 0
-    ALLOCATE( desc%tg_sdsp( desc%nproc) ) ; desc%tg_sdsp = 0
-    ALLOCATE( desc%tg_rdsp( desc%nproc) ) ; desc%tg_rdsp = 0
+    ALLOCATE( desc%tg_snd( desc%nproc2) ) ; desc%tg_snd = 0
+    ALLOCATE( desc%tg_rcv( desc%nproc2) ) ; desc%tg_rcv = 0
+    ALLOCATE( desc%tg_sdsp( desc%nproc2) ) ; desc%tg_sdsp = 0
+    ALLOCATE( desc%tg_rdsp( desc%nproc2) ) ; desc%tg_rdsp = 0
 
   END SUBROUTINE fft_type_allocate
 !
@@ -453,8 +466,8 @@ CONTAINS
     nr3x = desc%nr3
 
     IF( ( size( desc%ngl ) < desc%nproc ) .or.  ( size( desc%iss ) < desc%nproc ) .or. &
-        ( size( desc%nr2p ) < desc%nproc ) .or. ( size( desc%i0r2p ) < desc%nproc ) .or. &
-        ( size( desc%nr3p ) < desc%nproc ) .or. ( size( desc%i0r3p ) < desc%nproc ) ) &
+        ( size( desc%nr2p ) < desc%nproc2 ) .or. ( size( desc%i0r2p ) < desc%nproc2 ) .or. &
+        ( size( desc%nr3p ) < desc%nproc3 ) .or. ( size( desc%i0r3p ) < desc%nproc3 ) ) &
         write(6,*) "Set wrong"
 
     IF( ( size( idx ) < nst ) .or. ( size( in1 ) < nst ) .or. ( size( in2 ) < nst ) ) &
@@ -464,70 +477,70 @@ CONTAINS
         write(6,*) "Set wrong"
 
     !  Set the number of "Y" values for each processor in the nproc2 group
-    np = nr2 / desc%nproc
-    nq = nr2 - np * desc%nproc
-    desc%nr2p(1:desc%nproc) = np    ! assign a base value to all processors of the nproc2 group
+    np = nr2 / desc%nproc2
+    nq = nr2 - np * desc%nproc2
+    desc%nr2p(1:desc%nproc2) = np    ! assign a base value to all processors of the nproc2 group
     DO i =1, nq ! assign an extra unit to the first nq processors of the nproc2 group
        desc%nr2p(i) = np + 1
     ENDDO
     ! set the offset
     desc%nr2p_offset(1) = 0
-    DO i =1, desc%nproc-1
+    DO i =1, desc%nproc2-1
        desc%nr2p_offset(i+1) = desc%nr2p_offset(i) + desc%nr2p(i)
     ENDDO
     !-- my_nr2p is the number of planes per processor of this processor   in the Y group
-    desc%my_nr2p = desc%nr2p( desc%mype + 1 )
+    desc%my_nr2p = desc%nr2p( desc%mype2 + 1 )
 
     !  Find out the index of the starting plane on each proc
     desc%i0r2p = 0
-    DO i = 2, desc%nproc
+    DO i = 2, desc%nproc2
        desc%i0r2p(i) = desc%i0r2p(i-1) + desc%nr2p(i-1)
     ENDDO
 !CLR: Imo, this loop is the exact same as the offset loop... why twice?
     !-- my_i0r2p is the index-offset of the starting plane of this processor  in the Y group
-    desc%my_i0r2p = desc%i0r2p( desc%mype + 1 )
+    desc%my_i0r2p = desc%i0r2p( desc%mype2 + 1 )
 
 !=========================
     !  Set the number of "Z" values for each processor in the nproc3 group
-    np = desc%totst / desc%nproc
-    nq = desc%totst - np * desc%nproc
-    desc%nstates(1:desc%nproc) = np    ! assign a base value to all processors
+    np = desc%totst / desc%nproc3
+    nq = desc%totst - np * desc%nproc3
+    desc%nstates(1:desc%nproc3) = np    ! assign a base value to all processors
     DO i =1, nq ! assign an extra unit to the first nq processors of the nproc3 group
        desc%nstates(i) = np + 1
     END DO
     ! set the offset
     desc%nstates_offset(1) = 0
-    DO i =1, desc%nproc-1
+    DO i =1, desc%nproc3-1
        desc%nstates_offset(i+1) = desc%nstates_offset(i) + desc%nstates(i)
     ENDDO
     !-- my_nr3p is the number of planes per processor of this processor   in the Z group
-    desc%my_nstates = desc%nstates( desc%mype + 1 )
+    desc%my_nstates = desc%nstates( desc%mype3 + 1 )
 !=========================
 
 
     !  Set the number of "Z" values for each processor in the nproc3 group
-    np = nr3 / desc%nproc
-    nq = nr3 - np * desc%nproc
-    desc%nr3p(1:desc%nproc) = np    ! assign a base value to all processors
+    np = nr3 / desc%nproc3
+    nq = nr3 - np * desc%nproc3
+    desc%nr3p(1:desc%nproc3) = np    ! assign a base value to all processors
     DO i =1, nq ! assign an extra unit to the first nq processors of the nproc3 group
        desc%nr3p(i) = np + 1
     END DO
     ! set the offset
     desc%nr3p_offset(1) = 0
-    DO i =1, desc%nproc-1
+    DO i =1, desc%nproc3-1
        desc%nr3p_offset(i+1) = desc%nr3p_offset(i) + desc%nr3p(i)
     ENDDO
     !-- my_nr3p is the number of planes per processor of this processor   in the Z group
-    desc%my_nr3p = desc%nr3p( desc%mype + 1 )
+    desc%my_nr3p = desc%nr3p( desc%mype3 + 1 )
 
     !  Find out the index of the starting plane on each proc
     desc%i0r3p  = 0
-    DO i = 2, desc%nproc
+    DO i = 2, desc%nproc3
        desc%i0r3p( i )  = desc%i0r3p( i-1 ) + desc%nr3p ( i-1 )
     ENDDO
 !CLR: Same as above... why twice?
     !-- my_i0r3p is the index-offset of the starting plane of this processor  in the Z group
-    desc%my_i0r3p = desc%i0r3p( desc%mype + 1 )
+    desc%my_i0r3p = desc%i0r3p( desc%mype3 + 1 )
 
     ! dimension of the xy plane. see ncplane
 
@@ -623,7 +636,7 @@ CONTAINS
           desc%indw_tg(nr1w_tg) = i1 !CLR: map row-number-in-total <-> row-number-in-x-active-space
        end if
 ! 
-      if (desc%iplw(i1) == desc%mype +1) desc%ir1w(i1) = desc%nr1w(desc%iplw(i1))
+      if (desc%iplw(i1) == desc%mype2 +1) desc%ir1w(i1) = desc%nr1w(desc%iplw(i1))
 !CLR: If its mine, set %ir1w of that row to the count number of this row in
 !proc2 -> proc specific
     end do
@@ -642,7 +655,7 @@ CONTAINS
           desc%nr1p(desc%iplp(i1)) =  desc%nr1p(desc%iplp(i1)) + 1 !CLR: -> increment the number of xrows owned by this proc2
           desc%indp(desc%nr1p(desc%iplp(i1)),desc%iplp(i1)) = i1 !CLR: -> store the row numberin a (max-numb-of-rows x proc2 numb) - Matrix
        end if
-       if (desc%iplp(i1) == desc%mype+1) desc%ir1p(i1) = desc%nr1p(desc%iplp(i1))
+       if (desc%iplp(i1) == desc%mype2+1) desc%ir1p(i1) = desc%nr1p(desc%iplp(i1))
 !CLR: If its mine, set %ir1p of that row to the count number of this row in
 !proc2 -> proc specific
     end do
@@ -700,9 +713,9 @@ CONTAINS
     ENDIF
 
     desc%nsw( 1:desc%nproc ) = nsp( 1:desc%nproc )  ! -- number of wave sticks per processor
-    DO ip=1, desc%nproc
+    DO ip=1, desc%nproc3
        desc%nsw_offset(1,ip) = 0
-       DO i=1, desc%nproc-1
+       DO i=1, desc%nproc2-1
           desc%nsw_offset(i+1,ip) = desc%nsw_offset(i,ip) + desc%nsw(desc%iproc(i,ip))
        ENDDO
     ENDDO
@@ -710,9 +723,9 @@ CONTAINS
 
     ! -- number of wave sticks per processor for task group ffts
     desc%nsw_tg( 1:desc%nproc ) = 0
-    do ip =1, desc%nproc
-       nsw_tg = sum(desc%nsw(desc%iproc(1:desc%nproc,ip))) !CLR: adds up all sticks for one com-group
-       desc%nsw_tg(desc%iproc(1:desc%nproc,ip)) = nsw_tg
+    do ip =1, desc%nproc3
+       nsw_tg = sum(desc%nsw(desc%iproc(1:desc%nproc2,ip))) !CLR: adds up all sticks for one com-group
+       desc%nsw_tg(desc%iproc(1:desc%nproc2,ip)) = nsw_tg
     end do
 
     !  then add pseudopotential stick
@@ -737,9 +750,9 @@ CONTAINS
     ENDIF
 
     desc%nsp( 1:desc%nproc ) = nsp( 1:desc%nproc ) ! -- number of rho sticks per processor
-    DO ip=1, desc%nproc
+    DO ip=1, desc%nproc3
        desc%nsp_offset(1,ip) = 0
-       DO i=1, desc%nproc-1
+       DO i=1, desc%nproc2-1
           desc%nsp_offset(i+1,ip) = desc%nsp_offset(i,ip) + desc%nsp(desc%iproc(i,ip))
        ENDDO
     ENDDO
@@ -820,25 +833,25 @@ CONTAINS
 
     !  Finally set fft local workspace dimension
 
-    nr1px = MAXVAL( desc%nr1p( 1:desc%nproc ) )  ! maximum number of X values per processor in the nproc2 group
+    nr1px = MAXVAL( desc%nr1p( 1:desc%nproc2 ) )  ! maximum number of X values per processor in the nproc2 group
     !CLR: max(number of assigned x-rows for that proc2-group... only important when thinking about G-space sticks)
-    nr2px = MAXVAL( desc%nr2p( 1:desc%nproc ) )  ! maximum number of planes per processor in the nproc2 group
+    nr2px = MAXVAL( desc%nr2p( 1:desc%nproc2 ) )  ! maximum number of planes per processor in the nproc2 group
     !CLR: max(number of assigned x-rows for that proc2-group... only important when thinking about R-space quadrants)
-    nr3px = MAXVAL( desc%nr3p( 1:desc%nproc ) )  ! maximum number of planes per processor in the nproc3 group
+    nr3px = MAXVAL( desc%nr3p( 1:desc%nproc3 ) )  ! maximum number of planes per processor in the nproc3 group
     !CLR: max(number of z-planes for each com-group)
     ncpx  = MAXVAL( ncp( 1:desc%nproc ) ) ! maximum number of columns per processor (use potential sticks to be safe)
     !CLR: max(number of assigned sticks for each processor)
 
     IF ( desc%nproc == 1 ) THEN
       desc%nnr  = nr1x * nr2x * nr3x
-      desc%nnr_tg = desc%nnr * desc%nproc
+      desc%nnr_tg = desc%nnr * desc%nproc2
     ELSE
       desc%nnr  = max( ncpx * nr3x, nr1x * nr2px * nr3px )  ! this is required to contain the local data in R and G space
       !CLR: max(filled G-space sticks per proc vs filled R-space quadrants per proc)
-      desc%nnr  = max( desc%nnr, ncpx*nr3px*desc%nproc, nr1px*nr2px*nr3px*desc%nproc)  ! this is required to use ALLTOALL instead of ALLTOALLV
+      desc%nnr  = max( desc%nnr, ncpx*nr3px*desc%nproc3, nr1px*nr2px*nr3px*desc%nproc2)  ! this is required to use ALLTOALL instead of ALLTOALLV
       !CLR: TO-DO -> come back when looking at G-R-Transformations
       desc%nnr  = max( 1, desc%nnr ) ! ensure that desc%nrr > 0 ( for extreme parallelism )
-      desc%nnr_tg = desc%nnr * desc%nproc
+      desc%nnr_tg = desc%nnr * desc%nproc2
       !CLR: com-group wide memory (?)
     ENDIF
 
@@ -856,12 +869,12 @@ CONTAINS
     IF( desc%nr3 * desc%nsw( desc%mype + 1 ) > desc%nnr ) &
           write(6,*) "Set wrong"
     desc%tg_snd(1)  = desc%nr3 * desc%nsw( desc%mype + 1 )
-    desc%tg_rcv(1)  = desc%nr3 * desc%nsw( desc%iproc(1,desc%mype+1) )
+    desc%tg_rcv(1)  = desc%nr3 * desc%nsw( desc%iproc(1,desc%mype3+1) )
     desc%tg_sdsp(1) = 0
     desc%tg_rdsp(1) = 0
-    DO i = 2, desc%nproc
+    DO i = 2, desc%nproc2
        desc%tg_snd(i)  = desc%nr3 * desc%nsw( desc%mype + 1 )
-       desc%tg_rcv(i)  = desc%nr3 * desc%nsw( desc%iproc(i,desc%mype+1) )
+       desc%tg_rcv(i)  = desc%nr3 * desc%nsw( desc%iproc(i,desc%mype3+1) )
        desc%tg_sdsp(i) = desc%tg_sdsp(i-1) + desc%nnr
        desc%tg_rdsp(i) = desc%tg_rdsp(i-1) + desc%tg_rcv(i-1)
     ENDDO
@@ -920,7 +933,7 @@ CONTAINS
      dfft%lpara = lpara  !  this descriptor can be either a descriptor for a
                          !  parallel FFT or a serial FFT even in parallel build
 
-     CALL sticks_map_allocate( smap, dfft%lpara, dfft%nproc, &
+     CALL sticks_map_allocate( smap, dfft%lpara, dfft%nproc2, &
           dfft%iproc, dfft%iproc2, dfft%nr1, dfft%nr2, dfft%nr3, bg, dfft%comm )
 
      ALLOCATE( stw ( smap%lb(1):smap%ub(1), smap%lb(2):smap%ub(2) ) )

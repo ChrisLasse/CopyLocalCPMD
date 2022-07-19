@@ -1049,7 +1049,6 @@ CONTAINS
     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
 
     COMPLEX(real_8)                          :: fm, fp, psii, psin
-    COMPLEX(DP)                              :: psi_comp( dfft%nnr, nstate/2 )
     COMPLEX(real_8), POINTER __CONTIGUOUS &
                            , ASYNCHRONOUS    :: wfn_r1(:)
     INTEGER :: i, iclpot = 0, id, ierr, ig, &
@@ -1065,7 +1064,7 @@ CONTAINS
     REAL(real_8), POINTER __CONTIGUOUS       :: VPOTX(:),vpotdg(:,:,:),extf_p(:,:)
     INTEGER, ALLOCATABLE                     :: lspin(:,:)
  
-    INTEGER                                  :: rem
+    INTEGER                                  :: rem, i1, j1
     ! ==--------------------------------------------------------------==
 
     IF(cntl%fft_tune_batchsize) THEN
@@ -1797,23 +1796,23 @@ CONTAINS
     INTEGER, INTENT(IN)    :: ngms, nbnd_source
     REAL(DP), INTENT(IN) :: v(dfft%nnr)
   
-    LOGICAL, SAVE :: first = .true.
-  
+    LOGICAL, SAVE :: do_calc = .false.
+    LOGICAL, SAVE :: do_com = .false.
     INTEGER, SAVE :: sendsize_rem, nthreads, nested_threads, nbnd, my_thread_num
-    INTEGER :: i, j, iter, ierr, buffer_size, batch_size
+    INTEGER :: i, j, iter, ierr, buffer_size, batch_size, ng
   
     INTEGER :: counter( 2 , 3)
     LOGICAL :: finished( 2 , 3 )
     INTEGER :: sendsize_save, next, last_buffer, ibatch, work_buffer
-    LOGICAL :: do_calc, do_com, finished_all, last_start, last_start_triggered
+    LOGICAL :: finished_all, last_start, last_start_triggered
   
   !  buffer_size = 3
     buffer_size = 1
     batch_size  = 1
   
-    IF( first ) THEN
+    IF( .not. allocated( dfft%aux ) ) THEN
   
-       first = .false.
+       dfft%use_maps = .true.
        dfft%ngms = ngms
        CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size )
        CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size )
@@ -1877,10 +1876,16 @@ CONTAINS
     locks_com_fw   = .true.
   
     locks_calc_1   = .true.
-    DO i = 1, batch_size*buffer_size
-       locks_calc_1( : , i ) = .false.
-    ENDDO
     locks_calc_2   = .true.
+    IF( .not. dfft%rsactive ) THEN
+       DO i = 1, batch_size*buffer_size
+          locks_calc_1( : , i ) = .false.
+       ENDDO
+    ELSE
+       DO i = 1, batch_size*buffer_size
+          locks_calc_2( : , i ) = .false.
+       ENDDO
+    END IF
   
     dfft%first_loading = .true.
     dfft%rem = .false.
@@ -1943,7 +1948,7 @@ CONTAINS
                    batch_size = dfft%batch_size_save
                 END IF
   
-                CALL fwfft_pwbatch( dfft, 3, batch_size, counter( 1, 3 ), work_buffer, comm_recv, hpsi )
+                CALL fwfft_pwbatch( dfft, 3, batch_size, counter( 1, 3 ), work_buffer, psi, hpsi, comm_recv(:,work_buffer) )
   
                 IF( last_start_triggered ) batch_size = dfft%rem_size
   
@@ -1953,12 +1958,12 @@ CONTAINS
   
              ! First Step
   
-             IF( finished( 1, 1 ) ) THEN
+             IF( finished( 1, 1 ) .or. dfft%rsactive ) THEN
                 CONTINUE
              ELSE
   
                 counter( 1, 1 ) = counter( 1, 1 ) + 1
-  
+
                 CALL invfft_pwbatch( dfft, 1, batch_size, counter( 1, 1 ), work_buffer, psi, comm_send, comm_recv(:,work_buffer) )
   
                 IF( counter( 1, 1 ) .eq. dfft%max_nbnd ) finished( 1, 1 ) = .true.
@@ -1969,7 +1974,7 @@ CONTAINS
      
           IF( do_com ) THEN
      
-             IF( finished( 2, 1 ) ) THEN
+             IF( finished( 2, 1 ) .or. dfft%rsactive) THEN
                 CONTINUE
              ELSE
   
@@ -1998,11 +2003,13 @@ CONTAINS
              ELSE
   
                 counter( 1, 2 ) = counter( 1, 2 ) + 1
-  
-                CALL invfft_pwbatch( dfft, 3, batch_size, counter( 1, 2 ), work_buffer, comm_recv, dfft%bench_aux )
+
+                IF( .not. dfft%rsactive ) THEN
+                   CALL invfft_pwbatch( dfft, 3, batch_size, counter( 1, 2 ), work_buffer, comm_recv, dfft%bench_aux )
+                END IF
   
                 DO ibatch = 1, batch_size
-                   CALL Apply_V( dfft, dfft%bench_aux(:,ibatch), v )
+                   CALL Apply_V( dfft, dfft%bench_aux(:,ibatch), v, ibatch )
                 ENDDO
   
                 CALL fwfft_pwbatch( dfft, 1, batch_size, counter( 1, 2 ), work_buffer, dfft%bench_aux, comm_send, comm_recv(:,work_buffer) )

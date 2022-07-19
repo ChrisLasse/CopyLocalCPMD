@@ -116,7 +116,7 @@ CONTAINS
 
     COMPLEX(real_8),INTENT(IN), TARGET&
                                __CONTIGUOUS  :: c0(:,:,:)
-    COMPLEX(real_8),INTENT(OUT) __CONTIGUOUS :: c2(:,:)
+    COMPLEX(real_8),INTENT(OUT), TARGET __CONTIGUOUS :: c2(:,:)
     REAL(real_8),INTENT(IN) __CONTIGUOUS     :: tau0(:,:,:)
     REAL(real_8),INTENT(OUT) __CONTIGUOUS    :: fion(:,:,:), &
                                                 rhoe(:,:)
@@ -135,7 +135,7 @@ CONTAINS
     COMPLEX(real_8), ALLOCATABLE, TARGET     :: auxc(:)
 #endif
     COMPLEX(real_8), EXTERNAL                :: zdotc
-    COMPLEX(real_8), POINTER __CONTIGUOUS    :: cgam(:), c0_ptr(:,:,:)
+    COMPLEX(real_8), POINTER __CONTIGUOUS    :: cgam(:), c0_ptr(:,:,:), c0_ptr2(:,:)
     INTEGER :: first_g, i, ierr, ik, ikind, il_auxc, il_fsc,  &
       il_psiab, il_scrdip, ipp, isub, isub2, isub3, j, jj, last_g,  &
       naa, ngw_l, nstx, NSTX_grp, is
