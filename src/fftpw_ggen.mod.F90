@@ -18,7 +18,7 @@ MODULE fftpw_ggen
    PRIVATE
    SAVE
 
-   PUBLIC :: ggen_pw
+   PUBLIC :: ggen_pw, fft_set_nl
 
 !=----------------------------------------------------------------------=
 CONTAINS

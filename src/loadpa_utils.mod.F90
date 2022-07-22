@@ -8,8 +8,10 @@ MODULE loadpa_utils
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
   USE fftpw_base,                      ONLY: dfft
-  USE fftpw_converting,                ONLY: Create_PwFFT_datastructure
-  USE fftpw_ggen,                      ONLY: ggen_pw
+  USE fftpw_converting,                ONLY: Create_PwFFT_datastructure,&
+                                             ConvertFFT_array
+  USE fftpw_ggen,                      ONLY: ggen_pw,&
+                                             fft_set_nl
   USE fftpw_param,                     ONLY: DP
   USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE geq0mod,                         ONLY: geq0
@@ -68,9 +70,10 @@ CONTAINS
     REAL(real_8)                             :: g2, sign, t
 
     INTEGER :: win
-    REAL(DP), ALLOCATABLE :: g_pw(:,:), g_cpmd(:,:), gg_pw(:)
-    INTEGER, ALLOCATABLE  :: mill_pw(:,:), ig_l2g_pw(:)
-    INTEGER :: gstart
+    REAL(DP), ALLOCATABLE :: g_pw(:,:), g_pw3(:,:)
+    REAL(DP), ALLOCATABLE :: g_pw_all(:,:)
+    INTEGER, ALLOCATABLE  :: mill_pw(:,:), ig_l2g_pw(:), g_pw2(:,:)
+    INTEGER :: gstart, offset, offset2
 ! ==--------------------------------------------------------------==
 ! ==  DISTRIBUTION OF PARALLEL WORK                               ==
 ! ==--------------------------------------------------------------==
@@ -250,7 +253,13 @@ CONTAINS
     ALLOCATE(g_pw(3,ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(g_cpmd(3,ncpw%nhg),STAT=ierr)
+    ALLOCATE(g_pw2(3,ncpw%nhg),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(g_pw3(3,ncpw%nhg),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(dfft%g_cpmd(3,ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
     ALLOCATE(mapgp(ncpw%nhg),STAT=ierr)
@@ -258,7 +267,7 @@ CONTAINS
          __LINE__,__FILE__)
     CALL zeroing(hg)!,nhg)
     CALL zeroing(inyh)!,3*nhg)
-    CALL zeroing(g_cpmd)!,3*nhg)
+    CALL zeroing(dfft%g_cpmd)!,3*nhg)
     CALL zeroing(mapgp)!,nhg)
     ! ==--------------------------------------------------------------==
     ! SYSTEM PARAMETER PER CPU
@@ -401,7 +410,7 @@ CONTAINS
     ! SORTING OF G-VECTORS
     ! ==--------------------------------------------------------------==
     CALL gsort(hg,inyh,ncpw%nhg)
-    g_cpmd = inyh - 17
+    dfft%g_cpmd = inyh - 17
     DO ig=1,ncpw%nhg
        mapgp(ig)=ig
     ENDDO
@@ -433,23 +442,59 @@ CONTAINS
     ! ==--------------------------------------------------------------==
 
     ALLOCATE(g_pw(3,ncpw%nhg),STAT=ierr)
-    ALLOCATE(gg_pw(ncpw%nhg),STAT=ierr)
+    ALLOCATE(dfft%gg_pw(ncpw%nhg),STAT=ierr)
     ALLOCATE(mill_pw(3,ncpw%nhg),STAT=ierr)
     ALLOCATE(ig_l2g_pw(ncpw%nhg),STAT=ierr)
     CALL zeroing(g_pw)
-    CALL zeroing(gg_pw)
+    CALL zeroing(dfft%gg_pw)
     CALL zeroing(mill_pw)
     CALL zeroing(ig_l2g_pw)
 
     CALL Create_PwFFT_datastructure( dfft )
 
     dfft%ngm_l  = ( dfft%ngl( dfft%mype + 1 ) + 1 ) / 2
-!    dfft%ngm_gl = dfft%ngm_l
-    CALL mp_sum( dfft%ngm_l, dfft%ngm_gl, dfft%comm )
+
+    ALLOCATE( dfft%ngm_all( dfft%nproc ) )
+    CALL zeroing( dfft%ngm_all )
+    dfft%ngm_all( dfft%mype + 1 ) = dfft%ngm_l
+    CALL mp_sum( dfft%ngm_all, dfft%nproc, dfft%comm )
+
+    dfft%ngm_gl = SUM( dfft%ngm_all )
+    dfft%ngm_max = MAXVAL( dfft%ngm_all )
     
     CALL ggen_pw( dfft, dfft%bg, dfft%bg, gvec_com%gcut, dfft%ngm_gl, dfft%ngm_l, & 
-                  g_pw, gg_pw, mill_pw, ig_l2g_pw, gstart )
+                  g_pw, dfft%gg_pw, mill_pw, ig_l2g_pw, gstart )
 
+!    g_pw2 = NINT( g_pw )
+!
+!    CALL gsort(gg_pw,g_pw2,dfft%ngm_l)
+!
+!    g_pw3 = g_pw2
+!
+!    CALL fft_set_nl( dfft, dfft%bg, g_cpmd )
+
+    ALLOCATE( dfft%ngw_all( dfft%nproc ) )
+    CALL zeroing( dfft%ngw_all )
+    dfft%ngw_all( dfft%mype + 1 ) = dfft%ngw
+    CALL mp_sum( dfft%ngw_all, dfft%nproc, dfft%comm )
+    dfft%ngw_total = SUM( dfft%ngw_all )
+    dfft%ngw_max   = MAXVAL( dfft%ngw_all )
+
+    ALLOCATE( g_pw_all( 3, dfft%ngw_total ) )
+    CALL zeroing( g_pw_all )
+    offset  = SUM( dfft%ngw_all( 1:dfft%mype ) )
+    offset2 = SUM( dfft%ngw_all( 1:dfft%mype+1 ) )
+    DO i = 1, dfft%ngw
+       g_pw_all( 1:3, i + offset ) = NINT(g_pw( 1:3, i ))
+    ENDDO
+    CALL mp_sum( g_pw_all, dfft%ngw_total*3, dfft%comm )
+
+    ALLOCATE( dfft%conv_inv( dfft%ngw_total ) )
+    ALLOCATE( dfft%conv_fw(  dfft%ngw_total ) )
+    CALL zeroing( dfft%conv_inv )
+    CALL zeroing( dfft%conv_fw  )
+
+    CALL ConvertFFT_array( dfft, g_pw_all, dfft%g_cpmd, ncpw%ngw ) 
 
     RETURN
   END SUBROUTINE loadpa

@@ -7585,7 +7585,7 @@ vpsi_utils.mod.o:vpsi_utils.mod.f90 cdftmod.mod cnst.mod cp_cuda_types.mod \
                 cuda_types.mod cuda_utils.mod cuuser_utils.mod \
                 dg.mod efld.mod error_handling.mod fft.mod \
                 fftmain_utils.mod fftnew_utils.mod fftpw_base.mod fftpw_batching.mod\
-                fftpw_make_maps.mod fftpw_param.mod fftpw_types.mod \
+                fftpw_converting.mod fftpw_make_maps.mod fftpw_param.mod fftpw_types.mod \
                 geq0mod.mod \
                 kinds.mod kpclean_utils.mod kpnt.mod kpts.mod \
                 mp_interface.mod parac.mod part_1d.mod prcp.mod \

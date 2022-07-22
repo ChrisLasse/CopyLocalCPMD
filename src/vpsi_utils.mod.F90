@@ -74,6 +74,8 @@ MODULE vpsi_utils
   USE fftnew_utils,                    ONLY: setfftn
   USE fftpw_base,                      ONLY: dfft
   USE fftpw_batching,                  ONLY: Apply_v
+  USE fftpw_converting,                ONLY: ConvertFFT_Coeffs,&
+                                             ConvertFFT_v
   USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
                                              Set_Req_Vals 
   USE fftpw_param,                     ONLY: DP
@@ -1811,18 +1813,22 @@ CONTAINS
     !$omp end parallel
   END SUBROUTINE calc_c2
 
-  SUBROUTINE do_the_vpsi_thing( psi, hpsi, v, ngms, nbnd_source )
+  SUBROUTINE do_the_vpsi_thing( c0, c2, v_cpmd, ngms_source, nbnd_source )
   
     IMPLICIT NONE
-    COMPLEX(DP), INTENT(IN)  :: psi (ngms, nbnd_source)
-    COMPLEX(DP), INTENT(INOUT) :: hpsi(ngms, nbnd_source)
-    INTEGER, INTENT(IN)    :: ngms, nbnd_source
-    REAL(DP), INTENT(IN) :: v(dfft%nnr)
+    COMPLEX(DP), INTENT(IN)  :: c0(ngms_source, nbnd_source)
+    COMPLEX(DP), INTENT(INOUT) :: c2(ngms_source, nbnd_source)
+    INTEGER, INTENT(IN)    :: ngms_source, nbnd_source
+    REAL(DP), INTENT(IN) :: v_cpmd(dfft%nnr)
   
+    COMPLEX(DP), ALLOCATABLE, SAVE :: psi (:,:)
+    COMPLEX(DP), ALLOCATABLE, SAVE :: hpsi(:,:)
+    REAL(DP), ALLOCATABLE, SAVE :: v(:)
+
     LOGICAL, SAVE :: do_calc = .false.
     LOGICAL, SAVE :: do_com = .false.
     INTEGER, SAVE :: sendsize_rem, nthreads, nested_threads, nbnd, my_thread_num
-    INTEGER :: i, j, iter, ierr, buffer_size, batch_size, ng
+    INTEGER :: i, j, iter, ierr, buffer_size, batch_size, ng, ngms
   
     INTEGER :: counter( 2 , 3)
     LOGICAL :: finished( 2 , 3 )
@@ -1832,9 +1838,13 @@ CONTAINS
   !  buffer_size = 3
     buffer_size = 1
     batch_size  = 1
-  
+    ngms = dfft%ngw
+
     IF( .not. allocated( dfft%aux ) ) THEN
-  
+ 
+       ALLOCATE( psi ( ngms, nbnd_source ) ) 
+       ALLOCATE( hpsi( ngms, nbnd_source ) ) 
+       ALLOCATE( v( dfft%nnr ) ) 
        dfft%use_maps = .true.
        dfft%ngms = ngms
        CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size )
@@ -1880,6 +1890,11 @@ CONTAINS
        END IF
   
     END IF
+
+    DO i = 1, nbnd_source
+       CALL ConvertFFT_Coeffs( dfft, -1, c0(:,i), psi(:,i), ncpw%ngw ) 
+    ENDDO
+    CALL ConvertFFT_v( dfft, v_cpmd, v )
   
     batch_size = dfft%batch_size_save
     sendsize_save = dfft%sendsize
@@ -2090,6 +2105,10 @@ CONTAINS
   
   !  CALL clean_up_shared( dfft )
   !  CALL MapVals_CleanUp( dfft )
+
+    DO i = 1, nbnd_source
+       CALL ConvertFFT_Coeffs( dfft, 1, hpsi(:,i), c2(:,i), ncpw%ngw ) 
+    ENDDO
   
   END SUBROUTINE do_the_vpsi_thing
 

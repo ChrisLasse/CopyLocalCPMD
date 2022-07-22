@@ -26,6 +26,9 @@ MODULE fftprp_utils
   USE fft_maxfft,                      ONLY: maxfft
   USE fftnew_utils,                    ONLY: addfftnset,&
                                              setfftn
+  USE fftpw_base,                      ONLY: dfft
+  USE fftpw_converting,                ONLY: Create_PwFFT_datastructure
+  USE fftpw_ggen,                      ONLY: fft_set_nl
   USE isos,                            ONLY: isos1
   USE kinds,                           ONLY: real_8
   USE kpts,                            ONLY: tkpts
@@ -241,6 +244,10 @@ CONTAINS
           ENDIF
        ENDDO
     ENDDO
+!
+!    CALL Create_PwFFT_datastructure( dfft )
+!    CALL fft_set_nl( dfft, dfft%bg, dfft%g_cpmd )
+!
     nhray=img
     ! SCATTER ARRAY FOR FFT ALONG X
     ALLOCATE(ms(nhrm,2),STAT=ierr)
@@ -360,9 +367,9 @@ CONTAINS
     CALL zeroing(yf)!,SIZE(yf))
 #endif
     !
-    DEALLOCATE(mg,STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
-         __LINE__,__FILE__)
+!    DEALLOCATE(mg,STAT=ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+!         __LINE__,__FILE__)
     DEALLOCATE(mz,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
          __LINE__,__FILE__)

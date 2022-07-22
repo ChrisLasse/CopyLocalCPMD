@@ -401,7 +401,7 @@ SUBROUTINE Apply_V( dfft, f, v, ibatch )
   IF( .not. dfft%rsactive ) THEN
      !$omp parallel do private ( j )
      DO j = 1, dfft%nnr
-        f( j )= - f( j ) * v(j)
+        f( j )= - f( j ) * v( j )
      END DO
      !$omp end parallel do
   ELSE
@@ -630,12 +630,15 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, psi, hpsi, ibatch, ngms, batch_size, h
      IF( howmany .eq. 2 ) THEN
      
         dfft%aux = dfft%aux * (- dfft%tscale )
+!        dfft%aux = dfft%aux *  dfft%tscale_gamma
         !$omp parallel do private( j, fp, fm )
         DO j = 1, ngms
-           fp = ( dfft%aux( dfft%nl(j) ) + dfft%aux( dfft%nlm(j) ) )! * dfft%tscale_gamma
-           fm = ( dfft%aux( dfft%nl(j) ) - dfft%aux( dfft%nlm(j) ) )! * dfft%tscale_gamma
-           hpsi ( j, 1 ) = -1 * ((parm%tpiba2*hg(j))*psi( j, 1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
-           hpsi ( j, 2 ) = -1 * ((parm%tpiba2*hg(j))*psi( j, 2 ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
+           fp = dfft%aux( dfft%nl(j) ) + dfft%aux( dfft%nlm(j) )
+           fm = dfft%aux( dfft%nl(j) ) - dfft%aux( dfft%nlm(j) )
+           hpsi ( j, 1 ) = -1 * ((parm%tpiba2*dfft%gg_pw(j))*psi( j, 1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
+           hpsi ( j, 2 ) = -1 * ((parm%tpiba2*dfft%gg_pw(j))*psi( j, 2 ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
+!           hpsi ( j, 1 ) =  cmplx(  dble(fp) , aimag(fm), KIND=DP )
+!           hpsi ( j, 2 ) =  cmplx(  aimag(fp), -dble(fm), KIND=DP )
         END DO
         !$omp end parallel do
      
