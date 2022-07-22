@@ -138,7 +138,20 @@ MODULE fftpw_types
     LOGICAL, POINTER, CONTIGUOUS :: locks_com_fw(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_overtake(:,:)
 
+    REAL(DP), ALLOCATABLE :: gg_pw (:)
+    REAL(DP), ALLOCATABLE:: g_cpmd(:,:)
+    INTEGER, ALLOCATABLE :: cpmd_mg(:,:)
+    INTEGER, ALLOCATABLE :: conv_inv(:)
+    INTEGER, ALLOCATABLE :: conv_fw (:)
+    INTEGER, ALLOCATABLE :: nnr_all (:)
+    INTEGER :: nnr_offset
+    INTEGER :: nnr_total
     INTEGER :: ngm_gl
+    INTEGER :: ngm_max
+    INTEGER, ALLOCATABLE :: ngm_all(:)
+    INTEGER :: ngw_total
+    INTEGER :: ngw_max
+    INTEGER, ALLOCATABLE :: ngw_all(:)
     INTEGER :: ngm_l
     INTEGER :: cpus_per_task = 1
     INTEGER :: my_node_rank = 0

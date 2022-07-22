@@ -566,6 +566,13 @@ CONTAINS
 !
    SUBROUTINE get_sticks( smap, gcut, nstp, sstp, st, nst, ng )
 
+      USE fftpw_base,                           ONLY: dfft
+      USE fft,                                  ONLY: mg
+      USE mp_interface,                         ONLY: mp_sum
+      USE system,                               ONLY: parap,&
+                                                      spar
+
+
       IMPLICIT NONE
 
       TYPE( sticks_map ), INTENT(INOUT) :: smap
@@ -581,6 +588,10 @@ CONTAINS
 
       INTEGER, ALLOCATABLE :: ngc(:)
       INTEGER :: ic
+
+      INTEGER :: l, k, i, j
+      LOGICAL, SAVE :: first = .true.    
+ 
       !write (6,*) ' inside get_sticks gcut=',gcut; FLUSH(6)
       !write (6,*) smap%lb, smap%ub
 
@@ -596,6 +607,33 @@ CONTAINS
       CALL sticks_dist_new( smap%lgamma, smap%mype, smap%nproc, smap%nyfft, smap%iproc, smap%iproc2, &
                             smap%ub, smap%lb, smap%idx, &
                             smap%ist(:,1), smap%ist(:,2), ngc, SIZE(smap%idx), nstp, sstp, smap%stown, ng )
+
+!      smap%stown = 0
+!      nstp = 0
+!      sstp = 0
+!
+!      l = 1
+!      DO i = smap%lb(1), smap%ub(1)
+!            l = l + 1
+!            k = 1
+!         DO j = smap%lb(2), smap%ub(2)
+!            k = k + 1
+!            IF( mg( l, k ) .gt. 0 ) smap%stown( i, j ) = dfft%mype+1
+!         ENDDO
+!      ENDDO
+!      CALL mp_sum( smap%stown, (1+smap%ub(1)-smap%lb(1))*(1+smap%ub(2)-smap%lb(2)), dfft%comm )
+!      IF( first ) THEN
+!         nstp( dfft%mype+1 ) = parap%sparm( 9, dfft%mype )
+!         ng = parap%sparm( 3, dfft%mype )
+!         sstp( dfft%mype+1 ) = spar%ngws
+!         first = .false.
+!      ELSE
+!         nstp( dfft%mype+1 ) = parap%sparm( 8, dfft%mype )
+!         ng = parap%sparm( 1, dfft%mype )
+!         sstp( dfft%mype+1 ) = spar%nhgs
+!      END IF   
+!      CALL mp_sum( nstp, dfft%nproc, dfft%comm )
+!      CALL mp_sum( sstp, dfft%nproc, dfft%comm )
 
       ! assign the owner of each (relavant) stick 
       st = 0
