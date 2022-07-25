@@ -110,7 +110,7 @@ MODULE fftpw_types
     INTEGER :: window_counter = 0
     LOGICAL :: shared = .false.
     LOGICAL :: single_node = .false.
-    LOGICAL :: non_blocking = .false.
+    LOGICAL :: non_blocking = .true.
     LOGICAL :: autotune = .false.
     TYPE(MPI_WIN) :: mpi_window(99)
     INTEGER :: batch_size = 1

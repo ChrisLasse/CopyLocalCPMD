@@ -866,7 +866,7 @@ CONTAINS
   
           DO ibatch = 1, batch_size
   !           CALL invfft_after_com( dfft, dfft%bench_aux(:,ibatch), comm_recv, ibatch )
-             CALL invfft_after_com( dfft, f_inout1(:,work_buffer), f_in(:,ibatch), ibatch )
+             CALL invfft_after_com( dfft, f_inout1(:,ibatch), f_in(:,work_buffer), ibatch )
   
              !$  locks_calc_2( dfft%my_node_rank+1, ibatch+current ) = .false.
              !$omp flush( locks_calc_2 )

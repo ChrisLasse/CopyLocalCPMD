@@ -3138,7 +3138,8 @@ fftpw_single_calls.mod.o:fftpw_single_calls.mod.f90 fftpw_batching.mod fftpw_par
                 fftpw_types.mod
 
 fftpw_stick_base.mod.f90:$(SRCDIR)/fftpw_stick_base.mod.F90
-fftpw_stick_base.mod.o:fftpw_stick_base.mod.f90 fftpw_param.mod
+fftpw_stick_base.mod.o:fftpw_stick_base.mod.f90 fftpw_param.mod \
+                mp_interface.mod 
 
 fftpw_types.mod.f90:$(SRCDIR)/fftpw_types.mod.F90
 fftpw_types.mod.o:fftpw_types.mod.f90 fftpw_stick_base.mod fftpw_param.mod

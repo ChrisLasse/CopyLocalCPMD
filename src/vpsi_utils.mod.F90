@@ -1801,6 +1801,8 @@ CONTAINS
     COMPLEX(DP), ALLOCATABLE, SAVE :: psi (:,:)
     COMPLEX(DP), ALLOCATABLE, SAVE :: hpsi(:,:)
     REAL(DP), ALLOCATABLE, SAVE :: v(:)
+ 
+    LOGICAL, ALLOCATABLE :: first_step(:)
 
     LOGICAL, SAVE :: do_calc = .false.
     LOGICAL, SAVE :: do_com = .false.
@@ -1813,8 +1815,9 @@ CONTAINS
     LOGICAL :: finished_all, last_start, last_start_triggered
   
   !  buffer_size = 3
-    buffer_size = 1
-    batch_size  = 1
+    buffer_size = 3
+    dfft%batch_size_save  = 2
+    batch_size = dfft%batch_size_save
     ngms = dfft%ngw
 
     IF( .not. allocated( dfft%aux ) ) THEN
@@ -1822,6 +1825,7 @@ CONTAINS
        ALLOCATE( psi ( ngms, nbnd_source ) ) 
        ALLOCATE( hpsi( ngms, nbnd_source ) ) 
        ALLOCATE( v( dfft%nnr ) ) 
+       ALLOCATE( first_step( dfft%num_buff ) ) 
        dfft%use_maps = .true.
        dfft%ngms = ngms
        CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size )
@@ -1846,16 +1850,11 @@ CONTAINS
        !$omp end parallel
        nthreads = MIN( 2, dfft%cpus_per_task )
        nested_threads = MAX( 1, dfft%cpus_per_task - 1 )
-       do_calc = .false.
        dfft%uneven  = .false.
        dfft%num_buff = buffer_size
+       dfft%first_step = .true.
   
-       IF( dfft%my_node_rank .ne. 0 .or. dfft%single_node ) THEN
-          nthreads = 1
-  !     CALL omp_set_num_threads( 5 )
-          my_thread_num = 1
-          do_calc = .true.
-       END IF
+       IF( dfft%my_node_rank .ne. 0 .or. dfft%single_node ) nthreads = 1
        
        nbnd = ( nbnd_source + 1 ) / 2
        IF( mod( nbnd_source, 2 ) .ne. 0 ) dfft%uneven = .true.
@@ -1873,15 +1872,7 @@ CONTAINS
     ENDDO
     CALL ConvertFFT_v( dfft, v_cpmd, v )
   
-    batch_size = dfft%batch_size_save
     sendsize_save = dfft%sendsize
-    next = -1
-    counter = 0
-    finished = .false.
-    last_buffer = 0
-    do_com  = .false.
-    dfft%first_step = .true.
-    finished_all = .false.
     last_start = .true.
     last_start_triggered = .false.
   
@@ -1910,8 +1901,19 @@ CONTAINS
     !!! Initializiation finished
   
     !$omp parallel IF( nthreads .eq. 2 ) num_threads( nthreads ) &
-    !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, work_buffer, finished ) &
+    !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, work_buffer, finished ) &
     !$omp proc_bind( close )
+    
+    do_calc = .false.
+    do_com  = .false.
+    batch_size = dfft%batch_size_save
+    next = -1
+    counter = 0
+    finished = .false.
+    last_buffer = 0
+    finished_all = .false.
+    first_step = dfft%first_step
+
     !$  IF( nthreads .eq. 2 ) THEN
     !$     my_thread_num = omp_get_thread_num()
     !$     IF( my_thread_num .eq. 1 ) THEN
@@ -1925,7 +1927,12 @@ CONTAINS
     !$     END IF
     !$  END IF
   
-    IF( .not. dfft%overlapp .and. dfft%my_node_rank .eq. 0 .and. .not. dfft%single_node ) do_com = .true.
+    IF( nthreads .eq. 1 ) THEN
+       IF( dfft%my_node_rank .eq. 0 .and. .not. dfft%single_node ) do_com = .true.
+!       CALL omp_set_num_threads( 5 )
+       my_thread_num = 1
+       do_calc = .true.
+    ENDIF
    
     DO WHILE( .not. finished_all )
   
@@ -1936,14 +1943,14 @@ CONTAINS
           work_buffer = dfft%buffer_sequence( next )
        END IF
   
-       IF( dfft%rem_size .ne. 0 .and. ( ( dfft%first_step( work_buffer ) .and. last_buffer .eq. 0 .and. ( counter( 1, 1 ) .eq. dfft%max_nbnd - 1 .or. counter( 2, 1 ) .eq. dfft%max_nbnd - 1 ) ) .or. last_buffer .eq. work_buffer ) ) THEN
+       IF( dfft%rem_size .ne. 0 .and. ( ( first_step( work_buffer ) .and. last_buffer .eq. 0 .and. ( counter( 1, 1 ) .eq. dfft%max_nbnd - 1 .or. counter( 2, 1 ) .eq. dfft%max_nbnd - 1 ) ) .or. last_buffer .eq. work_buffer ) ) THEN
           last_buffer = work_buffer
           batch_size = dfft%rem_size
           dfft%sendsize = sendsize_rem
           IF( do_calc ) dfft%rem = .true.
        END IF
     
-       IF( dfft%first_step( work_buffer ) ) THEN
+       IF( first_step( work_buffer ) ) THEN
   
           ! Last and First Step
   
@@ -2005,7 +2012,7 @@ CONTAINS
   
           IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr) 
   
-          dfft%first_step( work_buffer ) = .false.
+          first_step( work_buffer ) = .false.
   
        ELSE
   
@@ -2058,7 +2065,7 @@ CONTAINS
   
           IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr) 
   
-          dfft%first_step( work_buffer ) = .true.
+          first_step( work_buffer ) = .true.
   
        END IF
   
