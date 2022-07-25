@@ -566,11 +566,11 @@ CONTAINS
 !
    SUBROUTINE get_sticks( smap, gcut, nstp, sstp, st, nst, ng )
 
-      USE fftpw_base,                           ONLY: dfft
-      USE fft,                                  ONLY: mg
-      USE mp_interface,                         ONLY: mp_sum
-      USE system,                               ONLY: parap,&
-                                                      spar
+!      USE fftpw_base,                           ONLY: dfft
+!      USE fft,                                  ONLY: mg
+!      USE mp_interface,                         ONLY: mp_sum
+!      USE system,                               ONLY: parap,&
+!                                                      spar
 
 
       IMPLICIT NONE

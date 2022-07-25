@@ -13,6 +13,7 @@ MODULE fftpw_ggen
   !  ... subroutines generating variables nl* needed to map G-vector
   !  ... components onto the FFT grid(s) in reciprocal space
   !
+   USE error_handling,                  ONLY: stopgm
    USE fftpw_param
    USE fftpw_types,  ONLY : PW_fft_type_descriptor
    PRIVATE
@@ -24,7 +25,7 @@ MODULE fftpw_ggen
 CONTAINS
 !=----------------------------------------------------------------------=
   SUBROUTINE ggen_pw ( dfft, at, bg,  gcutm, ngm_g, ngm, &
-       g, gg, mill, ig_l2g, gstart )
+       g, gg, ig_l2g, gstart )
     !----------------------------------------------------------------------
     !! This routine generates all the reciprocal lattice vectors
     !! contained in the sphere of radius gcutm. Furthermore it
@@ -40,7 +41,7 @@ CONTAINS
     INTEGER, INTENT(IN) :: ngm_g
     INTEGER, INTENT(INOUT) :: ngm
     REAL(DP), INTENT(OUT) :: g(:,:), gg(:)
-    INTEGER, INTENT(OUT) :: mill(:,:), ig_l2g(:), gstart
+    INTEGER, INTENT(OUT) :: ig_l2g(:), gstart
     !  if no_global_sort is present (and it is true) G vectors are sorted only
     !  locally and not globally. In this case no global array needs to be
     !  allocated and sorted: saves memory and a lot of time for large systems.
@@ -237,6 +238,7 @@ CONTAINS
    !  
    !
    IMPLICIT NONE
+   CHARACTER(*), PARAMETER                  :: procedureN = 'fft_set_nl'
    !
    TYPE (PW_fft_type_descriptor), INTENT(inout) :: dfft
    REAL(DP), INTENT(IN) :: g(:,:)
@@ -252,7 +254,9 @@ CONTAINS
    dfft%nlnew = 0
 
    IF( ALLOCATED( dfft%nl ) ) DEALLOCATE( dfft%nl )
-   ALLOCATE( dfft%nl( dfft%ngm ) )
+   ALLOCATE( dfft%nl( dfft%ngm ),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
    IF( ALLOCATED( dfft%nl_r ) ) DEALLOCATE( dfft%nl_r )
    ALLOCATE( dfft%nl_r( dfft%nnr ) )
    dfft%nl_r = 0

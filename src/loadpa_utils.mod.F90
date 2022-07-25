@@ -70,9 +70,9 @@ CONTAINS
     REAL(real_8)                             :: g2, sign, t
 
     INTEGER :: win
-    REAL(DP), ALLOCATABLE :: g_pw(:,:), g_pw3(:,:)
+    REAL(DP), ALLOCATABLE :: g_pw(:,:)
     REAL(DP), ALLOCATABLE :: g_pw_all(:,:)
-    INTEGER, ALLOCATABLE  :: mill_pw(:,:), ig_l2g_pw(:), g_pw2(:,:)
+    INTEGER, ALLOCATABLE  :: mill_pw(:,:), ig_l2g_pw(:)
     INTEGER :: gstart, offset, offset2
 ! ==--------------------------------------------------------------==
 ! ==  DISTRIBUTION OF PARALLEL WORK                               ==
@@ -250,15 +250,6 @@ CONTAINS
     ALLOCATE(inyh(3,ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(g_pw(3,ncpw%nhg),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-         __LINE__,__FILE__)
-    ALLOCATE(g_pw2(3,ncpw%nhg),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-         __LINE__,__FILE__)
-    ALLOCATE(g_pw3(3,ncpw%nhg),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-         __LINE__,__FILE__)
     ALLOCATE(dfft%g_cpmd(3,ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
@@ -410,7 +401,7 @@ CONTAINS
     ! SORTING OF G-VECTORS
     ! ==--------------------------------------------------------------==
     CALL gsort(hg,inyh,ncpw%nhg)
-    dfft%g_cpmd = inyh - 17
+    dfft%g_cpmd = inyh - ( ( spar%nr1s / 2 ) + 1 )
     DO ig=1,ncpw%nhg
        mapgp(ig)=ig
     ENDDO
@@ -441,46 +432,39 @@ CONTAINS
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==
 
-    ALLOCATE(g_pw(3,ncpw%nhg),STAT=ierr)
-    ALLOCATE(dfft%gg_pw(ncpw%nhg),STAT=ierr)
-    ALLOCATE(mill_pw(3,ncpw%nhg),STAT=ierr)
-    ALLOCATE(ig_l2g_pw(ncpw%nhg),STAT=ierr)
-    CALL zeroing(g_pw)
-    CALL zeroing(dfft%gg_pw)
-    CALL zeroing(mill_pw)
-    CALL zeroing(ig_l2g_pw)
-
     CALL Create_PwFFT_datastructure( dfft )
 
     dfft%ngm_l  = ( dfft%ngl( dfft%mype + 1 ) + 1 ) / 2
 
-    ALLOCATE( dfft%ngm_all( dfft%nproc ) )
+    ALLOCATE( dfft%ngm_all( dfft%nproc ),STAT=ierr )
     CALL zeroing( dfft%ngm_all )
     dfft%ngm_all( dfft%mype + 1 ) = dfft%ngm_l
     CALL mp_sum( dfft%ngm_all, dfft%nproc, dfft%comm )
 
     dfft%ngm_gl = SUM( dfft%ngm_all )
     dfft%ngm_max = MAXVAL( dfft%ngm_all )
+
+!    ALLOCATE(g_pw(3,ncpw%nhg),STAT=ierr)
+!    ALLOCATE(dfft%gg_pw(ncpw%nhg),STAT=ierr)
+!    ALLOCATE(ig_l2g_pw(ncpw%nhg),STAT=ierr)
+    ALLOCATE(g_pw(3,dfft%ngm_gl),STAT=ierr)
+    ALLOCATE(dfft%gg_pw(dfft%ngm_gl),STAT=ierr)
+    ALLOCATE(ig_l2g_pw(dfft%ngm_gl),STAT=ierr)
+    CALL zeroing(g_pw)
+    CALL zeroing(dfft%gg_pw)
+    CALL zeroing(ig_l2g_pw)
     
     CALL ggen_pw( dfft, dfft%bg, dfft%bg, gvec_com%gcut, dfft%ngm_gl, dfft%ngm_l, & 
-                  g_pw, dfft%gg_pw, mill_pw, ig_l2g_pw, gstart )
+                  g_pw, dfft%gg_pw, ig_l2g_pw, gstart )
 
-!    g_pw2 = NINT( g_pw )
-!
-!    CALL gsort(gg_pw,g_pw2,dfft%ngm_l)
-!
-!    g_pw3 = g_pw2
-!
-!    CALL fft_set_nl( dfft, dfft%bg, g_cpmd )
-
-    ALLOCATE( dfft%ngw_all( dfft%nproc ) )
+    ALLOCATE( dfft%ngw_all( dfft%nproc ) ,STAT=ierr)
     CALL zeroing( dfft%ngw_all )
     dfft%ngw_all( dfft%mype + 1 ) = dfft%ngw
     CALL mp_sum( dfft%ngw_all, dfft%nproc, dfft%comm )
     dfft%ngw_total = SUM( dfft%ngw_all )
     dfft%ngw_max   = MAXVAL( dfft%ngw_all )
 
-    ALLOCATE( g_pw_all( 3, dfft%ngw_total ) )
+    ALLOCATE( g_pw_all( 3, dfft%ngw_total ) ,STAT=ierr)
     CALL zeroing( g_pw_all )
     offset  = SUM( dfft%ngw_all( 1:dfft%mype ) )
     offset2 = SUM( dfft%ngw_all( 1:dfft%mype+1 ) )
@@ -489,12 +473,18 @@ CONTAINS
     ENDDO
     CALL mp_sum( g_pw_all, dfft%ngw_total*3, dfft%comm )
 
-    ALLOCATE( dfft%conv_inv( dfft%ngw_total ) )
-    ALLOCATE( dfft%conv_fw(  dfft%ngw_total ) )
+    ALLOCATE( dfft%conv_inv( dfft%ngw_total ),STAT=ierr )
+    ALLOCATE( dfft%conv_fw(  dfft%ngw_total ),STAT=ierr )
     CALL zeroing( dfft%conv_inv )
     CALL zeroing( dfft%conv_fw  )
 
     CALL ConvertFFT_array( dfft, g_pw_all, dfft%g_cpmd, ncpw%ngw ) 
+
+    DEALLOCATE( g_pw )
+!    DEALLOCATE( dfft%gg_pw )
+    DEALLOCATE( ig_l2g_pw )
+    DEALLOCATE( dfft%ngm_all )
+    DEALLOCATE( g_pw_all )
 
     RETURN
   END SUBROUTINE loadpa
