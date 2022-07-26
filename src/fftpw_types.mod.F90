@@ -18,6 +18,7 @@ MODULE fftpw_types
   TYPE PW_fft_type_descriptor
 
     INTEGER(INT64), allocatable :: time_adding(:)
+    INTEGER(INT64), allocatable :: averaged_times(:)
 
     INTEGER :: nr1    = 0  !
     INTEGER :: nr2    = 0  ! effective FFT dimensions of the 3D grid (global)
@@ -116,8 +117,11 @@ MODULE fftpw_types
     INTEGER :: batch_size = 1
 
     LOGICAL :: overlapp = .true.
+    LOGICAL :: tunned = .false.
+    LOGICAL :: need_new_maps = .false.
     INTEGER :: rem_size = 0
-    INTEGER :: batch_size_save = 1
+    INTEGER :: batch_size_save  = 1
+    INTEGER :: buffer_size_save = 1
     INTEGER :: num_buff = 1
     INTEGER :: ngms
     INTEGER :: sendsize
@@ -236,6 +240,7 @@ MODULE fftpw_types
   PUBLIC :: create_shared_memory_window_2d
   PUBLIC :: create_shared_locks_2d
   PUBLIC :: create_shared_locks_1d
+  PUBLIC :: clean_up_shared
 
 CONTAINS
 
@@ -1355,35 +1360,18 @@ CONTAINS
   
   END SUBROUTINE create_shared_locks_1d
 
-!  SUBROUTINE Initialize_PWFFT( desc )
-!    IMPLICIT NONE
-!
-!    TYPE ( PW_fft_type_descriptor ), INTENT(INOUT)   :: desc
-!
-!    INTEGER :: np, nq, i
-!
-!    ALLOCATE( desc%nr3p( desc%nproc ) )
-!    ALLOCATE( desc%nr3p_offset( desc%nproc ) )
-!
-!    !  Set the number of "Z" values for each processor in the nproc3 group
-!    np = desc%nr3 / desc%nproc
-!    nq = desc%nr3 - np * desc%nproc
-!    desc%nr3p(1:desc%nproc) = np    ! assign a base value to all processors
-!    DO i =1, nq ! assign an extra unit to the first nq processors of the nproc3 group
-!       desc%nr3p(i) = np + 1
-!    END DO
-!    ! set the offset
-!    desc%nr3p_offset(1) = 0
-!    DO i =1, desc%nproc-1
-!       desc%nr3p_offset(i+1) = desc%nr3p_offset(i) + desc%nr3p(i)
-!    ENDDO
-!    !-- my_nr3p is the number of planes per processor of this processor   in the
-!    !Z group
-!    desc%my_nr3p = desc%nr3p( desc%mype + 1 )
-!
-!
-!
-!  END SUBROUTINE Initialize_PWFFT
- 
+  SUBROUTINE clean_up_shared( dfft )
+    IMPLICIT NONE
+  
+    TYPE (PW_fft_type_descriptor), INTENT(inout) :: dfft
+  
+    INTEGER :: i, ierr 
+   
+    do i = 1, dfft%window_counter
+       CALL MPI_WIN_FREE( dfft%mpi_window( i ) , ierr )
+    end do
+    dfft%window_counter = 0
+  
+  END SUBROUTINE
 
 END MODULE fftpw_types

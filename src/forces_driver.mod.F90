@@ -86,7 +86,9 @@ MODULE forces_driver
                                              zclean_k
   USE vpsi_utils,                      ONLY: vpsi,&
                                              vpsi_batchfft,&
-                                             do_the_vpsi_thing
+                                             do_the_vpsi_thing,&
+                                             TIME_the_vpsi_thing,&
+                                             TIME_vpsi_batchfft
 !!use rotate_utils, only : rotate_c
 !!use ovlap_utils, only : ovlap_c
   USE zeroing_utils,                   ONLY: zeroing
@@ -346,13 +348,17 @@ CONTAINS
 
     DO ik=1,nkpoint
        IF(batch_fft.AND..NOT.tkpts%tkpnt)THEN
-!          CALL vpsi_batchfft(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
-!               clsd%nlsd,redist_c2)
+          CALL vpsi_batchfft(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
+               clsd%nlsd,redist_c2)
           CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,jgw,nstate)
+          CALL TIME_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,jgw,nstate)
+          CALL TIME_vpsi_batchfft(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
+               clsd%nlsd,redist_c2)
        ELSE
           CALL vpsi(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,&
                redist_c2)
        END IF
+       CALL stopgm(procedureN,'Testing Finished!',__LINE__,__FILE__)
        ! c2u0 is calculated in uprho or rscpot
        IF (hubbu%debug) THEN
             IF (paral%io_parent) write(6,*) procedureN,"| starting add_hubbardu"

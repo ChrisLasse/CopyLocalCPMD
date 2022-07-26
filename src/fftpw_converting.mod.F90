@@ -60,6 +60,8 @@ CONTAINS
 
     CALL fft_type_init( dfft, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
 
+    ALLOCATE( dfft%time_adding( 100 ) )
+    ALLOCATE( dfft%averaged_times( 100 ) )
     ALLOCATE( dfft%nnr_all( dfft%nproc ) )
     dfft%nnr_all = 0
     dfft%nnr_all( dfft%mype+1 ) = dfft%nnr
