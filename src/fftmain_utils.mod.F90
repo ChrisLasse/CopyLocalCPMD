@@ -832,7 +832,6 @@ CONTAINS
                 !$  END DO
              END IF
   
-           !  CALL set_psi_batch_g(f_in,dfft%aux,dfft%sendsize,0,1,4,0,1)
              IF( counter .eq. dfft%max_nbnd .and. ibatch .eq. batch_size .and. dfft%uneven ) THEN
                 CALL Prepare_Psi_overlapp( dfft, f_in(:,1+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 1 )
              ELSE
