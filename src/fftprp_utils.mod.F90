@@ -291,6 +291,9 @@ CONTAINS
        iny3=-ny3+2*nh3
        nzh(ig)=ny1 + (mg(ny2,ny3)-1)*fpar%kr1s
        indz(ig)=iny1 + (mg(iny2,iny3)-1)*fpar%kr1s
+
+       nzh(ig)=dfft%nl(ig)
+       indz(ig)=dfft%nlm(ig)
     ENDDO
     !$omp parallel do private(IG)
     DO ig=1,ncpw%ngw

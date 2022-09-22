@@ -2154,8 +2154,8 @@ CONTAINS
 
     repeats = 100
     average = 80
-    max_buff  = 5
-    max_batch = 10
+    max_buff  = 3
+    max_batch = 5
     ALLOCATE( time( max_buff, max_batch ) )
     ALLOCATE( lowest_batch_num( max_buff ) )
     ALLOCATE( lowest_batch_val( max_buff ) )

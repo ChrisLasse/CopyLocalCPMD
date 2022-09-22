@@ -457,6 +457,15 @@ CONTAINS
     CALL ggen_pw( dfft, dfft%bg, dfft%bg, gvec_com%gcut, dfft%ngm_gl, dfft%ngm_l, & 
                   g_pw, dfft%gg_pw, ig_l2g_pw, gstart )
 
+!    DO i = 1, dfft%ngw
+!       write(6,*) inyh(1,i), NINT( g_pw(1,i) + ( ( spar%nr1s / 2 ) + 1 ) ), inyh(2,i), NINT( g_pw(2,i) + ( ( spar%nr1s / 2 ) + 1 ) ), inyh(3,i), NINT( g_pw(3,i) + ( ( spar%nr1s / 2 ) + 1 ) )
+!    ENDDO
+!
+!    CALL stopgm(procedureN,'END',__LINE__,__FILE__)
+
+    hg = dfft%gg_pw
+    inyh = NINT( g_pw + ( ( spar%nr1s / 2 ) + 1 ) )
+
     ALLOCATE( dfft%ngw_all( dfft%nproc ) ,STAT=ierr)
     CALL zeroing( dfft%ngw_all )
     dfft%ngw_all( dfft%mype + 1 ) = dfft%ngw
