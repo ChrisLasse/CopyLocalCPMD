@@ -115,10 +115,10 @@ MODULE fftpw_types
     LOGICAL :: autotune = .false.
     TYPE(MPI_WIN) :: mpi_window(99)
     INTEGER :: batch_size = 1
+    INTEGER :: nstate = 0
 
     LOGICAL :: overlapp = .true.
     LOGICAL :: tunned = .false.
-    LOGICAL :: need_new_maps = .false.
     INTEGER :: rem_size = 0
     INTEGER :: batch_size_save  = 1
     INTEGER :: buffer_size_save = 1
@@ -174,8 +174,11 @@ MODULE fftpw_types
     INTEGER, ALLOCATABLE :: zero_acinv_end(:)
     INTEGER, ALLOCATABLE :: map_acinv(:)
     INTEGER, ALLOCATABLE :: map_acinv_rem(:)
+    INTEGER, ALLOCATABLE :: map_acinv_one(:)
+    INTEGER, ALLOCATABLE :: map_acinv_rem_one(:)
     INTEGER, ALLOCATABLE :: map_pcfw(:)
 
+    LOGICAL :: vpsi = .false.
     INTEGER, ALLOCATABLE :: buffer_sequence(:)
     LOGICAL, ALLOCATABLE :: first_loading(:)
     LOGICAL, ALLOCATABLE :: first_step(:)
@@ -238,6 +241,7 @@ MODULE fftpw_types
   PUBLIC :: fft_type_init
   PUBLIC :: create_mpi_communicators
   PUBLIC :: create_shared_memory_window_2d
+  PUBLIC :: create_shared_memory_window_1d
   PUBLIC :: create_shared_locks_2d
   PUBLIC :: create_shared_locks_1d
   PUBLIC :: clean_up_shared
@@ -1207,7 +1211,7 @@ CONTAINS
     TYPE ( PW_fft_type_descriptor ), INTENT(INOUT)   :: dfft
     INTEGER, INTENT(IN)                              :: win_size1, win_size2
     COMPLEX(DP),  POINTER, CONTIGUOUS, INTENT(OUT)   :: result_pointer( :, : )
-    INTEGER, INTENT(OUT)                             :: window_number
+    INTEGER, INTENT(IN)                              :: window_number
   
     INTEGER :: ierr
     INTEGER, SAVE :: counter = 0
@@ -1222,7 +1226,6 @@ CONTAINS
     TYPE(CONTAINER),ALLOCATABLE :: cont(:)
   
     dfft%window_counter = dfft%window_counter + 1
-    window_number = dfft%window_counter
     arrayshape( 1 ) = win_size1
     arrayshape( 2 ) = win_size2
   
@@ -1253,13 +1256,63 @@ CONTAINS
   
   END SUBROUTINE create_shared_memory_window_2d
 
+  SUBROUTINE create_shared_memory_window_1d( result_pointer, window_number, dfft, win_size )
+    IMPLICIT NONE
+  
+    TYPE (PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    INTEGER, INTENT(IN) :: win_size
+    COMPLEX(DP),  POINTER, CONTIGUOUS, INTENT(OUT)   :: result_pointer( : )
+    INTEGER, INTENT(IN) :: window_number
+  
+    INTEGER :: ierr
+    INTEGER, SAVE :: counter = 0
+    INTEGER, DIMENSION(1) :: arrayshape
+    INTEGER :: displ
+    INTEGER(KIND=MPI_ADDRESS_KIND) :: windowsize
+    INTEGER :: mpi_double_complex_in_bytes, pre_windowsize
+    TYPE(C_PTR), ALLOCATABLE :: baseptr( : )
+    TYPE CONTAINER
+       COMPLEX(DP),  POINTER, CONTIGUOUS   :: temp( : )
+    END TYPE CONTAINER
+    TYPE(CONTAINER),ALLOCATABLE :: cont(:)
+  
+    dfft%window_counter = dfft%window_counter + 1
+    arrayshape( 1 ) = win_size
+  
+    CALL mpi_type_size( mpi_double_complex, mpi_double_complex_in_bytes, ierr)
+    IF ( dfft%my_node_rank .eq. 0 ) then
+       windowsize = win_size * mpi_double_complex_in_bytes
+    ELSE
+       windowsize = 0
+    END IF
+    ALLOCATE( baseptr( dfft%node_task_size ) )
+    displ = mpi_double_complex_in_bytes
+  
+    CALL MPI_WIN_allocate_shared( windowsize , displ, MPI_INFO_NULL,  &
+         dfft%node_comm, baseptr( dfft%my_node_rank + 1 ), dfft%mpi_window( window_number ), ierr)
+  
+    IF ( dfft%my_node_rank .ne. 0 ) then
+       CALL mpi_win_shared_query( dfft%mpi_window( window_number ), 0, windowsize, &
+            displ, baseptr(1), ierr)
+    END IF
+  
+    Allocate( cont( dfft%node_task_size ) )
+  
+    CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( window_number ), ierr )
+  
+    CALL C_F_POINTER( baseptr(1), result_pointer, arrayshape )
+  
+    call mpi_win_unlock_all( dfft%mpi_window( window_number ), ierr )
+  
+  END SUBROUTINE create_shared_memory_window_1d
+
   SUBROUTINE create_shared_locks_2d( result_pointer, window_number, dfft, win_size1, win_size2 )
     IMPLICIT NONE
   
     TYPE (PW_fft_type_descriptor), INTENT(inout) :: dfft
-    INTEGER, INTENT(in) :: win_size1, win_size2
+    INTEGER, INTENT(IN) :: win_size1, win_size2
     LOGICAL,  POINTER, CONTIGUOUS, INTENT(out)   :: result_pointer( :, : )
-    INTEGER, INTENT(out) :: window_number
+    INTEGER, INTENT(IN) :: window_number
   
     INTEGER :: ierr
     INTEGER, SAVE :: counter = 0
@@ -1274,7 +1327,6 @@ CONTAINS
     TYPE(CONTAINER),ALLOCATABLE :: cont(:)
   
     dfft%window_counter = dfft%window_counter + 1
-    window_number = dfft%window_counter
     arrayshape( 1 ) = win_size1
     arrayshape( 2 ) = win_size2
   
@@ -1311,9 +1363,9 @@ CONTAINS
     IMPLICIT NONE
   
     TYPE (PW_fft_type_descriptor), INTENT(inout) :: dfft
-    INTEGER, INTENT(in) :: win_size
+    INTEGER, INTENT(IN) :: win_size
     LOGICAL,  POINTER, CONTIGUOUS, INTENT(out)   :: result_pointer( : )
-    INTEGER, INTENT(out) :: window_number
+    INTEGER, INTENT(IN) :: window_number
   
     INTEGER :: ierr
     INTEGER, SAVE :: counter = 0
@@ -1328,7 +1380,6 @@ CONTAINS
     TYPE(CONTAINER),ALLOCATABLE :: cont(:)
   
     dfft%window_counter = dfft%window_counter + 1
-    window_number = dfft%window_counter
     arrayshape( 1 ) = win_size
   
     CALL mpi_type_size( mpi_logical, mpi_logical_in_bytes, ierr)
@@ -1360,17 +1411,25 @@ CONTAINS
   
   END SUBROUTINE create_shared_locks_1d
 
-  SUBROUTINE clean_up_shared( dfft )
+  SUBROUTINE clean_up_shared( dfft, what )
     IMPLICIT NONE
   
-    TYPE (PW_fft_type_descriptor), INTENT(inout) :: dfft
+    TYPE (PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    INTEGER, INTENT(IN) :: what
   
     INTEGER :: i, ierr 
-   
-    do i = 1, dfft%window_counter
-       CALL MPI_WIN_FREE( dfft%mpi_window( i ) , ierr )
-    end do
-    dfft%window_counter = 0
+  
+    IF( what .eq. 1 ) THEN
+       CALL MPI_WIN_FREE( dfft%mpi_window( 1 ) , ierr )
+       CALL MPI_WIN_FREE( dfft%mpi_window( 2 ) , ierr )
+       CALL MPI_WIN_FREE( dfft%mpi_window( 20 ) , ierr )
+       CALL MPI_WIN_FREE( dfft%mpi_window( 21 ) , ierr )
+       CALL MPI_WIN_FREE( dfft%mpi_window( 22 ) , ierr )
+       CALL MPI_WIN_FREE( dfft%mpi_window( 23 ) , ierr )
+       CALL MPI_WIN_FREE( dfft%mpi_window( 50 ) , ierr )
+       CALL MPI_WIN_FREE( dfft%mpi_window( 51 ) , ierr )
+       dfft%window_counter = dfft%window_counter - 8
+    END IF
   
   END SUBROUTINE
 

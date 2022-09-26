@@ -2,6 +2,7 @@
 MODULE fftpw_converting
 !=----------------------------------------------------------------------------=!
 
+  USE elct,                          ONLY: crge
   USE fftpw_base,                    ONLY: smap
   USE fftpw_param
   USE fftpw_stick_base,              ONLY: sticks_map
@@ -38,6 +39,7 @@ CONTAINS
     dfft%nr3 = spar%nr3s
     dfft%nnr = dfft%nr1 * dfft%nr2 * dfft%nr3
 
+    dfft%nstate = crge%n
 
     dfft%nproc = parai%nproc
     dfft%mype  = parai%me
