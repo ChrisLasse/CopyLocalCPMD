@@ -24,48 +24,60 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff )
   INTEGER, INTENT(OUT) :: rem_size
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
 
+  INTEGER, SAVE :: last_batch  = 0
+  INTEGER, SAVE :: last_buffer = 0
   INTEGER :: i, j, k, l, f
 
-  dfft%rsactive = rsactive
-  dfft%nr3px = MAXVAL ( dfft%nr3p )
-  dfft%my_nr1p = count ( dfft%ir1w > 0 )
-  dfft%small_chunks = dfft%nr3px * MAXVAL( dfft%nsw )
-  dfft%big_chunks = dfft%small_chunks * dfft%node_task_size * dfft%node_task_size
+  IF( .not. allocated( dfft%aux ) ) THEN
 
-  dfft%tscale = 1.0d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
-  dfft%tscale_gamma = 0.5d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
-  rem_size = mod( (nbnd+1)/2, batch_size )
+     dfft%rsactive = rsactive
+     dfft%nr3px = MAXVAL ( dfft%nr3p )
+     dfft%my_nr1p = count ( dfft%ir1w > 0 )
+     dfft%small_chunks = dfft%nr3px * MAXVAL( dfft%nsw )
+     dfft%big_chunks = dfft%small_chunks * dfft%node_task_size * dfft%node_task_size
+   
+     dfft%tscale = 1.0d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
+     dfft%tscale_gamma = 0.5d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
 
-  ALLOCATE( dfft%first_step( num_buff ) )
+     ALLOCATE( dfft%aux( dfft%nnr ) )
+
+  END IF
+
+  IF( last_buffer .ne. num_buff ) THEN
+
+     last_buffer = num_buff
+  
+     IF( ALLOCATED( dfft%first_step ) )       DEALLOCATE( dfft%first_step )
+     IF( ALLOCATED( dfft%first_loading ) )    DEALLOCATE( dfft%first_loading )
+     IF( ALLOCATED( dfft%buffer_sequence ) )  DEALLOCATE( dfft%buffer_sequence )
+
+     ALLOCATE( dfft%first_step( num_buff ) )
+     ALLOCATE( dfft%first_loading( num_buff ) )
+     ALLOCATE( dfft%buffer_sequence( num_buff ) )
+     DO i = 1, num_buff
+        dfft%buffer_sequence( i ) = i
+     END DO
+     IF( num_buff .gt. 1 ) THEN
+        dfft%buffer_sequence( 1 ) = 2
+        dfft%buffer_sequence( 2 ) = 1
+     END IF
+
+  END IF
+
+  IF( last_batch .ne. batch_size .and. dfft%vpsi ) THEN
+
+     last_batch = batch_size
+
+     IF( ALLOCATED( dfft%bench_aux ) )        DEALLOCATE( dfft%bench_aux )
+     IF( ALLOCATED( dfft%bench_aux_rem ) )    DEALLOCATE( dfft%bench_aux_rem )
+   
+     ALLOCATE( dfft%bench_aux( dfft%nnr, batch_size ) )
+     ALLOCATE( dfft%bench_aux_rem( dfft%nnr, rem_size ) )
+
+  END IF
+
   dfft%first_step = .true.
-  ALLOCATE( dfft%first_loading( num_buff ) )
-  ALLOCATE( dfft%buffer_sequence( num_buff ) )
-  DO i = 1, num_buff
-     dfft%buffer_sequence( i ) = i
-  END DO
-  IF( num_buff .gt. 1 ) THEN
-     dfft%buffer_sequence( 1 ) = 2
-     dfft%buffer_sequence( 2 ) = 1
-  END IF
-
-  ALLOCATE( dfft%aux( dfft%nnr ) )
-  ALLOCATE( dfft%bench_aux( dfft%nnr, batch_size ) )
-  ALLOCATE( dfft%bench_aux_rem( dfft%nnr, rem_size ) )
-
-  IF( .not. allocated( dfft%wfn_keep ) .and. dfft%rsactive ) THEN
-     ALLOCATE( dfft%wfn_keep( dfft%nnr, ( nbnd / 2 ) + 1 ) )
-     f = 0
-     DO k = 1, fft_numbatches
-        DO l = 1, fft_batchsize
-           f = f + 1
-           DO i = 1, dfft%nr1
-              DO j = 1, dfft%nr2 * dfft%nr3
-                 dfft%wfn_keep( (i-1)*dfft%nr2*dfft%nr3 + j, f ) = wfn_r( j + (i-1)*fft_batchsize*dfft%nr2*dfft%nr3 + (l-1)*dfft%nr2*dfft%nr3, k )
-              ENDDO
-           ENDDO
-        ENDDO
-     ENDDO
-  END IF
+  rem_size = mod( (nbnd+1)/2, batch_size )
 
 END SUBROUTINE Set_Req_Vals
 
@@ -75,21 +87,46 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size )
   INTEGER, INTENT(IN) :: ngms, batch_size, rem_size
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
 
-  !Prepare_Psi
-  ALLOCATE( dfft%zero_prep_start( dfft%nsw( dfft%mype+1), 3 ) )
-  ALLOCATE( dfft%zero_prep_end( dfft%nsw( dfft%mype+1), 3 ) )
-  CALL Make_PrepPsi_Maps( dfft%zero_prep_start, dfft%zero_prep_end, dfft%nr3, dfft%nsw(dfft%mype+1), ngms, dfft%nl, dfft%nlm )
+  INTEGER, SAVE :: last_batch = 0
+  LOGICAL, SAVE :: one_done = .false.
 
-  !INV_After_Com
-  ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * batch_size ) )
-  ALLOCATE( dfft%map_acinv_rem( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * rem_size ) )
-  ALLOCATE( dfft%zero_acinv_start( dfft%my_nr1p ) ) 
-  ALLOCATE( dfft%zero_acinv_end( dfft%my_nr1p ) ) 
-  CALL Make_inv_yzCOM_Maps( dfft, batch_size, rem_size )
+  IF( .not. allocated( dfft%zero_prep_start ) ) THEN
 
-  !FW_Pre_Com
-  ALLOCATE( dfft%map_pcfw( dfft%nproc3 * dfft%small_chunks ) )
-  CALL Make_fw_yzCOM_Map( dfft )
+     !Prepare_Psi
+     ALLOCATE( dfft%zero_prep_start( dfft%nsw( dfft%mype+1), 3 ) )
+     ALLOCATE( dfft%zero_prep_end( dfft%nsw( dfft%mype+1), 3 ) )
+     CALL Make_PrepPsi_Maps( dfft%zero_prep_start, dfft%zero_prep_end, dfft%nr3, dfft%nsw(dfft%mype+1), ngms, dfft%nl, dfft%nlm )
+   
+     !INV_After_Com
+     ALLOCATE( dfft%zero_acinv_start( dfft%my_nr1p ) ) 
+     ALLOCATE( dfft%zero_acinv_end( dfft%my_nr1p ) ) 
+   
+     !FW_Pre_Com
+     ALLOCATE( dfft%map_pcfw( dfft%nproc3 * dfft%small_chunks ) )
+     CALL Make_fw_yzCOM_Map( dfft )
+
+  END IF
+
+  IF( .not. one_done .and. batch_size .eq. 1 ) THEN
+
+     ALLOCATE( dfft%map_acinv_one( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * batch_size ) )
+     ALLOCATE( dfft%map_acinv_rem_one( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * rem_size ) )
+     CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_one, dfft%map_acinv_rem_one, batch_size, rem_size )
+     one_done = .true.
+
+  END IF
+
+  IF( last_batch .ne. batch_size .and. dfft%vpsi ) THEN
+
+     last_batch = batch_size
+
+     IF( ALLOCATED( dfft%map_acinv ) )        DEALLOCATE( dfft%map_acinv )
+     IF( ALLOCATED( dfft%map_acinv_rem ) )    DEALLOCATE( dfft%map_acinv_rem )
+     ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * batch_size ) )
+     ALLOCATE( dfft%map_acinv_rem( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * rem_size ) )
+     CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, dfft%map_acinv_rem, batch_size, rem_size )
+
+  END IF
 
 END SUBROUTINE Prep_Copy_Maps
 
@@ -201,11 +238,12 @@ SUBROUTINE Make_PrepPsi_Maps( zero_start, zero_end, nr3, my_nsw, ngms, nl, nlm )
 
 END SUBROUTINE Make_PrepPsi_Maps
 
-SUBROUTINE Make_inv_yzCOM_Maps( dfft, batch_size, rem_size )
+SUBROUTINE Make_inv_yzCOM_Maps( dfft, map_acinv, map_acinv_rem, batch_size, rem_size )
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: batch_size, rem_size
+  INTEGER, INTENT(OUT) :: map_acinv(:), map_acinv_rem(:)
 
   LOGICAL :: l_map( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 )
   LOGICAL :: first
@@ -233,7 +271,7 @@ SUBROUTINE Make_inv_yzCOM_Maps( dfft, batch_size, rem_size )
               i1 = m2 + ( dfft%ir1w(m1) - 1 ) * dfft%nr2 + (ibatch-1)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
               DO k = 1, dfft%my_nr3p
                  IF( ibatch .eq. 1 ) l_map( i1 ) = .true.
-                 dfft%map_acinv( i1 ) = k + it
+                 map_acinv( i1 ) = k + it
                  i1 = i1 + dfft%nr2*dfft%my_nr1p
               ENDDO
            ENDDO
@@ -262,7 +300,7 @@ SUBROUTINE Make_inv_yzCOM_Maps( dfft, batch_size, rem_size )
               m2 = (mc-1)/dfft%nr1 + 1
               i1 = m2 + ( dfft%ir1w(m1) - 1 ) * dfft%nr2 + (ibatch-1)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
               DO k = 1, dfft%my_nr3p
-                 dfft%map_acinv_rem( i1 ) = k + it
+                 map_acinv_rem( i1 ) = k + it
                  i1 = i1 + dfft%nr2*dfft%my_nr1p
               ENDDO
            ENDDO

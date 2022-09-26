@@ -509,7 +509,7 @@ SUBROUTINE Placeholder_Name( dfft, psi, hpsi, v, comm_send, comm_recv, locks_cal
               CALL SYSTEM_CLOCK( time(13) )
 
               DO ibatch = 1, batch_size
-                 CALL invfft_after_com( dfft, dfft%bench_aux(:,ibatch), comm_recv(:,work_buffer), ibatch )
+!                 CALL invfft_after_com( dfft, dfft%bench_aux(:,ibatch), comm_recv(:,work_buffer), ibatch )
 !                 CALL Apply_V( dfft, dfft%bench_aux(:,ibatch), v )
 
                  !$  locks_calc_2( dfft%my_node_rank+1, ibatch+((counter(1,2)-1)*batch_size_save) ) = .false.

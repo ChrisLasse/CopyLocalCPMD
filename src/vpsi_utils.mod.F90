@@ -1820,6 +1820,8 @@ CONTAINS
     LOGICAL, SAVE :: do_calc = .false.
     LOGICAL, SAVE :: do_com = .false.
     INTEGER, SAVE :: sendsize_rem, nthreads, nested_threads, nbnd, my_thread_num
+    INTEGER, SAVE :: remember_batch  = 0
+    INTEGER, SAVE :: remember_buffer = 0
     INTEGER :: i, j, iter, ierr, buffer_size, batch_size, ng, ngms
   
     INTEGER :: counter( 2 , 3)
@@ -1828,7 +1830,9 @@ CONTAINS
     LOGICAL :: finished_all, last_start, last_start_triggered
 
     INTEGER(INT64) :: time(4)
-  
+ 
+    dfft%vpsi = .true.
+ 
     IF( .not. dfft%tunned ) THEN
        dfft%buffer_size_save = 3
        dfft%batch_size_save  = 1
@@ -1862,12 +1866,11 @@ CONTAINS
   
     END IF
 
-    IF( .not. allocated( dfft%aux ) .or. dfft%need_new_maps ) THEN
+    IF( remember_batch .ne. batch_size .or. remember_buffer .ne. buffer_size ) THEN
 
-       IF( dfft%need_new_maps ) THEN
-          CALL MapVals_CleanUp( dfft )
-          CALL Clean_up_shared( dfft ) 
-       END IF
+       remember_batch  = batch_size
+       remember_buffer = buffer_size
+       CALL Clean_up_shared( dfft, 1 ) 
 
        CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size )
        CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size )
@@ -1875,16 +1878,16 @@ CONTAINS
        dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
        sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
      
-       CALL create_shared_memory_window_2d( comm_send, i, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
-       CALL create_shared_memory_window_2d( comm_recv, i, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
+       CALL create_shared_memory_window_2d( comm_send, 1, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
+       CALL create_shared_memory_window_2d( comm_recv, 2, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
      
-       CALL create_shared_locks_2d( locks_calc_inv, i, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
-       CALL create_shared_locks_2d( locks_calc_fw,  i, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
-       CALL create_shared_locks_1d( locks_com_inv,  i, dfft, ( nbnd_source / batch_size ) + 1 )
-       CALL create_shared_locks_1d( locks_com_fw,   i, dfft, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_2d( locks_calc_inv, 20, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_2d( locks_calc_fw,  21, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_1d( locks_com_inv,  50, dfft, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_1d( locks_com_fw,   51, dfft, ( nbnd_source / batch_size ) + 1 )
        
-       CALL create_shared_locks_2d( locks_calc_1  , i, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
-       CALL create_shared_locks_2d( locks_calc_2  , i, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
+       CALL create_shared_locks_2d( locks_calc_1  , 22, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
+       CALL create_shared_locks_2d( locks_calc_2  , 23, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
   
        dfft%num_buff = buffer_size
        IF( dfft%rem_size .ne. 0 ) THEN
@@ -2129,6 +2132,8 @@ CONTAINS
 
     CALL SYSTEM_CLOCK( time(4) )
     dfft%time_adding( 98 ) = time(4) - time(3)
+
+    dfft%vpsi = .false.
   
   END SUBROUTINE do_the_vpsi_thing
 
@@ -2154,8 +2159,8 @@ CONTAINS
 
     repeats = 100
     average = 80
-    max_buff  = 3
-    max_batch = 5
+    max_buff  = 1 !5
+    max_batch = 1 !10
     ALLOCATE( time( max_buff, max_batch ) )
     ALLOCATE( lowest_batch_num( max_buff ) )
     ALLOCATE( lowest_batch_val( max_buff ) )
@@ -2171,13 +2176,11 @@ CONTAINS
        DO ibatch = 1, max_batch
  
           dfft%batch_size_save = ibatch
-          dfft%need_new_maps = .true.
 
           DO l = 1, 10
 
              CALL do_the_vpsi_thing( c0, c2, v_cpmd, ngms_source, nbnd_source )
    
-             dfft%need_new_maps = .false.
              DO i = 1, nbnd_source
                 DO j = 1, ngms_source
                    IF( abs( c2(j,i) - control_c2(j,i) ) .ge. eps4 ) &
@@ -2214,7 +2217,6 @@ CONTAINS
     CALL MP_BCAST(  dfft%batch_size_save, 0, dfft%comm )
 
     time_r = 0
-    dfft%need_new_maps = .true.
     dfft%averaged_times = 0
     DO i = 1, repeats
 
@@ -2222,7 +2224,6 @@ CONTAINS
 
        CALL do_the_vpsi_thing( c0, c2, v_cpmd, ngms_source, nbnd_source )
 
-       dfft%need_new_maps = .false.
        IF( i .gt. repeats-average ) THEN
           time_r = time_r + dfft%time_adding(100)
           DO j = 1, 100

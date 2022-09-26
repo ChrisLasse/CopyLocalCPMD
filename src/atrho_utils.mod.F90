@@ -11,7 +11,8 @@ MODULE atrho_utils
                                              nzh
   USE dotp_utils,                      ONLY: dotp
   USE error_handling,                  ONLY: stopgm
-  USE fftmain_utils,                   ONLY: invfftn
+  USE fftmain_utils,                   ONLY: invfftn,&
+                                             invfftu
   USE fftnew_utils,                    ONLY: setfftn
   USE fitpack_utils,                   ONLY: curv1,&
                                              curv2
@@ -138,6 +139,7 @@ CONTAINS
        END IF
        isa0=isa0+ions0%na(is)
     ENDDO
+
     CALL zeroing(psi)!,maxfft)
     !CDIR NODEP
     !$omp parallel do private(IG) schedule(static)
@@ -148,7 +150,7 @@ CONTAINS
     IF (geq0) psi(nzh(1)) = rhog(1)
     rsum = 0.0_real_8
     IF (geq0) rsum        = REAL(rhog(1))
-    CALL invfftn(psi,.FALSE.,parai%allgrp)
+    CALL invfftu(rhog, psi,.FALSE.,parai%allgrp)
     ! ==--------------------------------------------------------------==
     ! COMPUTE THE INTEGRAL OF THE CHARGE DENSITY IN REAL SPACE
     rsum1=0._real_8

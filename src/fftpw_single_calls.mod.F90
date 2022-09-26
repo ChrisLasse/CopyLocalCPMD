@@ -112,7 +112,7 @@ SUBROUTINE invfft_single( dfft, psi, comm_send, comm_recv, sendsize )
   CALL invfft_pre_com( dfft, comm_send, comm_recv, 1, 1 )
 !  CALL fft_com( dfft, comm_send, comm_recv, sendsize, dfft%my_node_rank, &
 !                dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
-  CALL invfft_after_com( dfft, psi, comm_recv, 1 )
+!  CALL invfft_after_com( dfft, psi, comm_recv, 1 )
 
 END SUBROUTINE invfft_single
 

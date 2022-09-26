@@ -278,13 +278,14 @@ SUBROUTINE fft_com( dfft, comm_mem_send, comm_mem_recv, sendsize, intra_me, inte
 END SUBROUTINE fft_com
 
 
-SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, ibatch )
+SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, ibatch )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: ibatch
   COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   COMPLEX(DP), INTENT(OUT) :: f( : )
+  INTEGER, INTENT(IN) :: map_acinv(:), map_acinv_rem(:)
 
   INTEGER :: i, j, k
   INTEGER :: offset1, offset2, ierr
@@ -306,7 +307,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, ibatch )
            !omp simd
            DO k = 1, dfft%zero_acinv_start( j )-1
               dfft%aux( offset1 + k ) = &
-              comm_mem_recv( dfft%map_acinv_rem( offset2 + k ) )
+              comm_mem_recv( map_acinv_rem( offset2 + k ) )
            END DO
            !omp simd
            DO k = dfft%zero_acinv_start( j ), dfft%zero_acinv_end( j )
@@ -315,7 +316,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, ibatch )
            !omp simd
            DO k = dfft%zero_acinv_end( j )+1, dfft%nr2
               dfft%aux( offset1 + k ) = &
-              comm_mem_recv( dfft%map_acinv_rem( offset2 + k ) )
+              comm_mem_recv( map_acinv_rem( offset2 + k ) )
            END DO
         END DO
      END DO
@@ -329,7 +330,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, ibatch )
            !omp simd
            DO k = 1, dfft%zero_acinv_start( j )-1
               dfft%aux( offset1 + k ) = &
-              comm_mem_recv( dfft%map_acinv( offset2 + k ) )
+              comm_mem_recv( map_acinv( offset2 + k ) )
            END DO
            !omp simd
            DO k = dfft%zero_acinv_start( j ), dfft%zero_acinv_end( j )
@@ -338,7 +339,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, ibatch )
            !omp simd
            DO k = dfft%zero_acinv_end( j )+1, dfft%nr2
               dfft%aux( offset1 + k ) = &
-              comm_mem_recv( dfft%map_acinv( offset2 + k ) )
+              comm_mem_recv( map_acinv( offset2 + k ) )
            END DO
         END DO
      END DO
