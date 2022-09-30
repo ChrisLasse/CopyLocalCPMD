@@ -153,10 +153,10 @@
      INTEGER :: nr1_temp(1)
    
      !
-     if ( desc%what == 1 ) then          ! It's a potential FFT
-        CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc2, desc%my_nr2p, desc%nr1p, desc%indp, desc%iplp )
-     else if ( desc%what == 2 ) then     ! It's a wavefunction FFT
-        CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc2, desc%my_nr2p, desc%nr1w, desc%indw, desc%iplw )
+     if ( .not. desc%vpsi ) then          ! It's a potential FFT
+        CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc2, desc%my_nr2p, desc%nr1p, desc%indp, desc%iplp, 1 )
+     else     ! It's a wavefunction FFT
+        CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc2, desc%my_nr2p, desc%nr1w, desc%indw, desc%iplw, 2 )
      end if
      !
    
@@ -164,18 +164,19 @@
    
      CONTAINS
    
-     SUBROUTINE impl_xy(nr2px, nproc2, my_nr2p, nr1p_, indx, iplx )
+     SUBROUTINE impl_xy(nr2px, nproc2, my_nr2p, nr1p_, indx, iplx, which )
      IMPLICIT NONE
      !
-     INTEGER, INTENT(in):: nr2px, nproc2, my_nr2p
+     INTEGER, INTENT(in):: nr2px, nproc2, my_nr2p, which
      INTEGER, INTENT(in):: nr1p_(nproc2), indx(desc%nr1,nproc2), iplx(desc%nr1)
      !
      INTEGER :: ierr, me2, iproc2, ncpx
      INTEGER :: i, it, j, k, kfrom, kdest, mc, m1, m3, i1, icompact, sendsize, l
-     Logical, allocatable, save :: map( : )
-     Integer, allocatable, save :: map_source( : )
-     Integer, save :: zero_start, zero_end
+     Logical, allocatable, save :: map( : , : )
+     Integer, allocatable, save :: map_source( : , : )
+     Integer, save :: zero_start( 2 ), zero_end( 2 )
      Logical :: first
+     LOGICAL, save :: already( 2 ) = .false.
      !
      me2    = desc%mype2 + 1
      ncpx = MAXVAL(nr1p_) * desc%my_nr3p       ! maximum number of Y columns to be disributed
@@ -185,15 +186,19 @@
      ierr = 0
      IF (isgn.gt.0) THEN
    
-        IF( desc%use_maps ) THEN
+        IF( .true. ) THEN !desc%use_maps ) THEN
         
-           IF( .not.allocated( map ) ) THEN 
-              Allocate( map( nxx_ ) )
-              Allocate( map_source( nxx_ ) )
-              
+           IF( .not. already( which ) ) THEN 
+
+              IF( .not. allocated( map ) ) THEN
+                 Allocate( map( nxx_, 2 ) )
+                 Allocate( map_source( nxx_, 2 ) )
+              END IF
+
+              already(which) = .true.              
            
               do i = 1, nxx_
-                 map(i) = .false.
+                 map(i,which) = .false.
               end do
               !$omp parallel private(it,m3,i1,m1,icompact)
               DO iproc2 = 1, nproc2
@@ -206,8 +211,8 @@
                     m1 = indx(i1,iproc2)
                     icompact = m1 + (m3-1)*desc%nr1*my_nr2p
                     DO j = 1, my_nr2p
-                       map( icompact ) = .true.
-                       map_source( icompact ) = j + it
+                       map( icompact, which ) = .true.
+                       map_source( icompact, which ) = j + it
                        icompact = icompact + desc%nr1
                     ENDDO
                  ENDDO
@@ -219,14 +224,14 @@
               
               do l = 1, desc%nr1
               
-                 IF( map( l ) .eqv. .true. ) THEN
+                 IF( map( l, which ) .eqv. .true. ) THEN
                     IF( first .eqv. .false. ) THEN
-                       zero_end = l-1
+                       zero_end( which ) = l-1
                        EXIT
                     END IF
                  ELSE
                     IF( first .eqv. .true. ) THEN
-                       zero_start = l
+                       zero_start( which ) = l
                        first = .false.
                     END IF
                  END IF
@@ -234,18 +239,18 @@
               end do
            
            END IF
-           
+
            !$omp parallel do private( i, j, k )
            DO i = 1, desc%my_nr3p
               DO j = 1, my_nr2p
-                 DO k = 1, zero_start-1
-                    f_aux( (i-1)*my_nr2p*desc%nr1 + (j-1)*desc%nr1 + k ) = f_in( map_source( (i-1)*my_nr2p*desc%nr1 + (j-1)*desc%nr1 + k ) )
+                 DO k = 1, zero_start(which)-1
+                    f_aux( (i-1)*my_nr2p*desc%nr1 + (j-1)*desc%nr1 + k ) = f_in( map_source( (i-1)*my_nr2p*desc%nr1 + (j-1)*desc%nr1 + k, which ) )
                  END DO
-                 DO k = zero_start, zero_end
+                 DO k = zero_start(which), zero_end(which)
                     f_aux( (i-1)*my_nr2p*desc%nr1 + (j-1)*desc%nr1 + k ) = (0.0_DP, 0.0_DP)
                  END DO
-                 DO k = zero_end+1, desc%nr1
-                    f_aux( (i-1)*my_nr2p*desc%nr1 + (j-1)*desc%nr1 + k ) = f_in( map_source( (i-1)*my_nr2p*desc%nr1 + (j-1)*desc%nr1 + k ) )
+                 DO k = zero_end(which)+1, desc%nr1
+                    f_aux( (i-1)*my_nr2p*desc%nr1 + (j-1)*desc%nr1 + k ) = f_in( map_source( (i-1)*my_nr2p*desc%nr1 + (j-1)*desc%nr1 + k, which ) )
                  END DO
               END DO
            END DO

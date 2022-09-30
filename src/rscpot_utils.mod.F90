@@ -115,7 +115,7 @@ CONTAINS
        dorho=.NOT.lqmmm%qmmm .OR. (lqmmm%qmmm.AND.cntl%bsymm)&
             .OR.(lqmmm%qmmm .AND. iqmmm%coupl_model.EQ.0)
        IF (dorho) THEN
-          IF(batch_fft)THEN
+          IF(.false.) THEN !batch_fft)THEN
              CALL rhoofr_batchfft(c0,rhoe,psi(:,1),nstate)
           ELSE
              CALL rhoofr(c0,rhoe,psi(:,1),nstate)

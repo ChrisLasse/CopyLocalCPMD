@@ -145,6 +145,7 @@ MODULE fftpw_types
 
     REAL(DP), ALLOCATABLE :: gg_pw (:)
     REAL(DP), ALLOCATABLE:: g_cpmd(:,:)
+    REAL(DP), ALLOCATABLE:: g_pw(:,:)
     INTEGER, ALLOCATABLE :: cpmd_mg(:,:)
     INTEGER, ALLOCATABLE :: conv_inv(:)
     INTEGER, ALLOCATABLE :: conv_fw (:)

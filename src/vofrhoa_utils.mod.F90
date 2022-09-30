@@ -1,6 +1,7 @@
 #include "cpmd_global.h"
 
 MODULE vofrhoa_utils
+  USE cppt,                            ONLY: nzh
   USE eextern_utils,                   ONLY: eextern
   USE efld,                            ONLY: textfld
   USE eicalc_utils,                    ONLY: eicalc
@@ -70,7 +71,7 @@ CONTAINS
 #else
     COMPLEX(real_8), ALLOCATABLE             :: eirop(:), eivps(:)
 #endif
-    INTEGER                                  :: ierr, isub, nnrs
+    INTEGER                                  :: ierr, isub, nnrs, ig
     INTEGER(int_8)                           :: il_eivps(1), il_eirop(1)
     REAL(real_8)                             :: ehs
 
@@ -114,7 +115,8 @@ CONTAINS
     !DO ir=1,fpar%nnr1
     !   v(ir)=CMPLX(rhoe(ir),0._real_8,kind=real_8)
     !ENDDO
-    CALL  fwfftu(v,.FALSE.,parai%allgrp)
+    CALL  fwfftn(v,.FALSE.,parai%allgrp)
+
     ! ==--------------------------------------------------------------==
     ! ==                       PERIODIC SYSTEMS                       ==
     ! ==--------------------------------------------------------------==

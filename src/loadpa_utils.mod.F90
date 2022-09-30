@@ -438,6 +438,9 @@ CONTAINS
     dfftp%what = 1
     dfft%what  = 2
 
+    inyh = dfft%g_pw
+!    hg = dfft%gg_pw
+
     RETURN
   END SUBROUTINE loadpa
   ! ==================================================================

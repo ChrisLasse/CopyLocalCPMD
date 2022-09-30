@@ -627,6 +627,7 @@ CONTAINS
     ! == FUNCTION F. THE FOURIER TRANSFORM IS                         ==
     ! == RETURNED IN F (THE INPUT F IS OVERWRITTEN).                  ==
     ! ==--------------------------------------------------------------==
+    USE fftpw_base,                             ONLY: dfftp
 #ifdef __PARALLEL
     USE mpi_f08
 #endif
@@ -653,7 +654,11 @@ CONTAINS
        CALL fftnew_cuda(isign,f,sparse, comm, thread_view=thread_view, &
             & copy_data_to_device=copy_data_to_device, copy_data_to_host=copy_data_to_host )
     ELSE
-       CALL fftnew(isign,f,sparse, parai%allgrp )
+       IF( .false. ) THEN
+          CALL fftnew(isign,f,sparse, parai%allgrp )
+       ELSE
+          CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
+       END IF
     ENDIF
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==
@@ -665,6 +670,7 @@ CONTAINS
     ! == FUNCTION F. THE FOURIER TRANSFORM IS                         ==
     ! == RETURNED IN F IN OUTPUT (THE INPUT F IS OVERWRITTEN).        ==
     ! ==--------------------------------------------------------------==
+    USE fftpw_base,                             ONLY: dfftp
 #ifdef __PARALLEL
     USE mpi_f08
 #endif
@@ -691,7 +697,11 @@ CONTAINS
        CALL fftnew_cuda(isign,f,sparse, comm, thread_view=thread_view, &
             & copy_data_to_device=copy_data_to_device, copy_data_to_host=copy_data_to_host )
     ELSE
-       CALL fftnew(isign,f,sparse, parai%allgrp )
+       IF( .false. ) THEN
+          CALL fftnew(isign,f,sparse, parai%allgrp )
+       ELSE
+          CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
+       END IF
     ENDIF
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==
@@ -700,7 +710,7 @@ CONTAINS
   ! ==================================================================
   ! NEW-er FFT CODE -> includes PW things
   ! ==================================================================
-  SUBROUTINE invfftu(g,f,sparse,comm,thread_view, copy_data_to_device, copy_data_to_host )
+  SUBROUTINE invfftu(f,sparse,comm,thread_view, copy_data_to_device, copy_data_to_host )
     ! ==--------------------------------------------------------------==
     ! == COMPUTES THE INVERSE FOURIER TRANSFORM OF A COMPLEX          ==
     ! == FUNCTION F. THE FOURIER TRANSFORM IS                         ==
@@ -711,7 +721,6 @@ CONTAINS
     USE mpi_f08
 #endif
     COMPLEX(real_8)                          :: f(:)
-    COMPLEX(real_8)                          :: g(:)
     LOGICAL                                  :: sparse
 #ifdef __PARALLEL
     type(MPI_COMM), INTENT(IN)                      :: comm
@@ -736,7 +745,8 @@ CONTAINS
        IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
-          CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp, g )
+          CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
+          write(6,*) "NEW INVFFT CALLED"
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -779,6 +789,7 @@ CONTAINS
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
           CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
+          write(6,*) "NEW FWFFT CALLED"
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -1026,7 +1037,7 @@ CONTAINS
   
   END SUBROUTINE fftpw_batch
 
-  SUBROUTINE fftpw( isign, dfft, f, ng, nr1s, ir1, ns, g )
+  SUBROUTINE fftpw( isign, dfft, f, ng, nr1s, ir1, ns )
     USE cppt,                                   ONLY: indz,&
                                                       nzh
     USE fftpw_converting,                       ONLY: ConvertFFT_Coeffs
@@ -1034,11 +1045,13 @@ CONTAINS
                                                       Set_Req_Vals
     USE fftpw_types,                            ONLY: create_shared_memory_window_1d
     USE system,                                 ONLY: ncpw
+
+!    USE mpi_f08
+
     IMPLICIT NONE
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
     INTEGER, INTENT(IN) :: isign, ng
-    COMPLEX(DP), INTENT(IN), OPTIONAL  :: g(:)
     COMPLEX(DP), INTENT(INOUT) :: f(:)
     INTEGER, INTENT(IN) :: ir1(:), ns(:), nr1s(:)
 
@@ -1047,7 +1060,8 @@ CONTAINS
     COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared1(:)
     COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared2(:)
 
-    INTEGER :: i
+    INTEGER :: i, ierr
+    CHARACTER(*), PARAMETER                  :: procedureN = 'fftpw'
 
     dfft%singl = .true. 
 
@@ -1065,39 +1079,64 @@ CONTAINS
        CALL create_shared_memory_window_1d( shared2, 11, dfft, dfft%sendsize*dfft%nodes_numb ) 
      
     END IF
- 
+
     IF( isign .eq. -1 ) THEN !!  invfft
 
-       CALL ConvertFFT_Coeffs( dfft, -1, g, f, ncpw%nhg, dfft%ngm )
- 
-       CALL Prepare_Psi_overlapp( dfft, f, 1, ng, 1, 1, ns ) 
+       dfft%aux = f
+
+!IF( dfft%mype .eq. 0 ) THEN
+!   write(6,*) dfft%mype
+!   do i = 1, dfft%nnr
+!      write(6,*) i, dfft%aux(i)
+!   enddo
+!END IF
+!CALL MPI_BARRIER( dfft%comm, ierr) 
+!IF( dfft%mype .eq. 1 ) THEN
+!   write(6,*) dfft%mype
+!   do i = 1, dfft%nnr
+!      write(6,*) i, dfft%aux(i)
+!   enddo
+!END IF
+!CALL MPI_BARRIER( dfft%comm, ierr) 
+!CALL stopgm(procedureN,'testing done', __LINE__,__FILE__)
+
        CALL invfft_pre_com( dfft, shared1, shared2, 1, 1, ns )
-  
-       IF( .not. dfft%single_node ) CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
-                     dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
-
-       CALL invfft_after_com( dfft, f, shared2, dfft%map_acinv_one, dfft%map_acinv_rem_one, 1, nr1s )
-  
-    ELSE !! fw fft
-  
-       CALL fwfft_pre_com( dfft, f, shared1, shared2, 1, 1, nr1s, ns )
-  
-       IF( .not. dfft%single_node ) CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
-                     dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
-  
-       CALL fwfft_after_com( dfft, shared2, 1, 1, ns )
-       CALL Accumulate_Psi_overlapp( dfft, f, 1, ng, 1, 1 )
-
-       CALL ConvertFFT_Coeffs( dfft, 1, f, temp, ncpw%nhg, dfft%ngm )
-
-       DO i= 1, ncpw%nhg
-          f( indz(i) ) = CONJG( temp(i) )
-          f( nzh(i) )  = temp(i)
-       ENDDO
     
-  
+       IF( dfft%single_node ) THEN
+          CALL MPI_BARRIER( dfft%comm, ierr )
+       ELSE 
+          CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
+                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+       END IF
+   
+       CALL invfft_after_com( dfft, f, shared2, dfft%map_acinv_one, dfft%map_acinv_rem_one, 1, nr1s )
+
+    ELSE !! fw fft
+    
+       CALL fwfft_pre_com( dfft, f, shared1, shared2, 1, 1, nr1s, ns )
+    
+       IF( dfft%single_node ) THEN
+          CALL MPI_BARRIER( dfft%comm, ierr )
+       ELSE 
+          CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
+                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+       END IF
+    
+       CALL fwfft_after_com( dfft, shared2, 1, 1, ns )
+
+       f = dfft%aux * dfft%tscale 
+!       CALL Accumulate_Psi_overlapp( dfft, f, 1, ng, 1, 1 )
+!   
+!       CALL ConvertFFT_Coeffs( dfft, 1, f, temp, ncpw%nhg, dfft%ngm )
+!   
+!       DO i= 1, ncpw%nhg
+!          f( indz(i) ) = CONJG( temp(i) )
+!          f( nzh(i) )  = temp(i)
+!       ENDDO
+    
+    
     END IF
-  
+
     dfft%singl = .false. 
   
   END SUBROUTINE fftpw

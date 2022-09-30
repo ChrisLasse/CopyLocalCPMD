@@ -17,7 +17,8 @@ MODULE vofrhob_utils
   USE extpotmod,                       ONLY: extpot
   USE fft_maxfft,                      ONLY: maxfftn
   USE fftmain_utils,                   ONLY: fwfftn,&
-                                             invfftn
+                                             invfftn,&
+                                             invfftu
   USE fftnew_utils,                    ONLY: setfftn
   USE gcener_utils,                    ONLY: gcener,&
                                              gclsd
@@ -206,6 +207,7 @@ CONTAINS
        v(nzh(ig),1)  = vtemp(ig,1)
     ENDDO
     IF (geq0) v(nzh(1),1) = vtemp(1,1)
+
     CALL invfftn(v(:,1),.FALSE.,parai%allgrp)
     ! ==--------------------------------------------------------------==
     ! == ADD EXTERNAL POTENTIAL TO V                                  ==

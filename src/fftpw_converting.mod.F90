@@ -92,6 +92,7 @@ CONTAINS
     dfft%ngm_max = MAXVAL( dfft%ngm_all )
 
     ALLOCATE(g_pw(3,dfft%ngm_gl),STAT=ierr)
+    ALLOCATE(dfft%g_pw(3,dfft%ngm_gl),STAT=ierr)
     ALLOCATE(dfft%gg_pw(dfft%ngm_gl),STAT=ierr)
     ALLOCATE(ig_l2g_pw(dfft%ngm_gl),STAT=ierr)
     CALL zeroing(g_pw)
@@ -100,6 +101,8 @@ CONTAINS
     
     CALL ggen_pw( dfft, dfft%bg, dfft%bg, gvec_com%gcut, dfft%ngm_gl, dfft%ngm_l, & 
                   g_pw, dfft%gg_pw, ig_l2g_pw, gstart )
+
+    dfft%g_pw = NINT( g_pw + ( ( spar%nr1s / 2 ) + 1 ) )
 
     ALLOCATE( dfft%ng_all( dfft%nproc ) ,STAT=ierr)
     CALL zeroing( dfft%ng_all )
