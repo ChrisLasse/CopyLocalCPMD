@@ -281,6 +281,7 @@ END SUBROUTINE fft_com
 
 
 SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, ibatch, nr1s )
+    USE mpi_f08
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: ibatch
@@ -298,6 +299,28 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, i
   CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !--------After-Com-Copy Start--------------------------
+
+
+!IF( dfft%mype .eq. 0 ) THEN
+!   write(6,*) dfft%mype
+!   do i = 1, 1024
+!      write(6,*) i, map_acinv(i)
+!   enddo
+!   do i = 1, dfft%nnr
+!      write(6,*) i, comm_mem_recv(i)
+!   enddo
+!END IF
+!CALL MPI_BARRIER( dfft%comm, ierr) 
+!IF( dfft%mype .eq. 1 ) THEN
+!   write(6,*) dfft%mype
+!   do i = 1, 1024
+!      write(6,*) i, map_acinv(i)
+!   enddo
+!   do i = 1, dfft%nnr
+!      write(6,*) i, comm_mem_recv(i)
+!   enddo
+!END IF
+!CALL MPI_BARRIER( dfft%comm, ierr) 
 
   !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
 
@@ -364,7 +387,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, i
   CALL SYSTEM_CLOCK( time(3) )
 !------------------------------------------------------
 !------Forward xy-scatter Start------------------------
-    
+
   CALL fft_scatter_xy( dfft, dfft%aux, f, dfft%nnr, 2 )
 
 !-------Forward xy-scatter End-------------------------

@@ -1826,17 +1826,17 @@ CONTAINS
     !$omp end parallel
   END SUBROUTINE calc_c2
 
-  SUBROUTINE do_the_vpsi_thing( c0, c2, v_cpmd, ngms_source, nbnd_source )
+  SUBROUTINE do_the_vpsi_thing( psi, hpsi, v, ngms_source, nbnd_source )
   
     IMPLICIT NONE
-    COMPLEX(DP), INTENT(IN)  :: c0(ngms_source, nbnd_source)
-    COMPLEX(DP), INTENT(INOUT) :: c2(ngms_source, nbnd_source)
+    COMPLEX(DP), INTENT(IN)  :: psi(ngms_source, nbnd_source)
+    COMPLEX(DP), INTENT(INOUT) :: hpsi(ngms_source, nbnd_source)
     INTEGER, INTENT(IN)    :: ngms_source, nbnd_source
-    REAL(DP), INTENT(IN) :: v_cpmd(dfft%nnr)
+    REAL(DP), INTENT(IN) :: v(dfft%nnr)
   
-    COMPLEX(DP), ALLOCATABLE, SAVE :: psi (:,:)
-    COMPLEX(DP), ALLOCATABLE, SAVE :: hpsi(:,:)
-    REAL(DP), ALLOCATABLE, SAVE :: v(:)
+!    COMPLEX(DP), ALLOCATABLE, SAVE :: psi (:,:)
+!    COMPLEX(DP), ALLOCATABLE, SAVE :: hpsi(:,:)
+!    REAL(DP), ALLOCATABLE, SAVE :: v(:)
  
     LOGICAL, ALLOCATABLE :: first_step(:)
 
@@ -1853,7 +1853,7 @@ CONTAINS
     LOGICAL :: finished_all, last_start, last_start_triggered
 
     INTEGER(INT64) :: time(4)
- 
+
     dfft%vpsi = .true.
  
     IF( .not. dfft%tunned ) THEN
@@ -1866,11 +1866,11 @@ CONTAINS
 
     CALL SYSTEM_CLOCK( time(3) )
 
-    IF( .not. allocated( psi ) ) THEN
+    IF( .not. allocated( first_step ) ) THEN
  
-       ALLOCATE( psi ( ngms, nbnd_source ) ) 
-       ALLOCATE( hpsi( ngms, nbnd_source ) ) 
-       ALLOCATE( v( dfft%nnr ) ) 
+!       ALLOCATE( psi ( ngms, nbnd_source ) ) 
+!       ALLOCATE( hpsi( ngms, nbnd_source ) ) 
+!       ALLOCATE( v( dfft%nnr ) ) 
        ALLOCATE( first_step( dfft%buffer_size_save ) ) 
        dfft%use_maps = .true.
        dfft%ngms = ngms
@@ -1921,10 +1921,10 @@ CONTAINS
   
     END IF
 
-    DO i = 1, nbnd_source
-       CALL ConvertFFT_Coeffs( dfft, -1, c0(:,i), psi(:,i), ncpw%ngw, dfft%ngw ) 
-    ENDDO
-    CALL ConvertFFT_v( dfft, v_cpmd, v )
+!    DO i = 1, nbnd_source
+!       CALL ConvertFFT_Coeffs( dfft, -1, c0(:,i), psi(:,i), ncpw%ngw, dfft%ngw ) 
+!    ENDDO
+!    CALL ConvertFFT_v( dfft, v_cpmd, v )
   
     sendsize_save = dfft%sendsize
     last_start = .true.
@@ -1946,7 +1946,7 @@ CONTAINS
           locks_calc_2( : , i ) = .false.
        ENDDO
     END IF
-  
+
     dfft%first_loading = .true.
     dfft%rem = .false.
   
@@ -2043,7 +2043,7 @@ CONTAINS
                 counter( 1, 1 ) = counter( 1, 1 ) + 1
 
                 CALL invfft_pwbatch( dfft, 1, batch_size, counter( 1, 1 ), work_buffer, psi, comm_send, comm_recv(:,work_buffer) )
-  
+
                 IF( counter( 1, 1 ) .eq. dfft%max_nbnd ) finished( 1, 1 ) = .true.
   
              END IF
@@ -2085,7 +2085,7 @@ CONTAINS
                 IF( .not. dfft%rsactive ) THEN
                    CALL invfft_pwbatch( dfft, 3, batch_size, counter( 1, 2 ), work_buffer, comm_recv, dfft%bench_aux )
                 END IF
-  
+ 
                 DO ibatch = 1, batch_size
                    CALL Apply_V( dfft, dfft%bench_aux(:,ibatch), v, ibatch )
                 ENDDO
@@ -2149,9 +2149,9 @@ CONTAINS
     CALL SYSTEM_CLOCK( time(2) )
     dfft%time_adding( 100 ) = time(2) - time(1)
 
-    DO i = 1, nbnd_source
-       CALL ConvertFFT_Coeffs( dfft, 1, hpsi(:,i), c2(:,i), ncpw%ngw, dfft%ngw )
-    ENDDO
+!    DO i = 1, nbnd_source
+!       CALL ConvertFFT_Coeffs( dfft, 1, hpsi(:,i), c2(:,i), ncpw%ngw, dfft%ngw )
+!    ENDDO
 
     CALL SYSTEM_CLOCK( time(4) )
     dfft%time_adding( 98 ) = time(4) - time(3)

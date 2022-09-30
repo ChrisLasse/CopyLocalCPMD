@@ -9,6 +9,7 @@ MODULE atrho_utils
                                              nzh
   USE dotp_utils,                      ONLY: dotp
   USE error_handling,                  ONLY: stopgm
+  USE fftpw_base,                      ONLY: dfft
   USE fftmain_utils,                   ONLY: invfftn,&
                                              invfftu
   USE fftnew_utils,                    ONLY: setfftn
@@ -58,7 +59,7 @@ CONTAINS
     ! ==                        COMPUTES                              ==
     ! ==  THE NORMALIZED ELECTRON DENSITY RHOE IN REAL SPACE          ==
     ! ==--------------------------------------------------------------==
-
+USE mpi_f08
     REAL(real_8)                             :: rhoe(*)
     COMPLEX(real_8)                          :: psi(:)
     INTEGER                                  :: nstate
@@ -137,18 +138,34 @@ CONTAINS
        END IF
        isa0=isa0+ions0%na(is)
     ENDDO
-
+!IF( dfft%mype .eq. 0 ) THEN
+!   write(6,*) dfft%mype
+!   do ig = 1, ncpw%nhg
+!      write(6,*) ig, rhog(ig)
+!   enddo
+!END IF
+!CALL MPI_BARRIER( dfft%comm, ierr) 
+!IF( dfft%mype .eq. 1 ) THEN
+!   write(6,*) dfft%mype
+!   do ig = 1, ncpw%nhg
+!      write(6,*) ig, rhog(ig)
+!   enddo
+!END IF
+!CALL MPI_BARRIER( dfft%comm, ierr) 
+!CALL stopgm(procedureN,'testing done', __LINE__,__FILE__)
     CALL zeroing(psi)!,maxfft)
     !CDIR NODEP
     !$omp parallel do private(IG) schedule(static)
     DO ig=1,ncpw%nhg
        psi(indz(ig)) = CONJG(rhog(ig))
        psi(nzh(ig))  = rhog(ig)
+!       psi(dfft%nlm(ig)) = CONJG(rhog(ig))
+!       psi(dfft%nl(ig))  = rhog(ig)
     ENDDO
     IF (geq0) psi(nzh(1)) = rhog(1)
     rsum = 0.0_real_8
     IF (geq0) rsum        = REAL(rhog(1))
-    CALL invfftu(rhog, psi,.FALSE.,parai%allgrp)
+    CALL invfftn(psi,.FALSE.,parai%allgrp)
     ! ==--------------------------------------------------------------==
     ! COMPUTE THE INTEGRAL OF THE CHARGE DENSITY IN REAL SPACE
     rsum1=0._real_8
