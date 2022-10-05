@@ -3,6 +3,7 @@
 !=----------------------------------------------------------------------=!
 !! iso_c_binding provides C_PTR, C_NULL_PTR, C_ASSOCIATED
        USE, intrinsic :: iso_c_binding
+       USE error_handling,                ONLY: stopgm
        USE fftpw_param
        USE fftpw_types,                         ONLY: PW_fft_type_descriptor
        IMPLICIT NONE
@@ -177,6 +178,7 @@
      Integer, save :: zero_start( 2 ), zero_end( 2 )
      Logical :: first
      LOGICAL, save :: already( 2 ) = .false.
+     CHARACTER(*), PARAMETER                  :: procedureN = 'legacy_pwfft_xycopy'
      !
      me2    = desc%mype2 + 1
      ncpx = MAXVAL(nr1p_) * desc%my_nr3p       ! maximum number of Y columns to be disributed
@@ -191,8 +193,12 @@
            IF( .not. already( which ) ) THEN 
 
               IF( .not. allocated( map ) ) THEN
-                 Allocate( map( nxx_, 2 ) )
-                 Allocate( map_source( nxx_, 2 ) )
+                 Allocate( map( nxx_, 2 ),STAT=ierr )
+                 IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+                      __LINE__,__FILE__)
+                 Allocate( map_source( nxx_, 2 ),STAT=ierr )
+                 IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+                      __LINE__,__FILE__)
               END IF
 
               already(which) = .true.              

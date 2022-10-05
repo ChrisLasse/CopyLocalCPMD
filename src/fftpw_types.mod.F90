@@ -2,6 +2,7 @@
 MODULE fftpw_types
 !=----------------------------------------------------------------------------=!
 
+  USE error_handling,                ONLY: stopgm
   USE fftpw_param
   USE fftpw_stick_base,              ONLY: get_sticks,&
                                            sticks_map_allocate,&
@@ -143,6 +144,8 @@ MODULE fftpw_types
     LOGICAL, POINTER, CONTIGUOUS :: locks_com_fw(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_overtake(:,:)
 
+    INTEGER, ALLOCATABLE :: pw_ixray(:,:)
+    INTEGER, ALLOCATABLE :: pw_ihray(:,:)
     REAL(DP), ALLOCATABLE :: gg_pw (:)
     REAL(DP), ALLOCATABLE:: g_cpmd(:,:)
     REAL(DP), ALLOCATABLE:: g_pw(:,:)
@@ -261,6 +264,7 @@ CONTAINS
     INTEGER :: nx, ny, ierr, nzfft, i, nsubbatches
     INTEGER :: mype, root, nproc, iproc, iproc2, iproc3 ! mype starting from 0
     INTEGER :: color, key
+    CHARACTER(*), PARAMETER                  :: procedureN = 'fftpw_allocate'
     !write (6,*) ' inside fft_type_allocate' ; FLUSH(6)
 
     desc%comm = comm
@@ -280,9 +284,15 @@ CONTAINS
     desc%nproc2  = 1
     desc%nproc3  = nproc
 
-    ALLOCATE ( desc%iproc(desc%nproc2,desc%nproc3) )
-    ALLOCATE ( desc%iproc2(desc%nproc) )
-    ALLOCATE ( desc%iproc3(desc%nproc) )
+    ALLOCATE ( desc%iproc(desc%nproc2,desc%nproc3),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE ( desc%iproc2(desc%nproc),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE ( desc%iproc3(desc%nproc),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     do iproc = 1, desc%nproc
        iproc2 = MOD(iproc-1, desc%nproc2) + 1 ; iproc3 = (iproc-1)/desc%nproc2 + 1
        desc%iproc2(iproc) = iproc2 ; desc%iproc3(iproc) = iproc3
@@ -291,43 +301,115 @@ CONTAINS
 
 !    CALL realspace_grid_init( desc, at, bg, gcutm, fft_fact )
 
-    ALLOCATE( desc%nr2p ( desc%nproc2 ) ) ;    desc%nr2p = 0 
-    ALLOCATE( desc%i0r2p( desc%nproc2 ) ) ;    desc%i0r2p = 0
-    ALLOCATE( desc%nr2p_offset ( desc%nproc2 ) ) ;    desc%nr2p_offset = 0
-    ALLOCATE( desc%nr3p ( desc%nproc3 ) ) ;    desc%nr3p = 0 
-    ALLOCATE( desc%i0r3p( desc%nproc3 ) ) ;    desc%i0r3p = 0
-    ALLOCATE( desc%nr3p_offset ( desc%nproc3 ) ) ;    desc%nr3p_offset = 0
-    ALLOCATE( desc%nstates ( desc%nproc3 ) ) ;     desc%nstates = 0 
-    ALLOCATE( desc%nstates_offset ( desc%nproc3 ) ) ;    desc%nstates_offset = 0
+    ALLOCATE( desc%nr2p ( desc%nproc2 ),STAT=ierr ) 
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    desc%nr2p = 0 
+    ALLOCATE( desc%i0r2p( desc%nproc2 ),STAT=ierr ) 
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    desc%i0r2p = 0
+    ALLOCATE( desc%nr2p_offset ( desc%nproc2 ),STAT=ierr ) 
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    desc%nr2p_offset = 0
+    ALLOCATE( desc%nr3p ( desc%nproc3 ),STAT=ierr ) 
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    desc%nr3p = 0 
+    ALLOCATE( desc%i0r3p( desc%nproc3 ),STAT=ierr ) 
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    desc%i0r3p = 0
+    ALLOCATE( desc%nr3p_offset ( desc%nproc3 ),STAT=ierr ) 
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    desc%nr3p_offset = 0
+    ALLOCATE( desc%nstates ( desc%nproc3 ),STAT=ierr ) 
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    desc%nstates = 0 
+    ALLOCATE( desc%nstates_offset ( desc%nproc3 ),STAT=ierr ) 
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    desc%nstates_offset = 0
 
     nx = desc%nr1
     ny = desc%nr2
 
-    ALLOCATE( desc%nsp( desc%nproc ) ) ; desc%nsp   = 0
-    ALLOCATE( desc%nsp_offset( desc%nproc2, desc%nproc3 ) ) ; desc%nsp_offset = 0
-    ALLOCATE( desc%nsw( desc%nproc ) ) ; desc%nsw   = 0
-    ALLOCATE( desc%nsw_offset( desc%nproc2, desc%nproc3 ) ) ; desc%nsw_offset = 0
-    ALLOCATE( desc%nsw_tg( desc%nproc ) ) ; desc%nsw_tg   = 0
-    ALLOCATE( desc%ngl( desc%nproc ) ) ; desc%ngl   = 0
-    ALLOCATE( desc%nwl( desc%nproc ) ) ; desc%nwl   = 0
-    ALLOCATE( desc%iss( desc%nproc ) ) ; desc%iss   = 0
-    ALLOCATE( desc%isind( nx * ny ) ) ; desc%isind = 0
-    ALLOCATE( desc%ismap( nx * ny ) ) ; desc%ismap = 0
-    ALLOCATE( desc%nr1p( desc%nproc2 ) ) ; desc%nr1p  = 0
-    ALLOCATE( desc%nr1w( desc%nproc2 ) ) ; desc%nr1w  = 0
-    ALLOCATE( desc%ir1p( desc%nr1 ) ) ; desc%ir1p  = 0
-    ALLOCATE( desc%indp( desc%nr1,desc%nproc2 ) ) ; desc%indp  = 0
-    ALLOCATE( desc%ir1w( desc%nr1 ) ) ; desc%ir1w  = 0
-    ALLOCATE( desc%ir1w_tg( desc%nr1 ) ) ; desc%ir1w_tg  = 0
-    ALLOCATE( desc%indw( desc%nr1, desc%nproc2 ) ) ; desc%indw  = 0
-    ALLOCATE( desc%indw_tg( desc%nr1 ) ) ; desc%indw_tg  = 0
-    ALLOCATE( desc%iplp( nx ) ) ; desc%iplp  = 0
-    ALLOCATE( desc%iplw( nx ) ) ; desc%iplw  = 0
+    ALLOCATE( desc%nsp( desc%nproc ),STAT=ierr ) ; desc%nsp   = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%nsp_offset( desc%nproc2, desc%nproc3 ),STAT=ierr ) ; desc%nsp_offset = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%nsw( desc%nproc ),STAT=ierr ) ; desc%nsw   = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%nsw_offset( desc%nproc2, desc%nproc3 ),STAT=ierr ) ; desc%nsw_offset = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%nsw_tg( desc%nproc ),STAT=ierr ) ; desc%nsw_tg   = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%ngl( desc%nproc ),STAT=ierr ) ; desc%ngl   = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%nwl( desc%nproc ),STAT=ierr ) ; desc%nwl   = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%iss( desc%nproc ),STAT=ierr ) ; desc%iss   = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%isind( nx * ny ),STAT=ierr ) ; desc%isind = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%ismap( nx * ny ),STAT=ierr ) ; desc%ismap = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%nr1p( desc%nproc2 ),STAT=ierr ) ; desc%nr1p  = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%nr1w( desc%nproc2 ),STAT=ierr ) ; desc%nr1w  = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%ir1p( desc%nr1 ),STAT=ierr ) ; desc%ir1p  = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%indp( desc%nr1,desc%nproc2 ),STAT=ierr ) ; desc%indp  = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%ir1w( desc%nr1 ),STAT=ierr ) ; desc%ir1w  = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%ir1w_tg( desc%nr1 ),STAT=ierr ) ; desc%ir1w_tg  = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%indw( desc%nr1, desc%nproc2 ),STAT=ierr ) ; desc%indw  = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%indw_tg( desc%nr1 ),STAT=ierr ) ; desc%indw_tg  = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%iplp( nx ),STAT=ierr ) ; desc%iplp  = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%iplw( nx ),STAT=ierr ) ; desc%iplw  = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
 
-    ALLOCATE( desc%tg_snd( desc%nproc2) ) ; desc%tg_snd = 0
-    ALLOCATE( desc%tg_rcv( desc%nproc2) ) ; desc%tg_rcv = 0
-    ALLOCATE( desc%tg_sdsp( desc%nproc2) ) ; desc%tg_sdsp = 0
-    ALLOCATE( desc%tg_rdsp( desc%nproc2) ) ; desc%tg_rdsp = 0
+    ALLOCATE( desc%tg_snd( desc%nproc2),STAT=ierr ) ; desc%tg_snd = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%tg_rcv( desc%nproc2),STAT=ierr ) ; desc%tg_rcv = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%tg_sdsp( desc%nproc2),STAT=ierr ) ; desc%tg_sdsp = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( desc%tg_rdsp( desc%nproc2),STAT=ierr ) ; desc%tg_rdsp = 0
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
 
   END SUBROUTINE fft_type_allocate
 !
@@ -947,6 +1029,9 @@ CONTAINS
      REAL(DP) :: gcut, gkcut
      INTEGER  :: ngm, ngw
      !write (6,*) ' inside fft_type_init' ; FLUSH(6)
+ 
+     INTEGER :: i, j, ierr
+     CHARACTER(*), PARAMETER                  :: procedureN = 'pw_type_init'
 
      gkcut = gcutw
      gcut  = gcutp
@@ -961,17 +1046,49 @@ CONTAINS
      CALL sticks_map_allocate( smap, dfft%lpara, dfft%nproc2, &
           dfft%iproc, dfft%iproc2, dfft%nr1, dfft%nr2, dfft%nr3, bg, dfft%comm )
 
-     ALLOCATE( stw ( smap%lb(1):smap%ub(1), smap%lb(2):smap%ub(2) ) )
-     ALLOCATE( st  ( smap%lb(1):smap%ub(1), smap%lb(2):smap%ub(2) ) )
-     ALLOCATE( nstp(smap%nproc) )
-     ALLOCATE( sstp(smap%nproc) )
-     ALLOCATE( nstpw(smap%nproc) )
-     ALLOCATE( sstpw(smap%nproc) )
+     ALLOCATE( stw ( smap%lb(1):smap%ub(1), smap%lb(2):smap%ub(2) ),STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     ALLOCATE( st  ( smap%lb(1):smap%ub(1), smap%lb(2):smap%ub(2) ),STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     ALLOCATE( nstp(smap%nproc),STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     ALLOCATE( sstp(smap%nproc),STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     ALLOCATE( nstpw(smap%nproc),STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     ALLOCATE( sstpw(smap%nproc),STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+
+     ALLOCATE( dfft%pw_ixray(dfft%nr2,dfft%nr3),STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     ALLOCATE( dfft%pw_ihray(dfft%nr2,dfft%nr3),STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
 
      !write(*,*) 'calling get_sticks with gkcut =',gkcut
      CALL get_sticks(  smap, gcutw, nstpw, sstpw, stw, nstw, ngw )
+
+     DO i = -15, 15
+        DO j = -15, 15
+           dfft%pw_ixray(i+17,j+17) = -smap%stown(i,j)
+        ENDDO
+     ENDDO
+
      !write(*,*) 'calling get_sticks with gcut =',gcut
      CALL get_sticks(  smap, gcutp,  nstp, sstp, st, nst, ngm )
+
+     DO i = -15, 15
+        DO j = -15, 15
+           dfft%pw_ihray(i+17,j+17) = -smap%stown(i,j)
+        ENDDO
+     ENDDO
 
      CALL fft_type_set( dfft, nst, smap%ub, smap%lb, smap%idx, &
           smap%ist(:,1), smap%ist(:,2), nstp, nstpw, sstp, sstpw, st, stw )
@@ -988,12 +1105,24 @@ CONTAINS
           write(6,*) "init wrong"
      END IF
 
-     DEALLOCATE( st )
-     DEALLOCATE( stw )
-     DEALLOCATE( nstp )
-     DEALLOCATE( sstp )
-     DEALLOCATE( nstpw )
-     DEALLOCATE( sstpw )
+     DEALLOCATE( st,STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     DEALLOCATE( stw,STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     DEALLOCATE( nstp,STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     DEALLOCATE( sstp,STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     DEALLOCATE( nstpw,STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
+     DEALLOCATE( sstpw,STAT=ierr )
+     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+          __LINE__,__FILE__)
 
   END SUBROUTINE fft_type_init
 !
@@ -1227,6 +1356,7 @@ CONTAINS
        COMPLEX(DP),  POINTER, CONTIGUOUS   :: temp( : )
     END TYPE CONTAINER
     TYPE(CONTAINER),ALLOCATABLE :: cont(:)
+    CHARACTER(*), PARAMETER                  :: procedureN = 'create_shared_2d'
   
     dfft%window_counter = dfft%window_counter + 1
     arrayshape( 1 ) = win_size1
@@ -1238,11 +1368,15 @@ CONTAINS
     ELSE
        windowsize = 0
     END IF
-    ALLOCATE( baseptr( dfft%node_task_size ) )
+    ALLOCATE( baseptr( dfft%node_task_size ),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     displ = mpi_double_complex_in_bytes
   
     CALL MPI_WIN_ALLOCATE_SHARED( windowsize , displ, MPI_INFO_NULL,  &
          dfft%node_comm, baseptr( dfft%my_node_rank + 1 ), dfft%mpi_window( window_number ), ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
   
     IF ( dfft%my_node_rank .ne. 0 ) then
        CALL MPI_WIN_SHARED_QUERY( dfft%mpi_window( window_number ), 0, windowsize, &
@@ -1278,6 +1412,7 @@ CONTAINS
        COMPLEX(DP),  POINTER, CONTIGUOUS   :: temp( : )
     END TYPE CONTAINER
     TYPE(CONTAINER),ALLOCATABLE :: cont(:)
+    CHARACTER(*), PARAMETER                  :: procedureN = 'create_shared_1d'
   
     dfft%window_counter = dfft%window_counter + 1
     arrayshape( 1 ) = win_size
@@ -1288,11 +1423,15 @@ CONTAINS
     ELSE
        windowsize = 0
     END IF
-    ALLOCATE( baseptr( dfft%node_task_size ) )
+    ALLOCATE( baseptr( dfft%node_task_size ),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     displ = mpi_double_complex_in_bytes
   
     CALL MPI_WIN_allocate_shared( windowsize , displ, MPI_INFO_NULL,  &
          dfft%node_comm, baseptr( dfft%my_node_rank + 1 ), dfft%mpi_window( window_number ), ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
   
     IF ( dfft%my_node_rank .ne. 0 ) then
        CALL mpi_win_shared_query( dfft%mpi_window( window_number ), 0, windowsize, &
@@ -1328,6 +1467,7 @@ CONTAINS
        COMPLEX(DP),  POINTER, CONTIGUOUS   :: temp( : )
     END TYPE CONTAINER
     TYPE(CONTAINER),ALLOCATABLE :: cont(:)
+    CHARACTER(*), PARAMETER                  :: procedureN = 'create_locks_2d'
   
     dfft%window_counter = dfft%window_counter + 1
     arrayshape( 1 ) = win_size1
@@ -1339,11 +1479,15 @@ CONTAINS
     ELSE
        windowsize = 0
     END IF
-    ALLOCATE( baseptr( dfft%node_task_size ) )
+    ALLOCATE( baseptr( dfft%node_task_size ),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     displ = mpi_logical_in_bytes
   
     CALL MPI_WIN_allocate_shared( windowsize , displ, MPI_INFO_NULL,  &
          dfft%node_comm, baseptr( dfft%my_node_rank + 1 ), dfft%mpi_window( window_number ), ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
   
     IF ( dfft%my_node_rank .ne. 0 ) then
        CALL mpi_win_shared_query( dfft%mpi_window( window_number ), 0, windowsize, &
@@ -1381,6 +1525,7 @@ CONTAINS
        COMPLEX(DP),  POINTER, CONTIGUOUS   :: temp( : )
     END TYPE CONTAINER
     TYPE(CONTAINER),ALLOCATABLE :: cont(:)
+    CHARACTER(*), PARAMETER                  :: procedureN = 'create_shared_1d'
   
     dfft%window_counter = dfft%window_counter + 1
     arrayshape( 1 ) = win_size
@@ -1391,11 +1536,15 @@ CONTAINS
     ELSE
        windowsize = 0
     END IF
-    ALLOCATE( baseptr( dfft%node_task_size ) )
+    ALLOCATE( baseptr( dfft%node_task_size ),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     displ = mpi_logical_in_bytes
   
     CALL MPI_WIN_allocate_shared( windowsize , displ, MPI_INFO_NULL,  &
          dfft%node_comm, baseptr( dfft%my_node_rank + 1 ), dfft%mpi_window( window_number ), ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
   
     IF ( dfft%my_node_rank .ne. 0 ) then
        CALL mpi_win_shared_query( dfft%mpi_window( window_number ), 0, windowsize, &

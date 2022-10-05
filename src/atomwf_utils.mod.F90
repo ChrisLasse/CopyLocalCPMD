@@ -287,7 +287,6 @@ CONTAINS
     IF (tkpts%tkpnt) CALL setkwf(ncpw%ngw,atwp%nattot,catom)
     ! Local potential
     CALL vofrho(tau0,fion,rhoe,psi,.FALSE.,.FALSE.)
-
     ! SUM ETOT, EKIN, EHT, EPSEU, ENL and EXC.
     CALL mp_sum(ener_com%etot,parai%allgrp)
     CALL mp_sum(ener_com%ekin,parai%allgrp)
@@ -295,7 +294,6 @@ CONTAINS
     CALL mp_sum(ener_com%enl,parai%allgrp)
     CALL mp_sum(ener_com%eht,parai%allgrp)
     CALL mp_sum(ener_com%ehep,parai%allgrp)
-
     IF (cntl%tdmal) THEN
        CALL dist_ksmat(cx,rhoe,psi(:,1),nstate,1,c0,&
             MIN(nstate,atwp%nattot),tlsd2,.FALSE.)

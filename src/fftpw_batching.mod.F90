@@ -166,25 +166,25 @@ SUBROUTINE invfft_pre_com( dfft, comm_mem_send, comm_mem_recv, ibatch, batch_siz
 
      !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 1 ), ierr )
 
-     !$omp parallel private( l, m, j, offset, k, kdest, kfrom, i )
+!     !$omp parallel private( l, m, j, offset, k, kdest, kfrom, i )
      DO l = 1, dfft%nodes_numb
         IF( dfft%non_blocking .and. l .eq. dfft%my_node+1 ) CYCLE 
         DO m = 1, dfft%node_task_size
            j = (l-1)*dfft%node_task_size + m
            offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (ibatch-1) ) * dfft%big_chunks
-           !$omp do
-           DO k = 0, dfft%nsw(dfft%mype+1)-1
+!           !$omp do
+           DO k = 0, ns(dfft%mype+1)-1
               kdest = offset + dfft%nr3px * k 
               kfrom = dfft%nr3p_offset( j ) + dfft%nr3 * k
-              !omp simd
+!              !omp simd
               DO i = 1, dfft%nr3p( j )
                  comm_mem_send( kdest + i ) = dfft%aux( kfrom + i )
               ENDDO
            ENDDO
-           !$omp end do nowait
+!           !$omp end do nowait
         ENDDO
      ENDDO
-     !$omp end parallel
+!     !$omp end parallel
 
      !CALL mpi_win_unlock_all( dfft%mpi_window( 1 ), ierr )
 

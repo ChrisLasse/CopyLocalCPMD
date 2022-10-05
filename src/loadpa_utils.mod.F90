@@ -239,6 +239,20 @@ CONTAINS
     ncpw%ngw=INT(REAL(spar%ngws,kind=real_8)/REAL(parai%nproc,kind=real_8)*1.2_real_8)
     ncpw%ngw=MIN(ncpw%ngw,spar%ngws)
     ncpw%ngw=MAX(ncpw%ngw,100)
+
+
+    CALL Create_PwFFT_datastructure( dfft, "wave" )
+
+    CALL Create_PwFFT_datastructure( dfftp, "rho" )
+
+    dfftp%what = 1
+    dfft%what  = 2
+
+    ixray = dfft%pw_ixray
+    ihray = dfft%pw_ihray
+    ncpw%nhg = dfft%ngm
+    ncpw%ngw = dfft%ngw
+
     ALLOCATE(hg(ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
@@ -314,7 +328,7 @@ CONTAINS
                    ! HG(NHG)=G2+SQRT(real(IG-1,kind=real_8))*EPSG*SIGN
                    ! G2*EPSGX*SIGN is the epsilon added (>= epsilon(G2))
                    ! SQRT(FLOAT(IG-1)) is to break the symmetry
-                   hg(ncpw%nhg)=g2*(1._real_8+SQRT(REAL(ig-1,kind=real_8))*epsgx*sign)
+!                   hg(ncpw%nhg)=g2*(1._real_8+SQRT(REAL(ig-1,kind=real_8))*epsgx*sign)
                    inyh(1,ncpw%nhg)=in1
                    inyh(2,ncpw%nhg)=in2
                    inyh(3,ncpw%nhg)=in3
@@ -323,6 +337,12 @@ CONTAINS
           ENDDO
        ENDDO
     ENDDO
+
+    inyh = dfft%g_pw
+    hg = dfft%gg_pw
+    ncpw%nhg = dfft%ngm
+    ncpw%ngw = dfft%ngw
+
     CALL zeroing(mgpa)!,kr2s*kr3s)
     parai%nhrays=0
     parai%ngrays=0
@@ -398,9 +418,47 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     ! SORTING OF G-VECTORS
     ! ==--------------------------------------------------------------==
-    CALL gsort(hg,inyh,ncpw%nhg)
-    dfft%g_cpmd = inyh - ( ( spar%nr1s / 2 ) + 1 )
-    dfftp%g_cpmd = inyh - ( ( spar%nr1s / 2 ) + 1 )
+!    CALL gsort(hg,inyh,ncpw%nhg)
+!    dfft%g_cpmd = inyh - ( ( spar%nr1s / 2 ) + 1 )
+!    dfftp%g_cpmd = inyh - ( ( spar%nr1s / 2 ) + 1 )
+
+
+
+
+
+!do i = 1, ncpw%nhg
+!write(6,*) i, hg(i), dfft%gg_pw(i)
+!enddo
+
+!    ncpw%nhg = dfft%ngm
+!    IF( allocated( hg ) ) DEALLOCATE( hg )
+!    ALLOCATE(hg(ncpw%nhg),STAT=ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+!         __LINE__,__FILE__)
+!    IF( allocated( inyh ) ) DEALLOCATE( inyh )
+!    ALLOCATE(inyh(3,ncpw%nhg),STAT=ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+!         __LINE__,__FILE__)
+!    IF( allocated( mapgp ) ) DEALLOCATE( mapgp )
+!    ALLOCATE(mapgp(ncpw%nhg),STAT=ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+!         __LINE__,__FILE__)
+!
+!
+!    IF (tkpts%tkpnt) THEN
+!       nkpt%ngwk=ncpw%ngw*2
+!       nkpt%nhgk=ncpw%nhg*2
+!    ELSE
+!       nkpt%ngwk=ncpw%ngw
+!       nkpt%nhgk=ncpw%nhg
+!    ENDIF
+!    parap%sparm(1,parai%mepos)=ncpw%nhg
+
+
+
+    
+
+
     DO ig=1,ncpw%nhg
        mapgp(ig)=ig
     ENDDO
@@ -430,16 +488,6 @@ CONTAINS
          __LINE__,__FILE__)
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==
-
-    CALL Create_PwFFT_datastructure( dfft, "wave" )
-
-    CALL Create_PwFFT_datastructure( dfftp, "rho" )
-
-    dfftp%what = 1
-    dfft%what  = 2
-
-    inyh = dfft%g_pw
-!    hg = dfft%gg_pw
 
     RETURN
   END SUBROUTINE loadpa
