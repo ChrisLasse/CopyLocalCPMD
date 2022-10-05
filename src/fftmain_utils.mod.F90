@@ -1084,29 +1084,15 @@ CONTAINS
 
        dfft%aux = f
 
-!IF( dfft%mype .eq. 0 ) THEN
-!   write(6,*) dfft%mype
-!   do i = 1, dfft%nnr
-!      write(6,*) i, dfft%aux(i)
-!   enddo
-!END IF
-!CALL MPI_BARRIER( dfft%comm, ierr) 
-!IF( dfft%mype .eq. 1 ) THEN
-!   write(6,*) dfft%mype
-!   do i = 1, dfft%nnr
-!      write(6,*) i, dfft%aux(i)
-!   enddo
-!END IF
-!CALL MPI_BARRIER( dfft%comm, ierr) 
-!CALL stopgm(procedureN,'testing done', __LINE__,__FILE__)
-
        CALL invfft_pre_com( dfft, shared1, shared2, 1, 1, ns )
     
        IF( dfft%single_node ) THEN
           CALL MPI_BARRIER( dfft%comm, ierr )
        ELSE 
+          CALL MPI_BARRIER( dfft%comm, ierr )
           CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
                         dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+          CALL MPI_BARRIER( dfft%comm, ierr )
        END IF
    
        CALL invfft_after_com( dfft, f, shared2, dfft%map_acinv_one, dfft%map_acinv_rem_one, 1, nr1s )
@@ -1118,22 +1104,15 @@ CONTAINS
        IF( dfft%single_node ) THEN
           CALL MPI_BARRIER( dfft%comm, ierr )
        ELSE 
+          CALL MPI_BARRIER( dfft%comm, ierr )
           CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
                         dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+          CALL MPI_BARRIER( dfft%comm, ierr )
        END IF
     
        CALL fwfft_after_com( dfft, shared2, 1, 1, ns )
 
        f = dfft%aux * dfft%tscale 
-!       CALL Accumulate_Psi_overlapp( dfft, f, 1, ng, 1, 1 )
-!   
-!       CALL ConvertFFT_Coeffs( dfft, 1, f, temp, ncpw%nhg, dfft%ngm )
-!   
-!       DO i= 1, ncpw%nhg
-!          f( indz(i) ) = CONJG( temp(i) )
-!          f( nzh(i) )  = temp(i)
-!       ENDDO
-    
     
     END IF
 

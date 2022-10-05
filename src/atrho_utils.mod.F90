@@ -140,21 +140,6 @@ CONTAINS
        END IF
        isa0=isa0+ions0%na(is)
     ENDDO
-!IF( dfft%mype .eq. 0 ) THEN
-!   write(6,*) dfft%mype
-!   do ig = 1, ncpw%nhg
-!      write(6,*) ig, rhog(ig)
-!   enddo
-!END IF
-!CALL MPI_BARRIER( dfft%comm, ierr) 
-!IF( dfft%mype .eq. 1 ) THEN
-!   write(6,*) dfft%mype
-!   do ig = 1, ncpw%nhg
-!      write(6,*) ig, rhog(ig)
-!   enddo
-!END IF
-!CALL MPI_BARRIER( dfft%comm, ierr) 
-!CALL stopgm(procedureN,'testing done', __LINE__,__FILE__)
     CALL zeroing(psi)!,maxfft)
     !CDIR NODEP
     !$omp parallel do private(IG) schedule(static)

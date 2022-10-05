@@ -2,6 +2,7 @@
 MODULE fftpw_stick_base
 !=----------------------------------------------------------------------=
 
+   USE error_handling,                ONLY: stopgm
    USE fftpw_param
 
    IMPLICIT NONE
@@ -66,6 +67,7 @@ CONTAINS
       INTEGER :: lb(3), ub(3)
       INTEGER :: nzfft, nstx, ierr
       INTEGER, ALLOCATABLE :: indmap(:,:), stown(:,:), idx(:), ist(:,:)
+      CHARACTER(*), PARAMETER                  :: procedureN = 'sticks_map'
       !write (6,*) ' inside sticks_map_allocate'; FLUSH(6)
       ub(1) = ( nr1 - 1 ) / 2
       ub(2) = ( nr2 - 1 ) / 2
@@ -93,14 +95,24 @@ CONTAINS
          smap%bg = bg
          smap%nyfft = nyfft
          nzfft = smap%nproc / nyfft
-         ALLOCATE ( smap%iproc( nyfft, nzfft ), smap%iproc2 ( smap%nproc ) )
+         ALLOCATE ( smap%iproc( nyfft, nzfft ), smap%iproc2 ( smap%nproc ),STAT=ierr )
+         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+              __LINE__,__FILE__)
          smap%iproc = iproc
          smap%iproc2= iproc2
 
-         ALLOCATE( smap%indmap ( lb(1):ub(1), lb(2):ub(2) ) )
-         ALLOCATE( smap%stown ( lb(1):ub(1), lb(2):ub(2) ) )
-         ALLOCATE( smap%idx( nstx ) )
-         ALLOCATE( smap%ist( nstx , 2) )
+         ALLOCATE( smap%indmap ( lb(1):ub(1), lb(2):ub(2) ),STAT=ierr )
+         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+              __LINE__,__FILE__)
+         ALLOCATE( smap%stown ( lb(1):ub(1), lb(2):ub(2) ),STAT=ierr )
+         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+              __LINE__,__FILE__)
+         ALLOCATE( smap%idx( nstx ),STAT=ierr )
+         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+              __LINE__,__FILE__)
+         ALLOCATE( smap%ist( nstx , 2),STAT=ierr )
+         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+              __LINE__,__FILE__)
          smap%stown = 0
          smap%indmap = 0
          smap%idx = 0
@@ -334,15 +346,18 @@ CONTAINS
 
       INTEGER, INTENT(inout) :: idx(:)
 
-      INTEGER  :: mc, ic, nc
+      INTEGER  :: mc, ic, nc, ierr
       INTEGER, ALLOCATABLE :: iaux(:)
       INTEGER, ALLOCATABLE :: itmp(:)
       REAL(DP), ALLOCATABLE :: aux(:)
+      CHARACTER(*), PARAMETER                  :: procedureN = 'sticks_sort'
       !write (6,*) ' inside sticks_map_sort_new'; FLUSH(6)
 
       !  we need to avoid sorting elements already sorted previously
       !  build inverse indexes
-      ALLOCATE( iaux( nct ) )
+      ALLOCATE( iaux( nct ),STAT=ierr )
+      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+           __LINE__,__FILE__)
       iaux = 0
       DO mc = 1, nct
          IF( idx( mc ) > 0 ) iaux( idx( mc ) ) = mc
@@ -371,8 +386,12 @@ CONTAINS
       END IF
 
       IF( parallel ) THEN
-         ALLOCATE( aux( nct ) )
-         ALLOCATE( itmp( nct ) )
+         ALLOCATE( aux( nct ),STAT=ierr )
+         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+              __LINE__,__FILE__)
+         ALLOCATE( itmp( nct ),STAT=ierr )
+         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+              __LINE__,__FILE__)
          itmp = 0
          nc = 0
          DO mc = 1, nct
@@ -386,8 +405,12 @@ CONTAINS
          DO mc = 1, nc
             idx( ic + mc ) = itmp( mc )
          END DO
-         DEALLOCATE( itmp )
-         DEALLOCATE( aux )
+         DEALLOCATE( itmp,STAT=ierr )
+         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+              __LINE__,__FILE__)
+         DEALLOCATE( aux,STAT=ierr )
+         IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+              __LINE__,__FILE__)
       ELSE
          DO mc = 1, nct
             IF( ng(mc) > 0 .AND. iaux(mc) == 0 ) THEN
@@ -398,7 +421,9 @@ CONTAINS
       ENDIF
 !CLR: sorts the sticks. On Exit, %idx contains the stick indexes sorted from the
 !one with the most g-vectors to the one with the least
-      DEALLOCATE( iaux )
+      DEALLOCATE( iaux,STAT=ierr )
+      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+           __LINE__,__FILE__)
 
       RETURN
    END SUBROUTINE sticks_sort_new
@@ -424,16 +449,24 @@ CONTAINS
       INTEGER, INTENT(out):: ngp(:)           ! number of G-vectors per processor
       INTEGER, INTENT(out):: ng               ! number of G-vector of this processor. that is ng = ngp(mype+1)
 
-      INTEGER :: mc, i1, i2, j, jj, icnt, gr, j2, j3
+      INTEGER :: mc, i1, i2, j, jj, icnt, gr, j2, j3, ierr
       INTEGER, ALLOCATABLE :: yc(:), yg(:) ! number of relevant columns and G-vectors in a given yz plane
       INTEGER, ALLOCATABLE :: ygr(:) ! element in the nyfft group to which a YZ plane belong
       INTEGER, ALLOCATABLE :: ygrp(:), ygrc(:), ygrg(:) ! number of yz planes, relevant columns and G-vectors belonging to a given element in the nyfft group
       !write (6,*) ' inside sticks_map_dist_new'; FLUSH(6)
+      CHARACTER(*), PARAMETER                  :: procedureN = 'sticks_dist'
 
       ! distribute X values first
       !write (6,*) 'nyfft inside sticks_dist_new', nyfft
-      ALLOCATE ( yc(lb(1):ub(1)), yg(lb(1):ub(1)), ygr(lb(1):ub(1)) ) ; yc = 0; yg = 0 ; ygr = 0
-      ALLOCATE ( ygrp(nyfft), ygrc(nyfft), ygrg(nyfft) ) ; ygrp = 0; ygrc = 0; ygrg = 0 
+      ALLOCATE ( yc(lb(1):ub(1)), yg(lb(1):ub(1)), ygr(lb(1):ub(1)),STAT=ierr ) 
+      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+           __LINE__,__FILE__)
+
+      yc = 0; yg = 0 ; ygr = 0
+      ALLOCATE ( ygrp(nyfft), ygrc(nyfft), ygrg(nyfft),STAT=ierr ) 
+      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+           __LINE__,__FILE__)
+      ygrp = 0; ygrc = 0; ygrg = 0 
       DO mc =1, nct
 !CLR: yc/yg get loaded with the number of sticks/g-vectors in a y-column
          if( idx( mc ) < 1 ) CYCLE
@@ -556,8 +589,12 @@ CONTAINS
 
       !write (6,*) 'final nyfft distribution'
       !write (6,'(4i5)') (i1,ygrp(i1),ygrc(i1),ygrg(i1),i1=1,nyfft)
-      DEALLOCATE ( ygrp, ygrc, ygrg ) 
-      DEALLOCATE ( yc, yg, ygr ) 
+      DEALLOCATE ( ygrp, ygrc, ygrg,STAT=ierr ) 
+      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+           __LINE__,__FILE__)
+      DEALLOCATE ( yc, yg, ygr,STAT=ierr ) 
+      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+           __LINE__,__FILE__)
 
       RETURN
    END SUBROUTINE sticks_dist_new
@@ -589,8 +626,9 @@ CONTAINS
       INTEGER, ALLOCATABLE :: ngc(:)
       INTEGER :: ic
 
-      INTEGER :: l, k, i, j
+      INTEGER :: l, k, i, j, ierr
       LOGICAL, SAVE :: first = .true.    
+      CHARACTER(*), PARAMETER                  :: procedureN = 'sticks_get'
  
       !write (6,*) ' inside get_sticks gcut=',gcut; FLUSH(6)
       !write (6,*) smap%lb, smap%ub
@@ -598,7 +636,9 @@ CONTAINS
       st = 0
       CALL sticks_map_set( smap%lgamma, smap%ub, smap%lb, smap%bg, gcut, st, smap%comm )
 
-      ALLOCATE( ngc ( SIZE( smap%idx ) ) )
+      ALLOCATE( ngc ( SIZE( smap%idx ) ),STAT=ierr )
+      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+           __LINE__,__FILE__)
       ngc = 0
       CALL sticks_map_index( smap%ub, smap%lb, st, smap%ist(:,1), smap%ist(:,2), ngc, smap%indmap )
       nst = count( st > 0 )
@@ -648,7 +688,9 @@ CONTAINS
          END IF
       END DO
 !CLR: copy stown to st
-      DEALLOCATE( ngc )
+      DEALLOCATE( ngc,STAT=ierr )
+      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+           __LINE__,__FILE__)
       RETURN
    END SUBROUTINE get_sticks
 !

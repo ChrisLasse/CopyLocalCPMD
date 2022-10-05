@@ -48,6 +48,7 @@ CONTAINS
     !
     !     here a few local variables
     !
+    CHARACTER(*), PARAMETER                  :: procedureN = 'fft_ggen'
     REAL(DP), PARAMETER :: eps8=1.0E-8_DP
     REAL(DP) :: tx(3), ty(3), t(3)
     REAL(DP), ALLOCATABLE :: tt(:)
@@ -61,7 +62,7 @@ CONTAINS
     ! only g-vectors for the current processor are stored
     INTEGER, ALLOCATABLE :: igsrt(:), g2l(:)
     !
-    INTEGER :: ni, nj, nk, i, j, k, ipol, ng, igl, indsw
+    INTEGER :: ni, nj, nk, i, j, k, ipol, ng, igl, indsw, ierr
     INTEGER :: istart, jstart, kstart
     INTEGER :: mype, npe
     LOGICAL :: global_sort, is_local
@@ -84,16 +85,26 @@ CONTAINS
     !
     !    and computes all the g vectors inside a sphere
     !
-    ALLOCATE( mill_unsorted( 3, ngm_save ) )
-    ALLOCATE( igsrt( ngm_max ) )
-    ALLOCATE( g2l( ngm_max ) )
-    ALLOCATE( g2sort_g( ngm_max ) )
+    ALLOCATE( mill_unsorted( 3, ngm_save ),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( igsrt( ngm_max ),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( g2l( ngm_max ),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( g2sort_g( ngm_max ),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     !
     g2sort_g(:) = 1.0d20
     !
     ! allocate temporal array
     !
-    ALLOCATE( tt( dfft%nr3 ) )
+    ALLOCATE( tt( dfft%nr3 ),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     !
     ! max miller indices (same convention as in module stick_set)
     !
@@ -171,7 +182,13 @@ CONTAINS
     !
     igsrt(1) = 0
     CALL hpsort_eps( ngm_g, g2sort_g, igsrt, eps8 )
-    DEALLOCATE( g2sort_g, tt )
+    DEALLOCATE( g2sort_g, tt,STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+
+!write(6,*) "ngm_max", ngm_max
+!write(6,*) "g2l", g2l
+!write(6,*) "igsrt", igsrt
     
     ngm = 0
     !
@@ -195,7 +212,9 @@ CONTAINS
        ENDIF
     ENDDO ngloop
 
-    DEALLOCATE( igsrt, g2l )
+    DEALLOCATE( igsrt, g2l,STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
 
     IF (ngm /= ngm_save) write(6,*) "GVEC ERROR"
     !
@@ -249,21 +268,41 @@ CONTAINS
    ngm_max = MAXVAL(dfft%ngl)
    l=0
    !
-   IF( ALLOCATED( dfft%nlnew ) ) DEALLOCATE( dfft%nlnew )
-   ALLOCATE( dfft%nlnew( ngm_max, dfft%nproc3 ) )
+   IF( ALLOCATED( dfft%nlnew ) ) THEN
+      DEALLOCATE( dfft%nlnew,STAT=ierr )
+      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+           __LINE__,__FILE__)
+   END IF
+   ALLOCATE( dfft%nlnew( ngm_max, dfft%nproc3 ),STAT=ierr )
+   IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+        __LINE__,__FILE__)
    dfft%nlnew = 0
 
-   IF( ALLOCATED( dfft%nl ) ) DEALLOCATE( dfft%nl )
+   IF( ALLOCATED( dfft%nl ) ) DEALLOCATE( dfft%nl,STAT=ierr )
+   IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+        __LINE__,__FILE__)
    ALLOCATE( dfft%nl( dfft%ngm ),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-         __LINE__,__FILE__)
-   IF( ALLOCATED( dfft%nl_r ) ) DEALLOCATE( dfft%nl_r )
-   ALLOCATE( dfft%nl_r( dfft%nnr ) )
+   IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+        __LINE__,__FILE__)
+   IF( ALLOCATED( dfft%nl_r ) ) DEALLOCATE( dfft%nl_r,STAT=ierr )
+   IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+        __LINE__,__FILE__)
+   ALLOCATE( dfft%nl_r( dfft%nnr ),STAT=ierr )
+   IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+        __LINE__,__FILE__)
    dfft%nl_r = 0
-   IF( ALLOCATED( dfft%nlm ) ) DEALLOCATE( dfft%nlm )
-   ALLOCATE( dfft%nlm( dfft%ngm ) )
-   IF( ALLOCATED( dfft%nlm_r ) ) DEALLOCATE( dfft%nlm_r )
-   ALLOCATE( dfft%nlm_r( dfft%nnr ) )
+   IF( ALLOCATED( dfft%nlm ) ) DEALLOCATE( dfft%nlm,STAT=ierr )
+   IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+        __LINE__,__FILE__)
+   ALLOCATE( dfft%nlm( dfft%ngm ),STAT=ierr )
+   IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+        __LINE__,__FILE__)
+   IF( ALLOCATED( dfft%nlm_r ) ) DEALLOCATE( dfft%nlm_r,STAT=ierr )
+   IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+        __LINE__,__FILE__)
+   ALLOCATE( dfft%nlm_r( dfft%nnr ),STAT=ierr )
+   IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+        __LINE__,__FILE__)
    !
    DO ng = 1, dfft%ngm
       n1 = nint (sum(g (:, ng) * at (:, 1)))

@@ -3,9 +3,10 @@ MODULE fftpw_converting
 !=----------------------------------------------------------------------------=!
 
   USE elct,                          ONLY: crge
+  USE error_handling,                ONLY: stopgm
   USE fftpw_base,                    ONLY: smap
-  USE fftpw_ggen,                      ONLY: ggen_pw,&
-                                             fft_set_nl
+  USE fftpw_ggen,                    ONLY: ggen_pw,&
+                                           fft_set_nl
   USE fftpw_param
   USE fftpw_stick_base,              ONLY: sticks_map
   USE fftpw_types,                   ONLY: fft_type_init,&
@@ -34,6 +35,7 @@ CONTAINS
   
     TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
     CHARACTER(LEN=*), INTENT(IN) :: which
+    CHARACTER(*), PARAMETER                  :: procedureN = 'create_pwfft'
 
     TYPE( sticks_map ) :: smap
     INTEGER :: i, gstart, offset, offset2, ierr
@@ -70,9 +72,15 @@ CONTAINS
 
     CALL fft_type_init( dfft, which, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
 
-    ALLOCATE( dfft%time_adding( 100 ) )
-    ALLOCATE( dfft%averaged_times( 100 ) )
-    ALLOCATE( dfft%nnr_all( dfft%nproc ) )
+    ALLOCATE( dfft%time_adding( 100 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( dfft%averaged_times( 100 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( dfft%nnr_all( dfft%nproc ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     dfft%nnr_all = 0
     dfft%nnr_all( dfft%mype+1 ) = dfft%nnr
     CALL mp_sum( dfft%nnr_all, dfft%nproc, dfft%comm )
@@ -84,6 +92,8 @@ CONTAINS
     dfft%ngm_l  = ( dfft%ngl( dfft%mype + 1 ) + 1 ) / 2
 
     ALLOCATE( dfft%ngm_all( dfft%nproc ),STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     CALL zeroing( dfft%ngm_all )
     dfft%ngm_all( dfft%mype + 1 ) = dfft%ngm_l
     CALL mp_sum( dfft%ngm_all, dfft%nproc, dfft%comm )
@@ -92,9 +102,17 @@ CONTAINS
     dfft%ngm_max = MAXVAL( dfft%ngm_all )
 
     ALLOCATE(g_pw(3,dfft%ngm_gl),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     ALLOCATE(dfft%g_pw(3,dfft%ngm_gl),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     ALLOCATE(dfft%gg_pw(dfft%ngm_gl),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     ALLOCATE(ig_l2g_pw(dfft%ngm_gl),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
     CALL zeroing(g_pw)
     CALL zeroing(dfft%gg_pw)
     CALL zeroing(ig_l2g_pw)
@@ -104,48 +122,54 @@ CONTAINS
 
     dfft%g_pw = NINT( g_pw + ( ( spar%nr1s / 2 ) + 1 ) )
 
-    ALLOCATE( dfft%ng_all( dfft%nproc ) ,STAT=ierr)
-    CALL zeroing( dfft%ng_all )
-    IF( which == 'wave' ) THEN
-       dfft%ng_all( dfft%mype + 1 ) = dfft%ngw
-    ELSE IF( which == 'rho' ) THEN
-       dfft%ng_all( dfft%mype + 1 ) = dfft%ngm
-    END IF
-    CALL mp_sum( dfft%ng_all, dfft%nproc, dfft%comm )
-    dfft%ng_total = SUM( dfft%ng_all )
-    dfft%ng_max   = MAXVAL( dfft%ng_all )
+!    ALLOCATE( dfft%ng_all( dfft%nproc ) ,STAT=ierr)
+!    CALL zeroing( dfft%ng_all )
+!    IF( which == 'wave' ) THEN
+!       dfft%ng_all( dfft%mype + 1 ) = dfft%ngw
+!    ELSE IF( which == 'rho' ) THEN
+!       dfft%ng_all( dfft%mype + 1 ) = dfft%ngm
+!    END IF
+!    CALL mp_sum( dfft%ng_all, dfft%nproc, dfft%comm )
+!    dfft%ng_total = SUM( dfft%ng_all )
+!    dfft%ng_max   = MAXVAL( dfft%ng_all )
+!
+!    ALLOCATE( g_pw_all( 3, dfft%ng_total ) ,STAT=ierr)
+!    CALL zeroing( g_pw_all )
+!    offset  = SUM( dfft%ng_all( 1:dfft%mype ) )
+!    offset2 = SUM( dfft%ng_all( 1:dfft%mype+1 ) )
+!    IF( which == 'wave' ) THEN
+!       DO i = 1, dfft%ngw
+!          g_pw_all( 1:3, i + offset ) = NINT(g_pw( 1:3, i ))
+!       ENDDO
+!    ELSE IF( which == 'rho' ) THEN
+!       DO i = 1, dfft%ngm
+!          g_pw_all( 1:3, i + offset ) = NINT(g_pw( 1:3, i ))
+!       ENDDO
+!    END IF
+!    CALL mp_sum( g_pw_all, dfft%ng_total*3, dfft%comm )
+!
+!    ALLOCATE( dfft%conv_inv( dfft%ng_total ),STAT=ierr )
+!    ALLOCATE( dfft%conv_fw(  dfft%ng_total ),STAT=ierr )
+!    CALL zeroing( dfft%conv_inv )
+!    CALL zeroing( dfft%conv_fw  )
+!
+!    IF( which == 'wave' ) THEN
+!       CALL ConvertFFT_array( dfft, g_pw_all, dfft%g_cpmd, ncpw%ngw, dfft%ngw ) 
+!    ELSE IF( which == 'rho' ) THEN
+!       CALL ConvertFFT_array( dfft, g_pw_all, dfft%g_cpmd, ncpw%nhg, dfft%ngm ) 
+!    END IF
 
-    ALLOCATE( g_pw_all( 3, dfft%ng_total ) ,STAT=ierr)
-    CALL zeroing( g_pw_all )
-    offset  = SUM( dfft%ng_all( 1:dfft%mype ) )
-    offset2 = SUM( dfft%ng_all( 1:dfft%mype+1 ) )
-    IF( which == 'wave' ) THEN
-       DO i = 1, dfft%ngw
-          g_pw_all( 1:3, i + offset ) = NINT(g_pw( 1:3, i ))
-       ENDDO
-    ELSE IF( which == 'rho' ) THEN
-       DO i = 1, dfft%ngm
-          g_pw_all( 1:3, i + offset ) = NINT(g_pw( 1:3, i ))
-       ENDDO
-    END IF
-    CALL mp_sum( g_pw_all, dfft%ng_total*3, dfft%comm )
-
-    ALLOCATE( dfft%conv_inv( dfft%ng_total ),STAT=ierr )
-    ALLOCATE( dfft%conv_fw(  dfft%ng_total ),STAT=ierr )
-    CALL zeroing( dfft%conv_inv )
-    CALL zeroing( dfft%conv_fw  )
-
-    IF( which == 'wave' ) THEN
-       CALL ConvertFFT_array( dfft, g_pw_all, dfft%g_cpmd, ncpw%ngw, dfft%ngw ) 
-    ELSE IF( which == 'rho' ) THEN
-       CALL ConvertFFT_array( dfft, g_pw_all, dfft%g_cpmd, ncpw%nhg, dfft%ngm ) 
-    END IF
-
-    DEALLOCATE( g_pw )
+    DEALLOCATE( g_pw,STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
 !    DEALLOCATE( dfft%gg_pw )
-    DEALLOCATE( ig_l2g_pw )
-    DEALLOCATE( dfft%ngm_all )
-    DEALLOCATE( g_pw_all )
+    DEALLOCATE( ig_l2g_pw,STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    DEALLOCATE( dfft%ngm_all,STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+!    DEALLOCATE( g_pw_all )
   
   END SUBROUTINE Create_PwFFT_datastructure
 

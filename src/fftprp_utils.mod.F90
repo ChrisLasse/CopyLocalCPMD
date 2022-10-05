@@ -153,8 +153,8 @@ CONTAINS
     nh2=spar%nr2s/2+1
     nh3=spar%nr3s/2+1
     DO ig=1,ncpw%ngw
-       ny2=inyh(2,ig)
-       ny3=inyh(3,ig)
+       ny2=inyh(1,ig)
+       ny3=inyh(2,ig)
        iny2=-ny2+2*nh2
        iny3=-ny3+2*nh3
        mg(ny2,ny3)=mg(ny2,ny3)+1
@@ -227,8 +227,8 @@ CONTAINS
     ENDDO
     ngray=img
     DO ig=ncpw%ngw+1,ncpw%nhg
-       ny2=inyh(2,ig)
-       ny3=inyh(3,ig)
+       ny2=inyh(1,ig)
+       ny3=inyh(2,ig)
        iny2=-ny2+2*nh2
        iny3=-ny3+2*nh3
        jmg=mg(ny2,ny3)
