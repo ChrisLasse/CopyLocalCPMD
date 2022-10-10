@@ -1810,10 +1810,6 @@ CONTAINS
     COMPLEX(DP), INTENT(INOUT) :: hpsi(ngms_source, nbnd_source)
     INTEGER, INTENT(IN)    :: ngms_source, nbnd_source
     REAL(DP), INTENT(IN) :: v(dfft%nnr)
-  
-!    COMPLEX(DP), ALLOCATABLE, SAVE :: psi (:,:)
-!    COMPLEX(DP), ALLOCATABLE, SAVE :: hpsi(:,:)
-!    REAL(DP), ALLOCATABLE, SAVE :: v(:)
  
     LOGICAL, ALLOCATABLE :: first_step(:)
 
@@ -1822,6 +1818,10 @@ CONTAINS
     INTEGER, SAVE :: sendsize_rem, nthreads, nested_threads, nbnd, my_thread_num
     INTEGER, SAVE :: remember_batch  = 0
     INTEGER, SAVE :: remember_buffer = 0
+    INTEGER, SAVE :: times_called = 0
+    INTEGER, SAVE :: bb_counter = 0
+    LOGICAL, SAVE :: tunning_finished = .false.
+    REAL(DP), SAVE, ALLOCATABLE :: final_time(:)
     INTEGER :: i, j, iter, ierr, buffer_size, batch_size, ng, ngms
   
     INTEGER :: counter( 2 , 3)
@@ -1830,10 +1830,58 @@ CONTAINS
     LOGICAL :: finished_all, last_start, last_start_triggered
 
     INTEGER(INT64) :: time(4)
+    INTEGER(INT64), SAVE :: auto_time(3)
+    INTEGER(INT64), SAVE :: cr
+    INTEGER        :: repeats, omit
+    INTEGER, SAVE  :: mbuff, mbatch
 
     dfft%vpsi = .true.
+    times_called = times_called + 1
+    repeats = 8
+    omit = 3
  
-    IF( .not. dfft%tunned ) THEN
+    IF( dfft%tunned ) THEN
+
+       IF( .not. tunning_finished ) THEN
+          IF( times_called .eq. 1 ) THEN 
+             CALL SYSTEM_CLOCK( count_rate = cr )
+             auto_time(3) = 0
+             mbuff = 5
+             mbatch = 10
+             ALLOCATE( final_time( mbuff*mbatch ) )
+          END IF
+          IF( mod( times_called-1, repeats ) .eq. 0 ) THEN
+   
+             IF( times_called .ne. 1 ) THEN
+                final_time( bb_counter ) = REAL( auto_time(3) / ( repeats - omit ) ) / REAL( cr )
+                IF( dfft%mype .eq. 0 ) write(6,*) "buffer:", dfft%buffer_size_save, "batch:", dfft%batch_size_save, "TIME:", final_time( bb_counter )
+                auto_time(3) = 0
+             END IF
+
+             dfft%buffer_size_save = ( bb_counter / mbatch ) + 1
+             dfft%batch_size_save  = mod( bb_counter, mbatch ) + 1
+             bb_counter = bb_counter + 1
+   
+             IF( dfft%buffer_size_save .eq. mbuff+1 ) THEN
+                IF( dfft%mype .eq. 0 ) THEN
+                   dfft%buffer_size_save = ( ( MINLOC( final_time, 1 ) - 1 ) / mbatch ) + 1
+                   dfft%batch_size_save  = mod( MINLOC( final_time, 1 ) - 1, mbatch ) + 1
+                   write(6,*) " "
+                   write(6,*) "TUNNING FINISHED"
+                   write(6,*) "USED BUFFERSIZE:", dfft%buffer_size_save, "USED BATCHSIZE:", dfft%batch_size_save
+                   write(6,*) " "
+                   write(6,*) final_time
+                   write(6,*) " "
+                END IF
+                CALL MP_BCAST( dfft%buffer_size_save, 0, dfft%comm )
+                CALL MP_BCAST(  dfft%batch_size_save, 0, dfft%comm )
+                tunning_finished = .true.
+             END IF
+   
+          END IF
+       END IF
+       
+    ELSE
        dfft%buffer_size_save = 3
        dfft%batch_size_save  = 1
     END IF
@@ -1845,9 +1893,6 @@ CONTAINS
 
     IF( .not. allocated( first_step ) ) THEN
  
-!       ALLOCATE( psi ( ngms, nbnd_source ) ) 
-!       ALLOCATE( hpsi( ngms, nbnd_source ) ) 
-!       ALLOCATE( v( dfft%nnr ) ) 
        ALLOCATE( first_step( dfft%buffer_size_save ) ) 
        dfft%use_maps = .true.
        dfft%ngms = ngms
@@ -1897,11 +1942,6 @@ CONTAINS
        END IF
   
     END IF
-
-!    DO i = 1, nbnd_source
-!       CALL ConvertFFT_Coeffs( dfft, -1, c0(:,i), psi(:,i), ncpw%ngw, dfft%ngw ) 
-!    ENDDO
-!    CALL ConvertFFT_v( dfft, v_cpmd, v )
   
     sendsize_save = dfft%sendsize
     last_start = .true.
@@ -1929,6 +1969,7 @@ CONTAINS
   
     CALL MPI_BARRIER(dfft%comm, ierr)
 
+    CALL SYSTEM_CLOCK( auto_time(1) )
     CALL SYSTEM_CLOCK( time(1) )
   
     !!! Initializiation finished
@@ -2120,16 +2161,8 @@ CONTAINS
     !$omp barrier
     !$omp end parallel
   
-  !  CALL clean_up_shared( dfft )
-  !  CALL MapVals_CleanUp( dfft )
-
-    CALL SYSTEM_CLOCK( time(2) )
-    dfft%time_adding( 100 ) = time(2) - time(1)
-
-!    DO i = 1, nbnd_source
-!       CALL ConvertFFT_Coeffs( dfft, 1, hpsi(:,i), c2(:,i), ncpw%ngw, dfft%ngw )
-!    ENDDO
-
+    CALL SYSTEM_CLOCK( auto_time(2) )
+    IF( mod( times_called-1, repeats ) .gt. omit-1 ) auto_time(3) = auto_time(3) + ( auto_time(2) - auto_time(1) )
     CALL SYSTEM_CLOCK( time(4) )
     dfft%time_adding( 98 ) = time(4) - time(3)
 

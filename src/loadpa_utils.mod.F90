@@ -248,8 +248,8 @@ CONTAINS
     dfftp%what = 1
     dfft%what  = 2
 
-    ixray = dfft%pw_ixray
-    ihray = dfft%pw_ihray
+!    ixray = dfft%pw_ixray
+!    ihray = dfft%pw_ihray
     ncpw%nhg = dfft%ngm
     ncpw%ngw = dfft%ngw
 
@@ -329,9 +329,9 @@ CONTAINS
                    ! G2*EPSGX*SIGN is the epsilon added (>= epsilon(G2))
                    ! SQRT(FLOAT(IG-1)) is to break the symmetry
 !                   hg(ncpw%nhg)=g2*(1._real_8+SQRT(REAL(ig-1,kind=real_8))*epsgx*sign)
-                   inyh(1,ncpw%nhg)=in1
-                   inyh(2,ncpw%nhg)=in2
-                   inyh(3,ncpw%nhg)=in3
+!                   inyh(1,ncpw%nhg)=in1
+!                   inyh(2,ncpw%nhg)=in2
+!                   inyh(3,ncpw%nhg)=in3
                 ENDIF
              ENDIF
           ENDDO
@@ -482,6 +482,9 @@ CONTAINS
     ! LEADING DIMENSIONS OF REAL SPACE ARRAYS
     ! ==--------------------------------------------------------------==
     CALL leadim(parm%nr1,parm%nr2,parm%nr3,fpar%kr1,fpar%kr2,fpar%kr3)
+
+    fpar%kr1 = dfft%nr3p( dfft%my_node_rank+1 )
+
     fpar%nnr1=fpar%kr1*fpar%kr2s*fpar%kr3s
     DEALLOCATE(thread_buff,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &

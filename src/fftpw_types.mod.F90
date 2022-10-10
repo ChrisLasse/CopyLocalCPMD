@@ -120,7 +120,7 @@ MODULE fftpw_types
 
     INTEGER :: what = 0
     LOGICAL :: overlapp = .true.
-    LOGICAL :: tunned = .false.
+    LOGICAL :: tunned = .true.
     INTEGER :: rem_size = 0
     INTEGER :: batch_size_save  = 1
     INTEGER :: buffer_size_save = 1
@@ -1065,30 +1065,11 @@ CONTAINS
      IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
           __LINE__,__FILE__)
 
-     ALLOCATE( dfft%pw_ixray(dfft%nr2,dfft%nr3),STAT=ierr )
-     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-          __LINE__,__FILE__)
-     ALLOCATE( dfft%pw_ihray(dfft%nr2,dfft%nr3),STAT=ierr )
-     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-          __LINE__,__FILE__)
-
      !write(*,*) 'calling get_sticks with gkcut =',gkcut
      CALL get_sticks(  smap, gcutw, nstpw, sstpw, stw, nstw, ngw )
 
-     DO i = -15, 15
-        DO j = -15, 15
-           dfft%pw_ixray(i+17,j+17) = -smap%stown(i,j)
-        ENDDO
-     ENDDO
-
      !write(*,*) 'calling get_sticks with gcut =',gcut
      CALL get_sticks(  smap, gcutp,  nstp, sstp, st, nst, ngm )
-
-     DO i = -15, 15
-        DO j = -15, 15
-           dfft%pw_ihray(i+17,j+17) = -smap%stown(i,j)
-        ENDDO
-     ENDDO
 
      CALL fft_type_set( dfft, nst, smap%ub, smap%lb, smap%idx, &
           smap%ist(:,1), smap%ist(:,2), nstp, nstpw, sstp, sstpw, st, stw )

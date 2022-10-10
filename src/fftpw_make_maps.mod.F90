@@ -44,7 +44,7 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
 
   END IF
 
-  IF( last_buffer .ne. num_buff ) THEN
+  IF( last_buffer .ne. num_buff .and. dfft%vpsi ) THEN
 
      last_buffer = num_buff
   

@@ -1075,8 +1075,8 @@ CONTAINS
   
        dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsp ) * dfft%node_task_size * dfft%node_task_size * 1
      
-       CALL create_shared_memory_window_1d( shared1, 10, dfft, dfft%sendsize*dfft%nodes_numb ) 
-       CALL create_shared_memory_window_1d( shared2, 11, dfft, dfft%sendsize*dfft%nodes_numb ) 
+       CALL create_shared_memory_window_1d( shared1, 80, dfft, dfft%sendsize*dfft%nodes_numb ) 
+       CALL create_shared_memory_window_1d( shared2, 81, dfft, dfft%sendsize*dfft%nodes_numb ) 
      
     END IF
 
@@ -1084,33 +1084,52 @@ CONTAINS
 
        dfft%aux = f
 
+       IF( dfft%single_node ) CALL MPI_BARRIER( dfft%comm, ierr )
+       IF( .not. dfft%single_node ) CALL MPI_BARRIER( dfft%node_comm, ierr )
+CALL MPI_BARRIER( dfft%comm, ierr )
+
        CALL invfft_pre_com( dfft, shared1, shared2, 1, 1, ns )
-    
+
        IF( dfft%single_node ) THEN
           CALL MPI_BARRIER( dfft%comm, ierr )
        ELSE 
-          CALL MPI_BARRIER( dfft%comm, ierr )
+CALL MPI_BARRIER( dfft%comm, ierr )
+          CALL MPI_BARRIER( dfft%node_comm, ierr )
           CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
                         dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
-          CALL MPI_BARRIER( dfft%comm, ierr )
+          CALL MPI_BARRIER( dfft%node_comm, ierr )
+CALL MPI_BARRIER( dfft%comm, ierr )
        END IF
    
        CALL invfft_after_com( dfft, f, shared2, dfft%map_acinv_one, dfft%map_acinv_rem_one, 1, nr1s )
+CALL MPI_BARRIER( dfft%comm, ierr )
+       IF( .not. dfft%single_node ) CALL MPI_BARRIER( dfft%node_comm, ierr )
+       IF( dfft%single_node ) CALL MPI_BARRIER( dfft%comm, ierr )
 
     ELSE !! fw fft
     
+       IF( dfft%single_node ) CALL MPI_BARRIER( dfft%comm, ierr )
+       IF( .not. dfft%single_node ) CALL MPI_BARRIER( dfft%node_comm, ierr )
+CALL MPI_BARRIER( dfft%comm, ierr )
+
        CALL fwfft_pre_com( dfft, f, shared1, shared2, 1, 1, nr1s, ns )
     
+CALL MPI_BARRIER( dfft%comm, ierr )
        IF( dfft%single_node ) THEN
           CALL MPI_BARRIER( dfft%comm, ierr )
        ELSE 
-          CALL MPI_BARRIER( dfft%comm, ierr )
+          CALL MPI_BARRIER( dfft%node_comm, ierr )
           CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
                         dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
-          CALL MPI_BARRIER( dfft%comm, ierr )
+          CALL MPI_BARRIER( dfft%node_comm, ierr )
        END IF
+CALL MPI_BARRIER( dfft%comm, ierr )
     
        CALL fwfft_after_com( dfft, shared2, 1, 1, ns )
+CALL MPI_BARRIER( dfft%comm, ierr )
+
+       IF( .not. dfft%single_node ) CALL MPI_BARRIER( dfft%node_comm, ierr )
+       IF( dfft%single_node ) CALL MPI_BARRIER( dfft%comm, ierr )
 
        f = dfft%aux * dfft%tscale 
     
