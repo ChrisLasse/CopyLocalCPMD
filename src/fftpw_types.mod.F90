@@ -119,7 +119,7 @@ MODULE fftpw_types
     INTEGER :: nstate = 0
 
     INTEGER :: what = 0
-    LOGICAL :: overlapp = .true.
+    LOGICAL :: overlapp = .false.
     LOGICAL :: tunned = .true.
     INTEGER :: rem_size = 0
     INTEGER :: batch_size_save  = 1

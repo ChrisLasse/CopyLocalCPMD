@@ -364,7 +364,7 @@ CONTAINS
           CALL vpsi(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,&
                redist_c2)
        END IF
-       CALL stopgm(procedureN,'Testing Finished!',__LINE__,__FILE__)
+!       CALL stopgm(procedureN,'Testing Finished!',__LINE__,__FILE__)
        ! c2u0 is calculated in uprho or rscpot
        IF (hubbu%debug) THEN
             IF (paral%io_parent) write(6,*) procedureN,"| starting add_hubbardu"
