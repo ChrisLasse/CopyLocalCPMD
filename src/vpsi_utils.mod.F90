@@ -1829,13 +1829,17 @@ CONTAINS
     INTEGER :: sendsize_save, next, last_buffer, ibatch, work_buffer
     LOGICAL :: finished_all, last_start, last_start_triggered
 
-    INTEGER(INT64) :: time(4)
+    INTEGER(INT64) :: time(20)
     INTEGER(INT64), SAVE :: auto_time(3)
     INTEGER(INT64), SAVE :: cr
     INTEGER        :: repeats, omit
     INTEGER, SAVE  :: mbuff, mbatch
+    REAL(DP) :: timer(29)
 
     dfft%vpsi = .true.
+    dfft%time_adding = 0
+    dfft%counter = 0
+    timer = 0.0d0
     times_called = times_called + 1
     repeats = 8
     omit = 3
@@ -2044,7 +2048,10 @@ CONTAINS
                    batch_size = dfft%batch_size_save
                 END IF
   
+                CALL SYSTEM_CLOCK( time(5) )
                 CALL fwfft_pwbatch( dfft, 3, batch_size, counter( 1, 3 ), work_buffer, psi, hpsi, comm_recv(:,work_buffer) )
+                CALL SYSTEM_CLOCK( time(6) )
+                dfft%time_adding( 18 ) = dfft%time_adding( 18 ) + ( time(6) - time(5) )
   
                 IF( last_start_triggered ) batch_size = dfft%rem_size
   
@@ -2060,7 +2067,10 @@ CONTAINS
   
                 counter( 1, 1 ) = counter( 1, 1 ) + 1
 
+                CALL SYSTEM_CLOCK( time(10) )
                 CALL invfft_pwbatch( dfft, 1, batch_size, counter( 1, 1 ), work_buffer, psi, comm_send, comm_recv(:,work_buffer) )
+                CALL SYSTEM_CLOCK( time(11) )
+                dfft%time_adding( 19 ) = dfft%time_adding( 19 ) + ( time(11) - time(10) )
 
                 IF( counter( 1, 1 ) .eq. dfft%max_nbnd ) finished( 1, 1 ) = .true.
   
@@ -2076,7 +2086,10 @@ CONTAINS
   
                 counter( 2, 1 ) = counter( 2, 1 ) + 1
   
+                CALL SYSTEM_CLOCK( time(12) )
                 CALL invfft_pwbatch( dfft, 2, batch_size, counter( 2, 1 ), work_buffer, comm_send, comm_recv )
+                CALL SYSTEM_CLOCK( time(13) )
+                dfft%time_adding( 16 ) = dfft%time_adding( 16 ) + ( time(13) - time(12) )
   
                 IF( counter( 2, 1 ) .eq. dfft%max_nbnd ) finished( 2, 1 ) = .true.
   
@@ -2100,6 +2113,7 @@ CONTAINS
   
                 counter( 1, 2 ) = counter( 1, 2 ) + 1
 
+                CALL SYSTEM_CLOCK( time(14) )
                 IF( .not. dfft%rsactive ) THEN
                    CALL invfft_pwbatch( dfft, 3, batch_size, counter( 1, 2 ), work_buffer, comm_recv, dfft%bench_aux )
                 END IF
@@ -2107,8 +2121,13 @@ CONTAINS
                 DO ibatch = 1, batch_size
                    CALL Apply_V( dfft, dfft%bench_aux(:,ibatch), v, ibatch )
                 ENDDO
+                CALL SYSTEM_CLOCK( time(15) )
+                dfft%time_adding( 20 ) = dfft%time_adding( 20 ) + ( time(15) - time(14) )
   
+                CALL SYSTEM_CLOCK( time(16) )
                 CALL fwfft_pwbatch( dfft, 1, batch_size, counter( 1, 2 ), work_buffer, dfft%bench_aux, comm_send, comm_recv(:,work_buffer) )
+                CALL SYSTEM_CLOCK( time(17) )
+                dfft%time_adding( 21 ) = dfft%time_adding( 21 ) + ( time(17) - time(16) )
   
                 IF( counter( 1, 2 ) .eq. dfft%max_nbnd ) finished( 1, 2 ) = .true.
   
@@ -2124,7 +2143,10 @@ CONTAINS
   
                 counter( 2, 2 ) = counter( 2, 2 ) + 1
   
+                CALL SYSTEM_CLOCK( time(18) )
                 CALL fwfft_pwbatch( dfft, 2, batch_size, counter( 2, 2 ), work_buffer, comm_send, comm_recv )
+                CALL SYSTEM_CLOCK( time(19) )
+                dfft%time_adding( 17 ) = dfft%time_adding( 17 ) + ( time(19) - time(18) )
   
                 IF( counter( 2, 2 ) .eq. dfft%max_nbnd ) THEN
                    finished( 2, 2 ) = .true.
@@ -2164,7 +2186,72 @@ CONTAINS
     CALL SYSTEM_CLOCK( auto_time(2) )
     IF( mod( times_called-1, repeats ) .gt. omit-1 ) auto_time(3) = auto_time(3) + ( auto_time(2) - auto_time(1) )
     CALL SYSTEM_CLOCK( time(4) )
-    dfft%time_adding( 98 ) = time(4) - time(3)
+    dfft%time_adding( 98 ) = time(4) - time(1)
+
+    DO i = 1, 29
+       timer( i ) = REAL( dfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
+    ENDDO
+
+    IF( dfft%mype .eq. 0 ) THEN
+
+          WRITE(6,*)" "
+          WRITE(6,*)"Some extra VPSI times"
+          write(6,*)"==================================="
+          write(6,*)"INV FFT before Com"
+          write(6,*)"CALC LOCK 1", timer(22)
+          write(6,*)"Prepare_psi ",           timer(1)
+          write(6,*)"INV z_fft ",             timer(2)
+          write(6,*)"INV Pre_com_copy ",      timer(3)
+  
+          write(6,*)"INV FFT before Com sum  ",timer(1)+timer(2)+timer(3)+timer(22)
+          write(6,*)"Control:", timer(19)
+          write(6,*)"==================================="
+          write(6,*)"INV FFT after Com"
+          write(6,*)"CALC LOCK 2", timer(24)
+          write(6,*)"INV After_com_copy ",    timer(4)
+          write(6,*)"INV y_fft ",             timer(5)
+          write(6,*)"INV xy_scatter ",        timer(6)
+          write(6,*)"INV x_fft ",             timer(7)
+          write(6,*)"Apply V ",               timer(8)
+  
+          write(6,*)"INV FFT after Com sum ",  timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(24)
+          write(6,*)"Control:", timer(20)
+          write(6,*)"==================================="
+          write(6,*)"FW FFT before Com"
+          write(6,*)"CALC LOCK 3", timer(25)
+          write(6,*)"FW x_fft ",             timer(9)
+          write(6,*)"FW xy_scatter ",        timer(10)
+          write(6,*)"FW y_fft ",             timer(11)
+          write(6,*)"FW Pre_com_copy ",      timer(12)
+  
+          write(6,*)"FW FFT before Com sum  ",timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
+          write(6,*)"Control:", timer(21)
+          write(6,*)"==================================="
+          write(6,*)"FW FFT after Com"
+          write(6,*)"CALC LOCK 4", timer(27)
+          write(6,*)"FW After_com_copy ",    timer(13)
+          write(6,*)"FW z_fft ",             timer(14)
+          write(6,*)"Accumulate_Psi ",       timer(15)
+  
+          write(6,*)"FW FFT after Com sum",  timer(13)+timer(14)+timer(15)+timer(27)
+          write(6,*)"Control:", timer(18)
+          write(6,*)"==================================="
+          write(6,*)"COM LOCK 1", timer(23)
+          write(6,*)"FIRST COMM TIMES:", timer(28)
+          write(6,*)"Control:", timer(16)
+          write(6,*)"COM LOCK 2", timer(26)
+          write(6,*)"SECOND COMM TIMES:", timer(29)
+          write(6,*)"Control:", timer(17)
+          write(6,*)"==================================="
+          write(6,*)"Adding up CALC:", timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+                                  timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
+                                  timer(13)+timer(14)+timer(15)+timer(22)+timer(24)+&
+                                  timer(25)+timer(27)
+          write(6,*)"Adding up COMM:", timer(23)+timer(26)+timer(28)+timer(29)
+          write(6,*)"Control:", REAL( REAL( dfft%time_adding( 98 ) ) / REAL( cr ), KIND = REAL64 )
+          WRITE(6,*)" "
+
+    END IF
 
     dfft%vpsi = .false.
   

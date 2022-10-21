@@ -339,7 +339,7 @@ CONTAINS
     ENDDO
 
     inyh = dfft%g_pw
-    hg = dfft%gg_pw
+    hg = NINT(dfft%gg_pw)
     ncpw%nhg = dfft%ngm
     ncpw%ngw = dfft%ngw
 
@@ -397,8 +397,8 @@ CONTAINS
        DO i=0,parai%nproc-1
           iorb=parap%nst12(i,2)-parap%nst12(i,1)+1
           izpl=parap%nrzpl(i,2)-parap%nrzpl(i,1)+1
-          WRITE(6,'(I6,7I8)') i,parap%sparm(3,i),parap%sparm(1,i),parap%sparm(5,i),&
-               parap%sparm(9,i),parap%sparm(8,i),iorb,izpL
+          WRITE(6,'(I6,8I8)') i,parap%sparm(3,i),parap%sparm(1,i),parap%sparm(5,i),&
+               parap%sparm(9,i),parap%sparm(8,i),iorb,izpL,dfft%nr3p(i+1)
           ! IF(SPARM(3,I).LE.0) CALL stopgm(procedureN,
           ! *            'NGW .LE. 0')
        ENDDO
@@ -483,7 +483,7 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     CALL leadim(parm%nr1,parm%nr2,parm%nr3,fpar%kr1,fpar%kr2,fpar%kr3)
 
-    fpar%kr1 = dfft%nr3p( dfft%my_node_rank+1 )
+    fpar%kr1 = dfft%nr3p( dfft%mype+1 )
 
     fpar%nnr1=fpar%kr1*fpar%kr2s*fpar%kr3s
     DEALLOCATE(thread_buff,STAT=ierr)

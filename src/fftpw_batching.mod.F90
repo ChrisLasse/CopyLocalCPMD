@@ -35,9 +35,7 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany, n
   INTEGER :: j, i
   INTEGER :: offset
 
-  INTEGER(INT64) :: time(2)
-
- dfft%counter = dfft%counter + 1
+  INTEGER(INT64) :: time(2), cr
 
   CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
@@ -133,7 +131,10 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany, n
 !------------------------------------------------------
   CALL SYSTEM_CLOCK( time(2) )
 
-  dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(2) - time(1) )
+!  dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(2) - time(1) )
+!  CALL SYSTEM_CLOCK( count_rate = cr )
+!  write(6,*) "ACTUAL", REAL( dfft%time_adding( 1 ) / REAL( cr ) )
+  dfft%counter(1) = dfft%counter(1) + 1
 
 END SUBROUTINE Prepare_Psi_overlapp
 
@@ -221,6 +222,7 @@ SUBROUTINE invfft_pre_com( dfft, comm_mem_send, comm_mem_recv, ibatch, batch_siz
 
   dfft%time_adding( 2 ) = dfft%time_adding( 2 ) + ( time(2) - time(1) )
   dfft%time_adding( 3 ) = dfft%time_adding( 3 ) + ( time(3) - time(2) )
+  dfft%counter(2) = dfft%counter(2) + 1
 
 END SUBROUTINE invfft_pre_com 
 
@@ -299,28 +301,6 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, i
   CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !--------After-Com-Copy Start--------------------------
-
-
-!IF( dfft%mype .eq. 0 ) THEN
-!   write(6,*) dfft%mype
-!   do i = 1, 1024
-!      write(6,*) i, map_acinv(i)
-!   enddo
-!   do i = 1, dfft%nnr
-!      write(6,*) i, comm_mem_recv(i)
-!   enddo
-!END IF
-!CALL MPI_BARRIER( dfft%comm, ierr) 
-!IF( dfft%mype .eq. 1 ) THEN
-!   write(6,*) dfft%mype
-!   do i = 1, 1024
-!      write(6,*) i, map_acinv(i)
-!   enddo
-!   do i = 1, dfft%nnr
-!      write(6,*) i, comm_mem_recv(i)
-!   enddo
-!END IF
-!CALL MPI_BARRIER( dfft%comm, ierr) 
 
   !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
 
@@ -406,6 +386,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, i
   dfft%time_adding( 5 ) = dfft%time_adding( 5 ) + ( time(3) - time(2) )
   dfft%time_adding( 6 ) = dfft%time_adding( 6 ) + ( time(4) - time(3) )
   dfft%time_adding( 7 ) = dfft%time_adding( 7 ) + ( time(5) - time(4) )
+  dfft%counter(3) = dfft%counter(3) + 1
 
 END SUBROUTINE invfft_after_com
 
@@ -444,6 +425,7 @@ SUBROUTINE Apply_V( dfft, f, v, ibatch )
   CALL SYSTEM_CLOCK( time(2) )
 
   dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
+  dfft%counter(4) = dfft%counter(4) + 1
 
 END SUBROUTINE Apply_V
 
@@ -569,6 +551,7 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
   dfft%time_adding( 10 ) = dfft%time_adding( 10 ) + ( time(3) - time(2) )
   dfft%time_adding( 11 ) = dfft%time_adding( 11 ) + ( time(4) - time(3) )
   dfft%time_adding( 12 ) = dfft%time_adding( 12 ) + ( time(5) - time(4) )
+  dfft%counter(5) = dfft%counter(5) + 1
 
 END SUBROUTINE fwfft_pre_com
 
@@ -626,6 +609,7 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size, ns )
 
   dfft%time_adding( 13 ) = dfft%time_adding( 13 ) + ( time(2) - time(1) )
   dfft%time_adding( 14 ) = dfft%time_adding( 14 ) + ( time(3) - time(2) )
+  dfft%counter(6) = dfft%counter(6) + 1
 
 END SUBROUTINE fwfft_after_com
 
@@ -688,7 +672,8 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, hpsi, ibatch, ngms, batch_size, howman
 !------------------------------------------------------
   CALL SYSTEM_CLOCK( time(2) )
 
-  dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(2) - time(1) )
+!  dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(2) - time(1) )
+  dfft%counter(7) = dfft%counter(7) + 1
 
 END SUBROUTINE Accumulate_Psi_overlapp
 
