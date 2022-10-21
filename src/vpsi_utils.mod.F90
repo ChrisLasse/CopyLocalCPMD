@@ -1901,11 +1901,15 @@ CONTAINS
        dfft%use_maps = .true.
        dfft%ngms = ngms
 
-       !$omp parallel
-       dfft%cpus_per_task = omp_get_num_threads()
-       !$omp end parallel
-       nthreads = MIN( 2, dfft%cpus_per_task )
-       nested_threads = MAX( 1, dfft%cpus_per_task - 1 )
+       IF( dfft%overlapp ) THEN
+          !$omp parallel
+          dfft%cpus_per_task = omp_get_num_threads()
+          !$omp end parallel
+          nthreads = MIN( 2, dfft%cpus_per_task )
+          nested_threads = MAX( 1, dfft%cpus_per_task - 1 )
+       ELSE
+          nthreads = 1
+       END IF
        dfft%uneven  = .false.
   
        IF( dfft%my_node_rank .ne. 0 .or. dfft%single_node ) nthreads = 1
@@ -2090,7 +2094,7 @@ CONTAINS
                 CALL invfft_pwbatch( dfft, 2, batch_size, counter( 2, 1 ), work_buffer, comm_send, comm_recv )
                 CALL SYSTEM_CLOCK( time(13) )
                 dfft%time_adding( 16 ) = dfft%time_adding( 16 ) + ( time(13) - time(12) )
-  
+ 
                 IF( counter( 2, 1 ) .eq. dfft%max_nbnd ) finished( 2, 1 ) = .true.
   
              END IF

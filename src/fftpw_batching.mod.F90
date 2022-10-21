@@ -41,90 +41,70 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany, n
 !------------------------------------------------------
 !----------Prepare_Psi Start---------------------------
 
-  IF( .false. ) THEN !dfft%singl ) THEN
-        !$omp parallel do private( i, j, offset )
-        DO i = 1, ns( dfft%mype+1 )
-           offset = (i-1)*dfft%nr3
-           !$omp simd
-           DO j = 1, dfft%zero_prep_start(i,4)-1
-              dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
-              dfft%aux( offset + j ) = (0.d0, 0.d0)
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_end(i,4)+1, dfft%nr3
-              dfft%aux( offset + j ) = conjg( psi( dfft%nl_r( offset + (dfft%zero_prep_start(i,4)-1) - ( j - (dfft%zero_prep_end(i,4)+1) ) ), 1 ) )
-           ENDDO
+  IF( howmany .eq. 2 ) THEN
+     !$omp parallel do private( i, j, offset )
+     DO i = 1, ns( dfft%mype+1 )
+        offset = (i-1)*dfft%nr3
+        !$omp simd
+        DO j = 1, dfft%zero_prep_start(i,1)-1
+           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), 2 )
         ENDDO
-        !$omp end parallel do
+        !$omp simd
+        DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
+           dfft%aux( offset + j ) = (0.d0, 0.d0)
+        ENDDO
+        !$omp simd
+        DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
+           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), 2 )
+        ENDDO
+     ENDDO
+     !$omp end parallel do
+  
+     !$omp parallel do private( i, j, offset )
+     DO i = 1, ns( dfft%mype+1 )
+        offset = (i-1)*dfft%nr3
+        !$omp simd
+        DO j = 1, dfft%zero_prep_start(i,3)-1
+           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), 2 ) )
+        ENDDO
+        !$omp simd
+        DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
+           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), 2 ) )
+        ENDDO
+     ENDDO
+     !$omp end parallel do
   ELSE
-     IF( howmany .eq. 2 ) THEN
-        !$omp parallel do private( i, j, offset )
-        DO i = 1, ns( dfft%mype+1 )
-           offset = (i-1)*dfft%nr3
-           !$omp simd
-           DO j = 1, dfft%zero_prep_start(i,1)-1
-              dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), 2 )
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
-              dfft%aux( offset + j ) = (0.d0, 0.d0)
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
-              dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), 2 )
-           ENDDO
+     !$omp parallel do private( i, j, offset )
+     DO i = 1, ns( dfft%mype+1 )
+        offset = (i-1)*dfft%nr3
+        !$omp simd
+        DO j = 1, dfft%zero_prep_start(i,1)-1
+           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
         ENDDO
-        !$omp end parallel do
-     
-        !$omp parallel do private( i, j, offset )
-        DO i = 1, ns( dfft%mype+1 )
-           offset = (i-1)*dfft%nr3
-           !$omp simd
-           DO j = 1, dfft%zero_prep_start(i,3)-1
-              dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), 2 ) )
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
-              dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), 2 ) )
-           ENDDO
+        !$omp simd
+        DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
+           dfft%aux( offset + j ) = (0.d0, 0.d0)
         ENDDO
-        !$omp end parallel do
-     ELSE
-        !$omp parallel do private( i, j, offset )
-        DO i = 1, ns( dfft%mype+1 )
-           offset = (i-1)*dfft%nr3
-           !$omp simd
-           DO j = 1, dfft%zero_prep_start(i,1)-1
-              dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
-              dfft%aux( offset + j ) = (0.d0, 0.d0)
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
-              dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
-           ENDDO
+        !$omp simd
+        DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
+           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
         ENDDO
-        !$omp end parallel do
-     
-        !$omp parallel do private( i, j, offset )
-        DO i = 1, ns( dfft%mype+1 )
-           offset = (i-1)*dfft%nr3
-           !$omp simd
-           DO j = 1, dfft%zero_prep_start(i,3)-1
-              dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) )
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
-              dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) )
-           ENDDO
+     ENDDO
+     !$omp end parallel do
+  
+     !$omp parallel do private( i, j, offset )
+     DO i = 1, ns( dfft%mype+1 )
+        offset = (i-1)*dfft%nr3
+        !$omp simd
+        DO j = 1, dfft%zero_prep_start(i,3)-1
+           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) )
         ENDDO
-        !$omp end parallel do
-     END IF
+        !$omp simd
+        DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
+           dfft%aux( offset + j ) = conjg( psi( dfft%nlm_r( offset + j ), 1 ) )
+        ENDDO
+     ENDDO
+     !$omp end parallel do
   END IF
 
 !----------Prepare_Psi End-----------------------------
