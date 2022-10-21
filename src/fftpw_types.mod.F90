@@ -170,7 +170,7 @@ MODULE fftpw_types
     INTEGER :: my_nr1p
     INTEGER :: small_chunks
     INTEGER :: big_chunks
-    INTEGER :: counter
+    INTEGER :: counter(10)
     DOUBLE PRECISION :: tscale
     DOUBLE PRECISION :: tscale_gamma
     INTEGER, ALLOCATABLE :: zero_prep_start(:,:)
