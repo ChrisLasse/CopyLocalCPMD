@@ -1873,7 +1873,7 @@ CONTAINS
           IF( times_called .eq. 1 ) THEN 
              CALL SYSTEM_CLOCK( count_rate = cr )
              auto_time(3) = 0
-             mbuff = 5
+             mbuff = 3
              mbatch = 10
              ALLOCATE( final_time( mbuff*mbatch ) )
           END IF
@@ -2201,7 +2201,7 @@ CONTAINS
   
     ENDDO 
   
-    !$  IF( my_thread_num .eq. 1 ) THEN
+    !$  IF( nthreads .eq. 2 .and. my_thread_num .eq. 1 ) THEN
     !$     CALL omp_set_max_active_levels( 1 )
     !$     CALL omp_set_num_threads( dfft%cpus_per_task )
     !$     CALL mkl_set_dynamic(1) 
