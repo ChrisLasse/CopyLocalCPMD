@@ -9,17 +9,23 @@ MODULE autotune_utils
   USE fft,                             ONLY: batch_fft,&
                                              fft_tune_max_it
   USE fftprp_utils,                    ONLY: autotune_fftbatchsize
+  USE fftpw_base,                      ONLY: dfft,&
+                                             d_vpsi
+  USE fftpw_param,                     ONLY: DP
+  USE mp_interface,                    ONLY: mp_bcast
   USE system,                          ONLY: cnti, cntl
   USE rswfmod,                         ONLY: rsactive
   USE kinds,                           ONLY: real_8
   USE timer,                           ONLY: tihalt,&
                                              tiset
+  USE iso_fortran_env
 
   IMPLICIT NONE
 
   PRIVATE
 
-  PUBLIC autotune
+  PUBLIC :: autotune
+  PUBLIC :: autotune_pw_vpsi
   
 CONTAINS
   ! ==================================================================
@@ -57,5 +63,56 @@ CONTAINS
     cntl%rnlsm_autotune=.FALSE.
     CALL tihalt(procedureN,isub)
   END SUBROUTINE autotune
+
+  SUBROUTINE autotune_pw_vpsi( time, finished )
+
+  REAL(DP), INTENT(IN) :: time
+  LOGICAL, INTENT(OUT) :: finished
+
+  INTEGER, SAVE :: times_called = 0
+  INTEGER, SAVE :: bb_counter = 1
+  INTEGER, SAVE  :: mbuff, mbatch, repeats, omit
+  REAL(DP), SAVE, ALLOCATABLE :: final_time(:)
+
+  times_called = times_called + 1
+  finished = .false.
+
+  IF( times_called .eq. 1 ) THEN 
+     mbuff = 3
+     mbatch = 10
+     repeats = 10
+     omit = 3
+     ALLOCATE( final_time( mbuff*mbatch ) )
+     final_time = 0.d0
+  END IF
+  IF( mod( times_called-1, repeats ) .gt. omit-1 ) final_time( bb_counter ) = final_time( bb_counter ) + time
+  IF( mod( times_called, repeats ) .eq. 0 ) THEN
+  
+     final_time( bb_counter ) = final_time( bb_counter ) / ( repeats - omit )
+     IF( dfft%mype .eq. 0 ) write(6,*) "vpsi tunning buffer:", d_vpsi%buffer_size_save, "batch:", d_vpsi%batch_size_save, "TIME:", final_time( bb_counter )
+
+     d_vpsi%buffer_size_save = ( bb_counter / mbatch ) + 1
+     d_vpsi%batch_size_save  = mod( bb_counter, mbatch ) + 1
+     bb_counter = bb_counter + 1
+  
+     IF( d_vpsi%buffer_size_save .eq. mbuff+1 ) THEN
+        IF( dfft%mype .eq. 0 ) THEN
+           d_vpsi%buffer_size_save = ( ( MINLOC( final_time, 1 ) - 1 ) / mbatch ) + 1
+           d_vpsi%batch_size_save  = mod( MINLOC( final_time, 1 ) - 1, mbatch ) + 1
+           write(6,*) " "
+           write(6,*) "VPSI TUNNING FINISHED"
+           write(6,*) "USED BUFFERSIZE:", d_vpsi%buffer_size_save, "USED BATCHSIZE:", d_vpsi%batch_size_save
+           write(6,*) " "
+           write(6,*) final_time
+           write(6,*) " "
+        END IF
+        CALL MP_BCAST( d_vpsi%buffer_size_save, 0, dfft%comm )
+        CALL MP_BCAST(  d_vpsi%batch_size_save, 0, dfft%comm )
+        finished = .true.
+     END IF
+  
+  END IF
+
+  END SUBROUTINE autotune_pw_vpsi
 
 END MODULE autotune_utils
