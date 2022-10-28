@@ -1,7 +1,8 @@
 #include "cpmd_global.h"
 
 MODULE forces_driver
-  USE autotune_utils,                  ONLY: autotune
+  USE autotune_utils,                  ONLY: autotune,&
+                                             autotune_pw_vpsi
   USE benc,                            ONLY: ibench
   USE cp_grp_utils,                    ONLY: cp_grp_get_cp_rank,&
                                              cp_grp_get_sizes,&
@@ -18,6 +19,7 @@ MODULE forces_driver
                                              fft_tune_max_it,&
                                              jgw
   USE fftprp_utils,                    ONLY: autotune_fftbatchsize
+  USE fftpw_param,                     ONLY: DP
   USE fnonloc_utils,                   ONLY: fnonloc
   USE func,                            ONLY: func1
   USE geq0mod,                         ONLY: geq0
@@ -163,6 +165,8 @@ CONTAINS
 
     INTEGER, SAVE                            :: autotune_it=1
     INTEGER(INT64) :: time(2), cr
+    REAL(DP) :: total_time
+    LOGICAL, SAVE :: tunning_finished = .false.
     CALL tiset(procedureN,isub)
     CALL tiset(procedureN//'_a',isub2)
     !TK noforce goes here:
@@ -352,14 +356,21 @@ CONTAINS
        IF(batch_fft.AND..NOT.tkpts%tkpnt)THEN
 !          CALL vpsi_batchfft(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
 !               clsd%nlsd,redist_c2)
-          CALL SYSTEM_CLOCK( time(1) )
-          CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,jgw,nstate)
-          CALL SYSTEM_CLOCK( time(2) )
-          CALL SYSTEM_CLOCK( count_rate = cr )
-          IF (paral%io_parent) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
-!          CALL TIME_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,jgw,nstate)
-!          CALL TIME_vpsi_batchfft(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
-!               clsd%nlsd,redist_c2)
+          IF( .true. .and. .not. tunning_finished ) THEN
+             CALL SYSTEM_CLOCK( time(1) )
+             CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,jgw,nstate)
+             CALL SYSTEM_CLOCK( time(2) )
+             CALL SYSTEM_CLOCK( count_rate = cr )
+             total_time = REAL( time(2)-time(1) ) / REAL( cr )
+             IF (paral%io_parent) write(6,*) "TIME OF NEW VPSI", total_time
+             CALL autotune_pw_vpsi( total_time , tunning_finished )
+          ELSE
+             CALL SYSTEM_CLOCK( time(1) )
+             CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,jgw,nstate)
+             CALL SYSTEM_CLOCK( time(2) )
+             CALL SYSTEM_CLOCK( count_rate = cr )
+             IF (paral%io_parent) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
+          END IF
        ELSE
           CALL vpsi(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,&
                redist_c2)
