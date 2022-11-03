@@ -154,7 +154,7 @@
      INTEGER :: nr1_temp(1)
    
      !
-     if ( .not. desc%vpsi ) then          ! It's a potential FFT
+     if ( .not. desc%wave ) then          ! It's a potential FFT
         CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc2, desc%my_nr2p, desc%nr1p, desc%indp, desc%iplp, 1 )
      else     ! It's a wavefunction FFT
         CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc2, desc%my_nr2p, desc%nr1w, desc%indw, desc%iplw, 2 )

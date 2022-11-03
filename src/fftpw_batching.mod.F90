@@ -3,10 +3,13 @@ MODULE fftpw_batching
 !=----------------------------------------------------------------------=
 
   USE cppt,                                     ONLY: hg
+  USE density_utils,                            ONLY: build_density_sum
+  USE elct,                                     ONLY: crge
   USE fftpw_legacy_routines,                    ONLY: fft_1D,&
                                                       fft_scatter_xy
   USE fftpw_param
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
+  USE kinds,                                    ONLY: real_8
   USE system,                                   ONLY: parm
   USE iso_fortran_env
   IMPLICIT NONE
@@ -18,6 +21,7 @@ MODULE fftpw_batching
   PUBLIC :: fft_com
   PUBLIC :: invfft_after_com
   PUBLIC :: Apply_V
+  PUBLIC :: Build_CD
   PUBLIC :: fwfft_pre_com
   PUBLIC :: fwfft_after_com
   PUBLIC :: Accumulate_Psi_overlapp
@@ -408,6 +412,36 @@ SUBROUTINE Apply_V( dfft, f, v, ibatch )
   dfft%counter(4) = dfft%counter(4) + 1
 
 END SUBROUTINE Apply_V
+
+SUBROUTINE Build_CD( dfft, f, rhoe, num ) 
+  IMPLICIT NONE
+
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  COMPLEX(DP), INTENT(IN) :: f( : )
+  REAL(real_8), INTENT(OUT) :: rhoe( : )
+  INTEGER, INTENT(IN)  :: num
+
+  REAL(real_8) :: coef3, coef4
+
+  INTEGER(INT64) :: time(2)
+
+!------------------------------------------------------
+!-----------Build CD Start-----------------------------
+
+  ! Compute the charge density from the wave functions
+  ! in real space
+  coef3=crge%f(num,1)/parm%omega
+!  IF (is2.GT.nstate) THEN
+!     coef4=0.0_real_8
+!  ELSE
+     coef4=crge%f(num+1,1)/parm%omega
+!  ENDIF
+  CALL build_density_sum(coef3,coef4,f,rhoe,dfft%nnr)
+
+!------------Build CD End------------------------------
+!------------------------------------------------------
+
+END SUBROUTINE Build_CD
 
 SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_size, nr1s, ns )
   IMPLICIT NONE

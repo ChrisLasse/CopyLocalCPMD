@@ -74,8 +74,6 @@ MODULE vpsi_utils
   USE fftnew_utils,                    ONLY: setfftn
   USE fftpw_base,                      ONLY: dfft
   USE fftpw_batching,                  ONLY: Apply_v
-  USE fftpw_converting,                ONLY: ConvertFFT_Coeffs,&
-                                             ConvertFFT_v
   USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
                                              Set_Req_Vals,&
                                              MapVals_CleanUp 
@@ -165,8 +163,6 @@ MODULE vpsi_utils
   PUBLIC :: vpsi_batchfft
   PUBLIC :: vpsimt
   PUBLIC :: do_the_vpsi_thing
-  PUBLIC :: TIME_the_vpsi_thing
-  PUBLIC :: TIME_vpsi_batchfft
   !public :: movepsid
 
 CONTAINS
@@ -1826,12 +1822,12 @@ CONTAINS
     !$omp end parallel
   END SUBROUTINE calc_c2
 
-  SUBROUTINE do_the_vpsi_thing( psi, hpsi, v, ngms_source, nbnd_source )
+  SUBROUTINE do_the_vpsi_thing( psi, hpsi, v, nbnd_source )
   
     IMPLICIT NONE
-    COMPLEX(DP), INTENT(IN)  :: psi(ngms_source, nbnd_source)
-    COMPLEX(DP), INTENT(INOUT) :: hpsi(ngms_source, nbnd_source)
-    INTEGER, INTENT(IN)    :: ngms_source, nbnd_source
+    COMPLEX(DP), INTENT(IN)  :: psi(dfft%ngw, nbnd_source)
+    COMPLEX(DP), INTENT(INOUT) :: hpsi(dfft%ngw, nbnd_source)
+    INTEGER, INTENT(IN)    :: nbnd_source
     REAL(DP), INTENT(IN) :: v(dfft%nnr)
  
     LOGICAL, ALLOCATABLE :: first_step(:)
@@ -1839,11 +1835,7 @@ CONTAINS
     LOGICAL, SAVE :: do_calc = .false.
     LOGICAL, SAVE :: do_com = .false.
     INTEGER, SAVE :: sendsize_rem, nthreads, nested_threads, nbnd, my_thread_num
-    INTEGER, SAVE :: remember_batch  = 0
-    INTEGER, SAVE :: remember_buffer = 0
     INTEGER, SAVE :: times_called = 0
-    INTEGER, SAVE :: bb_counter = 0
-    LOGICAL, SAVE :: tunning_finished = .false.
     REAL(DP), SAVE, ALLOCATABLE :: final_time(:)
     INTEGER :: i, j, iter, ierr, buffer_size, batch_size, ng, ngms
   
@@ -1853,69 +1845,23 @@ CONTAINS
     LOGICAL :: finished_all, last_start, last_start_triggered
 
     INTEGER(INT64) :: time(20)
-    INTEGER(INT64), SAVE :: auto_time(3)
     INTEGER(INT64), SAVE :: cr
-    INTEGER        :: repeats, omit
-    INTEGER, SAVE  :: mbuff, mbatch
     REAL(DP) :: timer(29)
 
+    times_called = times_called + 1
+    IF (dfft%mype .eq. 0) write(6,*) "VPSI CALLED", times_called
+
+    dfft%wave = .true.
     dfft%vpsi = .true.
     dfft%time_adding = 0
     dfft%counter = 0
     timer = 0.0d0
-    times_called = times_called + 1
-    repeats = 8
-    omit = 3
  
-    IF( dfft%tunned ) THEN
-
-       IF( .not. tunning_finished ) THEN
-          IF( times_called .eq. 1 ) THEN 
-             CALL SYSTEM_CLOCK( count_rate = cr )
-             auto_time(3) = 0
-             mbuff = 3
-             mbatch = 10
-             ALLOCATE( final_time( mbuff*mbatch ) )
-          END IF
-          IF( mod( times_called-1, repeats ) .eq. 0 ) THEN
-   
-             IF( times_called .ne. 1 ) THEN
-                final_time( bb_counter ) = REAL( auto_time(3) / ( repeats - omit ) ) / REAL( cr )
-                IF( dfft%mype .eq. 0 ) write(6,*) "buffer:", dfft%buffer_size_save, "batch:", dfft%batch_size_save, "TIME:", final_time( bb_counter )
-                auto_time(3) = 0
-             END IF
-
-             dfft%buffer_size_save = ( bb_counter / mbatch ) + 1
-             dfft%batch_size_save  = mod( bb_counter, mbatch ) + 1
-             bb_counter = bb_counter + 1
-   
-             IF( dfft%buffer_size_save .eq. mbuff+1 ) THEN
-                IF( dfft%mype .eq. 0 ) THEN
-                   dfft%buffer_size_save = ( ( MINLOC( final_time, 1 ) - 1 ) / mbatch ) + 1
-                   dfft%batch_size_save  = mod( MINLOC( final_time, 1 ) - 1, mbatch ) + 1
-                   write(6,*) " "
-                   write(6,*) "TUNNING FINISHED"
-                   write(6,*) "USED BUFFERSIZE:", dfft%buffer_size_save, "USED BATCHSIZE:", dfft%batch_size_save
-                   write(6,*) " "
-                   write(6,*) final_time
-                   write(6,*) " "
-                END IF
-                CALL MP_BCAST( dfft%buffer_size_save, 0, dfft%comm )
-                CALL MP_BCAST(  dfft%batch_size_save, 0, dfft%comm )
-                tunning_finished = .true.
-             END IF
-   
-          END IF
-       END IF
-       
-    ELSE
-       dfft%buffer_size_save = 3
-       dfft%batch_size_save  = 1
-    END IF
     batch_size =  dfft%batch_size_save
     buffer_size = dfft%buffer_size_save
     ngms = dfft%ngw
 
+    CALL SYSTEM_CLOCK( count_rate = cr )
     CALL SYSTEM_CLOCK( time(3) )
 
     IF( .not. allocated( first_step ) ) THEN
@@ -1942,17 +1888,16 @@ CONTAINS
   
     END IF
 
-    IF( remember_batch .ne. batch_size .or. remember_buffer .ne. buffer_size ) THEN
+    IF( dfft%remember_batch .ne. batch_size .or. dfft%remember_buffer .ne. buffer_size ) THEN
 
-       remember_batch  = batch_size
-       remember_buffer = buffer_size
+       dfft%remember_batch  = batch_size
+       dfft%remember_buffer = buffer_size
        CALL Clean_up_shared( dfft, 1 ) 
 
        CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size, dfft%ir1w, dfft%nsw )
        CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
   
        dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
-       sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
      
        CALL create_shared_memory_window_2d( comm_send, 1, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
        CALL create_shared_memory_window_2d( comm_recv, 2, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
@@ -1974,6 +1919,7 @@ CONTAINS
   
     END IF
   
+    sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
     sendsize_save = dfft%sendsize
     last_start = .true.
     last_start_triggered = .false.
@@ -2000,7 +1946,6 @@ CONTAINS
   
     CALL MPI_BARRIER(dfft%comm, ierr)
 
-    CALL SYSTEM_CLOCK( auto_time(1) )
     CALL SYSTEM_CLOCK( time(1) )
   
     !!! Initializiation finished
@@ -2210,8 +2155,6 @@ CONTAINS
     !$omp barrier
     !$omp end parallel
   
-    CALL SYSTEM_CLOCK( auto_time(2) )
-    IF( mod( times_called-1, repeats ) .gt. omit-1 ) auto_time(3) = auto_time(3) + ( auto_time(2) - auto_time(1) )
     CALL SYSTEM_CLOCK( time(4) )
     dfft%time_adding( 98 ) = time(4) - time(1)
 
@@ -2219,7 +2162,7 @@ CONTAINS
        timer( i ) = REAL( dfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
     ENDDO
 
-    IF( dfft%mype .eq. 0 ) THEN
+    IF( dfft%mype .eq. 0 .and. .false. ) THEN
 
           WRITE(6,*)" "
           WRITE(6,*)"Some extra VPSI times"
@@ -2280,211 +2223,9 @@ CONTAINS
 
     END IF
 
+    dfft%wave = .false.
     dfft%vpsi = .false.
   
   END SUBROUTINE do_the_vpsi_thing
-
-  
-  SUBROUTINE TIME_the_vpsi_thing( c0, control_c2, v_cpmd, ngms_source, nbnd_source )
-  
-    IMPLICIT NONE
-    COMPLEX(DP), INTENT(IN)  :: c0(ngms_source, nbnd_source)
-    COMPLEX(DP), INTENT(IN)  :: control_c2(ngms_source, nbnd_source)
-    INTEGER, INTENT(IN)    :: ngms_source, nbnd_source
-    REAL(DP), INTENT(IN) :: v_cpmd(dfft%nnr)
-
-    REAL(DP), PARAMETER :: eps4=1.0E-5_DP
-    COMPLEX(DP) :: c2(ngms_source, nbnd_source)
-
-    REAL(DP) :: time_av, time_final(100)
-
-    INTEGER :: max_buff, max_batch, ibatch, ibuff
-    INTEGER, ALLOCATABLE :: lowest_batch_num(:)
-    INTEGER(INT64), ALLOCATABLE :: time(:,:), lowest_batch_val(:)
-    INTEGER(INT64) :: cr, time_r
-    INTEGER :: i, j, l, average, repeats
-
-    repeats = 100
-    average = 80
-    max_buff  = 1 !5
-    max_batch = 1 !10
-    ALLOCATE( time( max_buff, max_batch ) )
-    ALLOCATE( lowest_batch_num( max_buff ) )
-    ALLOCATE( lowest_batch_val( max_buff ) )
-
-    dfft%tunned = .true.
-    time = 0
-    CALL SYSTEM_CLOCK( count_rate = cr )
-   
-    DO ibuff = 1, max_buff
- 
-       dfft%buffer_size_save = ibuff
-
-       DO ibatch = 1, max_batch
- 
-          dfft%batch_size_save = ibatch
-
-          DO l = 1, 10
-
-             CALL do_the_vpsi_thing( c0, c2, v_cpmd, ngms_source, nbnd_source )
-   
-             DO i = 1, nbnd_source
-                DO j = 1, ngms_source
-                   IF( abs( c2(j,i) - control_c2(j,i) ) .ge. eps4 ) &
-                       WRITE(6,*) "FFT ERROR! batch_size:", ibatch, " buffer_size:", ibuff, j, i, abs( c2(j,i) - control_c2(j,i) )
-                ENDDO
-             ENDDO
-   
-             IF( l .gt. 2 ) time( ibuff, ibatch ) = time( ibuff, ibatch ) + dfft%time_adding(1)
-!             IF( dfft%my_node .eq. 0 .and. dfft%my_node_rank .eq. 0 ) write(6,*) dfft%time_adding(1) / REAL ( cr , KIND = REAL64 )
-
-          ENDDO
-
-          time_av = REAL( time( ibuff, ibatch ) / 8, KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
-          IF( dfft%my_node .eq. 0 .and. dfft%my_node_rank .eq. 0 ) &
-              WRITE(6,*) "buffer_size:", ibuff, " batch_size:", ibatch, " Time:", time_av
-
-       ENDDO
-
-       IF( dfft%my_node .eq. 0 .and. dfft%my_node_rank .eq. 0 ) &
-           WRITE(6,*) " "
-
-       lowest_batch_num( ibuff ) = MINLOC( time( ibuff, : ), 1 )
-       lowest_batch_val( ibuff ) = MINVAL( time( ibuff, : ), 1 )
-
-    ENDDO
-
-    IF( dfft%my_node .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
-
-       dfft%buffer_size_save = MINLOC( lowest_batch_val, 1 )
-       dfft%batch_size_save  = lowest_batch_num( dfft%buffer_size_save )
-
-    END IF
-    CALL MP_BCAST( dfft%buffer_size_save, 0, dfft%comm )
-    CALL MP_BCAST(  dfft%batch_size_save, 0, dfft%comm )
-
-    time_r = 0
-    dfft%averaged_times = 0
-    DO i = 1, repeats
-
-       dfft%time_adding = 0
-
-       CALL do_the_vpsi_thing( c0, c2, v_cpmd, ngms_source, nbnd_source )
-
-       IF( i .gt. repeats-average ) THEN
-          time_r = time_r + dfft%time_adding(100)
-          DO j = 1, 100
-             dfft%averaged_times(j) = dfft%averaged_times(j) + dfft%time_adding(j)
-          ENDDO
-       END IF
-!       IF( dfft%my_node .eq. 0 .and. dfft%my_node_rank .eq. 0 ) write(6,*) dfft%time_adding(100) / REAL ( cr , KIND = REAL64 )
-
-    ENDDO 
-
-    time_av = REAL( time_r / average, KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
-    IF( dfft%my_node .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
-       WRITE(6,*) "buffer_size:", dfft%buffer_size_save, " batch_size:", dfft%batch_size_save
-       WRITE(6,*) "Repeats:", repeats, "Averaging over:", average
-       WRITE(6,*) "pw Time:", time_av
-    END IF
-
-    IF( .true. ) THEN
-       
-       IF( dfft%my_node .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
-
-          DO i = 1, 100
-             time_final(i) = REAL( dfft%averaged_times(i) / average, KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
-          ENDDO
-
-          WRITE(6,*)"Some extra times"
-
-          WRITE(6,*)"PW Including Conversion:", time_final(98)
-
-          write(6,*)"==================================="
-          write(6,*)"INV FFT before Com"
-          write(6,*)"Prepare_psi ",           time_final(1)
-          write(6,*)"INV z_fft ",             time_final(2)
-          write(6,*)"INV Pre_com_copy ",      time_final(3)
-  
-          write(6,*)"INV FFT before Com sum  ",time_final(1)+time_final(2)+time_final(3)
-          write(6,*)"==================================="
-          write(6,*)"INV FFT after Com"
-          write(6,*)"INV After_com_copy ",    time_final(4)
-          write(6,*)"INV y_fft ",             time_final(5)
-          write(6,*)"INV xy_scatter ",        time_final(6)
-          write(6,*)"INV x_fft ",             time_final(7)
-          write(6,*)"Apply V ",               time_final(8)
-  
-          write(6,*)"INV FFT after Com sum ",  time_final(4)+time_final(5)+time_final(6)+time_final(7)+time_final(8)
-          write(6,*)"==================================="
-          write(6,*)"FW FFT before Com"
-          write(6,*)"FW x_fft ",             time_final(9)
-          write(6,*)"FW xy_scatter ",        time_final(10)
-          write(6,*)"FW y_fft ",             time_final(11)
-          write(6,*)"FW Pre_com_copy ",      time_final(12)
-  
-          write(6,*)"FW FFT before Com sum  ",time_final(9)+time_final(10)+time_final(11)+time_final(12)
-          write(6,*)"==================================="
-          write(6,*)"FW FFT after Com"
-          write(6,*)"FW After_com_copy ",    time_final(13)
-          write(6,*)"FW z_fft ",             time_final(14)
-          write(6,*)"Accumulate_Psi ",       time_final(15)
-  
-          write(6,*)"FW FFT after Com sum",  time_final(13)+time_final(14)+time_final(15)
-          write(6,*)"==================================="
- 
-
-       END IF       
-
-    END IF
-
-  
-  END SUBROUTINE TIME_the_vpsi_thing
-
-  SUBROUTINE TIME_vpsi_batchfft( c0, control_c2, f, vpot, psi, nstate, ikind, ispin, redist_c2 )
-  
-    IMPLICIT NONE
-    COMPLEX(DP), INTENT(IN)  :: c0(:,:)
-    COMPLEX(DP), INTENT(IN)  :: control_c2(:,:)
-    REAL(real_8) __CONTIGUOUS                :: f(:)
-    REAL(real_8), TARGET __CONTIGUOUS        :: vpot(:,:)
-    COMPLEX(real_8), TARGET __CONTIGUOUS     :: psi(:)
-    INTEGER                                  :: nstate, ikind, ispin
-    LOGICAL                                  :: redist_c2
-
-    COMPLEX(DP), ALLOCATABLE :: c2(:,:)
-
-    REAL(DP) :: time_av
-
-    INTEGER(INT64) :: cr, time_r
-    INTEGER :: i, j, l, average, repeats
-
-    repeats = 100
-    average = 80
-
-    ALLOCATE( c2( SIZE(c0(:,1),1), SIZE(c0(1,:),1) ) )
-
-    CALL SYSTEM_CLOCK( count_rate = cr )
-   
-    time_r = 0
-    DO i = 1, repeats
-
-       CALL vpsi_batchfft( c0, c2, f, vpot, psi, nstate, ikind, ispin, redist_c2 )
-
-       IF( i .gt. repeats-average ) time_r = time_r + dfft%time_adding(99)
-!       IF( dfft%my_node .eq. 0 .and. dfft%my_node_rank .eq. 0 ) write(6,*) dfft%time_adding(99) / REAL ( cr , KIND = REAL64 )
-
-    ENDDO 
-
-    time_av = REAL( time_r / average, KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
-    IF( dfft%my_node .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
-       WRITE(6,*) "vpsi_batchfft timing"
-       WRITE(6,*) "Repeats:", repeats, "Averaging over:", average
-       WRITE(6,*) "batchfft  Time:", time_av
-       WRITE(6,*) " "
-    END IF
-  
-  END SUBROUTINE TIME_vpsi_batchfft
-
 
 END MODULE vpsi_utils

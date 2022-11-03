@@ -64,8 +64,28 @@ MODULE rhoofr_utils
                                              invfftn,&
                                              fwfftn_batch,&
                                              invfftn_batch,&
-                                             invfftn_batch_com
+                                             invfftn_batch_com,&
+                                             comm_send,&
+                                             comm_recv,&
+                                             locks_calc_inv,&
+                                             locks_calc_fw,&
+                                             locks_com_inv,&
+                                             locks_com_fw,&
+                                             locks_calc_1,&
+                                             locks_calc_2,&
+                                             invfft_pwbatch,&
+                                             fwfft_pwbatch
   USE fftnew_utils,                    ONLY: setfftn
+  USE fftpw_base,                      ONLY: dfft
+  USE fftpw_batching,                  ONLY: Build_CD
+  USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
+                                             Set_Req_Vals,&
+                                             MapVals_CleanUp 
+  USE fftpw_param,                     ONLY: DP
+  USE fftpw_types,                     ONLY: create_shared_memory_window_2d,&
+                                             create_shared_locks_2d,&
+                                             create_shared_locks_1d,&
+                                             Clean_up_shared
   USE geq0mod,                         ONLY: geq0
   USE ions,                            ONLY: ions0,&
                                              ions1
@@ -138,6 +158,8 @@ MODULE rhoofr_utils
 #ifdef _INTEL_MKL
   use mkl_service
 #endif
+
+ USE iso_fortran_env
   
   IMPLICIT NONE
 
@@ -145,6 +167,7 @@ MODULE rhoofr_utils
 
   PUBLIC :: rhoofr
   PUBLIC :: rhoofr_batchfft
+  PUBLIC :: do_the_rhoofr_thing
   !public :: movepsih
 
 CONTAINS
@@ -1290,5 +1313,590 @@ CONTAINS
     !$omp end workshare
     !$omp end parallel
   END SUBROUTINE copy
+
+  ! ==================================================================
+  SUBROUTINE do_the_rhoofr_thing(c0,rhoe,psi,nstate)
+    ! ==--------------------------------------------------------------==
+    ! ==                        COMPUTES                              ==
+    ! ==  THE NORMALIZED ELECTRON DENSITY RHOE IN REAL SPACE          ==
+    ! ==  THE KINETIC ENERGY EKIN. IT IS DONE IN RECIPROCAL SPACE     ==
+    ! ==  WHERE THE ASSOCIATED OPERATORS ARE DIAGONAL.                ==
+    ! ==  RHOE IS OBTAINED FOURIER TRANSFORMING THE WFN TO REAL       ==
+    ! ==  SPACE (PSI).                                                ==
+    ! ==--------------------------------------------------------------==
+    ! == WARNING: ALL WAVEFUNCTIONS C0 HAVE TO BE ORTHOGONAL          ==
+    ! ==--------------------------------------------------------------==
+
+    COMPLEX(real_8)                          :: c0(:,:)
+    REAL(real_8), TARGET __CONTIGUOUS        :: rhoe(:,:)
+    COMPLEX(real_8), TARGET __CONTIGUOUS     :: psi(:)
+    INTEGER                                  :: nstate
+    COMPLEX(real_8), ALLOCATABLE     :: psi_all(:,:)
+
+    CHARACTER(*), PARAMETER                  :: procedureN = 'rhoofr'
+    COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
+    REAL(real_8), PARAMETER :: delta = 1.e-6_real_8, &
+      o3 = 0.33333333333333333_real_8
+
+    COMPLEX(real_8), DIMENSION(:), &
+      POINTER __CONTIGUOUS                   :: psi_p
+    COMPLEX(real_8), DIMENSION(:, :), &
+      POINTER __CONTIGUOUS                   :: psis
+#ifdef __PARALLEL
+    INTEGER :: device_idx, i, i_stream, ia, iat, ierr, ir, is, is1, &
+      is2, ispin1, ispin2, isub, isub2, isub3, isub4, iwf, n_max_threads, &
+      n_nested_threads, n_streams_per_task, stream_idx, i_start, i_end
+    type(MPI_COMM)                           :: fft_comm
+#else
+    INTEGER :: device_idx, fft_comm, i, i_stream, ia, iat, ierr, ir, is, is1, &
+      is2, ispin1, ispin2, isub, isub2, isub3, isub4, iwf, n_max_threads, &
+      n_nested_threads, n_streams_per_task, stream_idx, i_start, i_end
+#endif
+    LOGICAL                                  :: copy_data_to_device, &
+                                                copy_data_to_host, tfcal
+    REAL(real_8)                             :: chksum, coef3, coef4, ral, &
+                                                rbe, rsp, rsum, rsum1, &
+                                                rsum1abs, rsumv, rto
+    REAL(real_8), ALLOCATABLE                :: qa(:)
+    REAL(real_8), ALLOCATABLE, &
+      DIMENSION(:, :, :), TARGET             :: rhoes
+    REAL(real_8), DIMENSION(:, :), &
+      POINTER __CONTIGUOUS                   :: rhoe_p
+    TYPE(cuda_memory_t), POINTER             :: c0_d, inzs_d, nzfs_d, psi_d, &
+                                                rho_d
+    TYPE(cuda_stream_t), POINTER             :: stream_p
+    TYPE(thread_view_t)                      :: thread_view
+    TYPE(thread_view_t), ALLOCATABLE, &
+      DIMENSION(:)                           :: thread_views
+
+    !$ LOGICAL :: nested_orig
+    !$ INTEGER :: max_level_orig
+    LOGICAL, PARAMETER :: wfn_on_gpu = .FALSE.
+    ! ==--------------------------------------------------------------==
+
+    CALL tiset(procedureN,isub)
+
+    ! ==--------------------------------------------------------------==
+    CALL kin_energy(c0,nstate,rsum)
+
+    ! Initialize
+    CALL zeroing(rhoe)!,clsd%nlsd*nnr1)
+
+    IF( .not. allocated(psi_all) ) ALLOCATE( psi_all( dfft%nnr , (nstate/2)+1 ) )
+    CALL rhoofr_pwfft(c0,psi_all,rhoe(:,1),nstate)
+
+    ! ==--------------------------------------------------------------==
+    ! redistribute RHOE over the groups if needed
+    !
+    IF (parai%cp_nogrp.GT.1) THEN
+       CALL tiset(procedureN//'_grps_b',isub3)
+       CALL cp_grp_redist(rhoe,fpar%nnr1,clsd%nlsd)
+       CALL tihalt(procedureN//'_grps_b',isub3)
+    ENDIF
+
+    ! CASPUR 2/9/04
+    IF (tdgcomm%tdg) THEN
+       IF (lspin2%tlse) THEN
+          CALL stopgm(procedureN,&
+               'TDG TOGETHER WITH LSE IS NOT YET IMPLEMENTED ',&
+               __LINE__,__FILE__)
+       ELSE IF (cntl%tlsd) THEN
+          !$omp parallel do private(IR)
+          DO ir=1,llr1
+             psi(ir)=CMPLX(rhoe(ir,1), rhoe(ir,2),kind=real_8)
+          ENDDO
+          CALL fwfftn(psi,.FALSE.,parai%allgrp)
+          CALL movepsih(psi,2)
+          CALL setfftn(0)
+          CALL invfftn(psi,.FALSE.,parai%allgrp)
+          !$omp parallel do private(IR)
+          DO ir=1,fpar%nnr1
+             rhoe(ir,1)=REAL(psi(ir))
+             rhoe(ir,2)=AIMAG(psi(ir))
+          ENDDO
+       ELSE
+          !$omp parallel do private(IR)
+          DO ir=1,llr1
+             psi(ir)=CMPLX(rhoe(ir,1), 0._real_8,kind=real_8)
+          ENDDO
+          CALL fwfftn(psi,.FALSE.,parai%allgrp)
+          CALL movepsih(psi,1)
+          CALL setfftn(0)
+          CALL invfftn(psi,.FALSE.,parai%allgrp)
+          CALL dcopy(fpar%nnr1, psi, 2, rhoe, 1)
+       ENDIF
+    ENDIF
+    ! MOVE DENSITY ACCORDING TO MOVEMENT OF ATOMS
+    IF (ropt_mod%modens) CALL moverho(rhoe,psi)
+    ! CONTRIBUTION OF THE VANDERBILT PP TO RHOE
+    IF (pslo_com%tivan) THEN
+       IF (cntl%tlsd) THEN
+          ! ALPHA SPIN
+          i_start=1
+          i_end=spin_mod%nsup
+          CALL rhov(i_start,i_end,rsumv,psi)
+          rsum=rsum+parm%omega*rsumv
+          !$omp parallel do private(I)
+          DO i=1,fpar%nnr1
+             rhoe(i,1)=rhoe(i,1)+REAL(psi(i))
+          ENDDO
+          ! BETA SPIN
+          i_start=spin_mod%nsup+1
+          i_end=spin_mod%nsup+spin_mod%nsdown
+          CALL rhov(i_start,i_end,rsumv,psi)
+          rsum=rsum+parm%omega*rsumv
+          !$omp parallel do private(I)
+          DO i=1,fpar%nnr1
+             rhoe(i,2)=rhoe(i,2)+REAL(psi(i))
+          ENDDO
+       ELSE
+          i_start=1
+          i_end=nstate
+          CALL rhov(i_start,i_end,rsumv,psi)
+          rsum=rsum+parm%omega*rsumv
+          !$omp parallel do private(I)
+          DO i=1,fpar%nnr1
+             rhoe(i,1)=rhoe(i,1)+REAL(psi(i))
+          ENDDO
+       ENDIF
+       ! Vanderbilt Charges
+       !TK This part here is meaningless, only calculated to print at the very first and very last step
+       !VDB Charges are calculated in rhov and newd
+       !optimized and parallelized routine: calc_rho
+!       IF (paral%parent) THEN
+!          ALLOCATE(qa(ions1%nat),STAT=ierr)
+!          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+!               __LINE__,__FILE__)
+!          CALL zeroing(qa)!,ions1%nat)
+!          CALL augchg(fnl,crge%f,qa,nstate)
+!          iat=0
+!          DO is=1,ions1%nsp
+!             chrg%vdbchg(is)=0._real_8
+!             DO ia=1,ions0%na(is)
+!                iat=iat+1
+!                chrg%vdbchg(is)=chrg%vdbchg(is)+qa(iat)
+!             ENDDO
+!             chrg%vdbchg(is)=chrg%vdbchg(is)/REAL(ions0%na(is),kind=real_8)
+!          ENDDO
+!          DEALLOCATE(qa,STAT=ierr)
+!          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+!               __LINE__,__FILE__)
+!       ENDIF
+    ENDIF
+
+    ! ALPHA+BETA DENSITY IN RHOE(*,1), BETA DENSITY IN RHOE(*,2)
+    chrg%csums=0._real_8
+    chrg%csumsabs=0._real_8
+    IF (cntl%tlsd) THEN
+       rsum1=0._real_8
+       rsum1abs=0._real_8
+       !$omp parallel do private(I) shared(fpar,RHOE) &
+       !$omp  reduction(+:RSUM1,RSUM1ABS)
+       DO i=1,fpar%nnr1
+          rsum1 = rsum1 + (rhoe(i,1) - rhoe(i,2))
+          rsum1abs = rsum1abs + ABS(rhoe(i,1) - rhoe(i,2))
+          rhoe(i,1) = rhoe(i,1) + rhoe(i,2)
+       ENDDO
+       chrg%csums=rsum1*parm%omega/REAL(lr1s*lr2s*lr3s,kind=real_8)
+       chrg%csumsabs=rsum1abs*parm%omega/REAL(lr1s*lr2s*lr3s,kind=real_8)
+       ! ALPHA+BETA DENSITY IN RHOE(*,1), BETA DENSITY IN RHOE(*,2) ; M STATE
+       ! ALPHA+BETA DENSITY IN RHOE(*,3), BETA DENSITY IN RHOE(*,4) ; T STATE
+    ELSEIF (lspin2%tlse) THEN
+       IF (lspin2%tcas22) THEN
+          ! Calculate "ground state" density and D-EX DENSITY
+          !$omp parallel do private(I,RTO,RBE,RAL)
+          DO i=1,fpar%nnr1
+             rto=rhoe(i,1)
+             rbe=rhoe(i,2)
+             ral=rhoe(i,3)
+             rhoe(i,6)=rto-rbe+ral
+             rhoe(i,7)=rto+rbe-ral
+          ENDDO
+       ENDIF
+       IF (lspin2%tlsets) THEN
+          !$omp parallel do private(I,RTO,RBE,RAL,RSP)
+          DO i=1,fpar%nnr1
+             rto=rhoe(i,1)
+             rbe=rhoe(i,2)
+             ral=rhoe(i,3)
+             rsp=0.5_real_8*(rto-ral-rbe)
+             rhoe(i,2)=rsp+rbe+o3*ral
+             rhoe(i,3)=rto
+             rhoe(i,4)=rsp+rbe+2._real_8*o3*ral
+          ENDDO
+       ELSE
+          !$omp parallel do private(I,RTO,RBE,RAL,RSP)
+          DO i=1,fpar%nnr1
+             rto=rhoe(i,1)
+             rbe=rhoe(i,2)
+             ral=rhoe(i,3)
+             rsp=0.5_real_8*(rto-ral-rbe)
+             rhoe(i,2)=rsp+rbe
+             rhoe(i,3)=rto
+             rhoe(i,4)=rsp+ral+rbe
+          ENDDO
+       ENDIF
+       IF (lspin2%tross.OR.lspin2%tcas22.OR.lspin2%tpenal) THEN
+          ! WE ALSO NEED THE A*B DENSITY FOR THE EXCHANGE CONTRIBUTION
+          ! OR THE OFF DIAGONAL ELEMENTS IN THE CAS22 METHOD
+          CALL zeroing(rhoe(:,5))!,nnr1)
+          CALL rhoabofr(1,c0(:,clsd%ialpha:clsd%ialpha),c0(:,clsd%ibeta:clsd%ibeta),rhoe(:,5),psi)
+       ENDIF
+    ENDIF
+
+    ! HERE TO CHECK THE INTEGRAL OF THE CHARGE DENSITY
+    ! RSUM1=DASUM(NNR1,RHOE(1,1),1)
+    ! --> with VDB PP RHOE might be negative in some points
+    rsum1=0._real_8
+#if defined(__SR8000)
+    !poption parallel, tlocal(I), psum(RSUM1)
+#else
+    !$omp parallel do private(I) shared(fpar,RHOE) &
+    !$omp  reduction(+:RSUM1)
+#endif
+    DO i=1,fpar%nnr1
+       rsum1=rsum1+rhoe(i,1)
+    ENDDO
+    rsum1=rsum1*parm%omega/REAL(spar%nr1s*spar%nr2s*spar%nr3s,kind=real_8)
+    chrg%csumg=rsum
+    chrg%csumr=rsum1
+    CALL mp_sum(chrg%csumg,parai%allgrp)
+    CALL mp_sum(chrg%csumr,parai%allgrp)
+    CALL mp_sum(chrg%csums,parai%allgrp)
+    CALL mp_sum(chrg%csumsabs,parai%allgrp)
+
+    IF (paral%parent.AND.ABS(chrg%csumr-chrg%csumg).GT.delta) THEN
+       IF (paral%io_parent)&
+            WRITE(6,'(A,T46,F20.12)') ' IN FOURIER SPACE:', chrg%csumg
+       IF (paral%io_parent)&
+            WRITE(6,'(A,T46,F20.12)') ' IN REAL SPACE:', chrg%csumr
+       IF ((symmi%indpg.NE.0.AND.dual00%cdual.LT.4._real_8).AND.paral%io_parent)&
+            WRITE(6,*) 'YOUR DUAL NUMBER ',dual00%cdual,&
+            ' COULD BE TOO SMALL WITH DENSITY SYMMETRISATION'
+       CALL stopgm(procedureN,'TOTAL DENSITY SUMS ARE NOT EQUAL',&
+            __LINE__,__FILE__)
+    ENDIF
+    ! TAU FUNCTION
+    IF (cntl%ttau) CALL tauofr(c0,psi,nstate)
+    !
+    __NVTX_TIMER_STOP
+    __NVTX_TIMER_STOP
+    CALL tihalt(procedureN,isub)
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END SUBROUTINE do_the_rhoofr_thing
+  ! ==================================================================
+
+  SUBROUTINE rhoofr_pwfft( psi, hpsi, rhoe, nbnd_source )
+  
+    IMPLICIT NONE
+    COMPLEX(DP), INTENT(IN)  :: psi(dfft%ngw, nbnd_source)
+    COMPLEX(DP), INTENT(INOUT) :: hpsi(dfft%nnr, nbnd_source)
+    REAL(real_8), INTENT(OUT) :: rhoe(dfft%nnr)
+    INTEGER, INTENT(IN)    :: nbnd_source
+ 
+    LOGICAL, ALLOCATABLE :: first_step(:)
+
+    LOGICAL, SAVE :: do_calc = .false.
+    LOGICAL, SAVE :: do_com = .false.
+    INTEGER, SAVE :: sendsize_rem, nthreads, nested_threads, nbnd, my_thread_num
+    INTEGER, SAVE :: times_called = 0
+    REAL(DP), SAVE, ALLOCATABLE :: final_time(:)
+    INTEGER :: i, j, iter, ierr, buffer_size, batch_size, ng, ngms
+  
+    INTEGER :: counter( 2 , 2 )
+    LOGICAL :: finished(3)
+    INTEGER :: sendsize_save, next, last_buffer, ibatch, work_buffer
+    LOGICAL :: finished_all, last_start, last_start_triggered
+
+    INTEGER(INT64) :: time(20)
+    INTEGER(INT64), SAVE :: cr
+    REAL(DP) :: timer(29)
+
+    times_called = times_called + 1
+    IF (dfft%mype .eq. 0) write(6,*) "RHOOFR CALLED", times_called
+
+    dfft%wave = .true.
+    dfft%time_adding = 0
+    timer = 0.0d0
+
+    batch_size =  dfft%batch_size_save
+    buffer_size = dfft%buffer_size_save
+    ngms = dfft%ngw
+
+    CALL SYSTEM_CLOCK( count_rate = cr )
+    CALL SYSTEM_CLOCK( time(3) )
+
+    IF( .not. allocated( first_step ) ) THEN
+ 
+       ALLOCATE( first_step( dfft%buffer_size_save ) ) 
+       dfft%use_maps = .true.
+       dfft%ngms = ngms
+
+       IF( dfft%overlapp ) THEN
+          !$omp parallel
+          dfft%cpus_per_task = omp_get_num_threads()
+          !$omp end parallel
+          nthreads = MIN( 2, dfft%cpus_per_task )
+          nested_threads = MAX( 1, dfft%cpus_per_task - 1 )
+       ELSE
+          nthreads = 1
+       END IF
+       dfft%uneven  = .false.
+  
+       IF( dfft%my_node_rank .ne. 0 .or. dfft%single_node ) nthreads = 1
+       
+       nbnd = ( nbnd_source + 1 ) / 2
+       IF( mod( nbnd_source, 2 ) .ne. 0 ) dfft%uneven = .true.
+  
+    END IF
+
+    IF( dfft%remember_batch .ne. batch_size .or. dfft%remember_buffer .ne. buffer_size ) THEN
+
+       dfft%remember_batch  = batch_size
+       dfft%remember_buffer = buffer_size
+       CALL Clean_up_shared( dfft, 1 ) 
+
+       CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size, dfft%ir1w, dfft%nsw )
+       CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
+  
+       dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
+     
+       CALL create_shared_memory_window_2d( comm_send, 1, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
+       CALL create_shared_memory_window_2d( comm_recv, 2, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
+     
+       CALL create_shared_locks_2d( locks_calc_inv, 20, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_2d( locks_calc_fw,  21, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_1d( locks_com_inv,  50, dfft, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_1d( locks_com_fw,   51, dfft, ( nbnd_source / batch_size ) + 1 )
+       
+       CALL create_shared_locks_2d( locks_calc_1  , 22, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
+       CALL create_shared_locks_2d( locks_calc_2  , 23, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
+  
+       dfft%num_buff = buffer_size
+       IF( dfft%rem_size .ne. 0 ) THEN
+          dfft%max_nbnd = ( nbnd / batch_size ) + 1
+       ELSE
+          dfft%max_nbnd = ( nbnd / batch_size )
+       END IF
+  
+    END IF
+  
+    sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
+    sendsize_save = dfft%sendsize
+    last_start = .true.
+    last_start_triggered = .false.
+  
+    locks_calc_inv = .true.
+    locks_com_inv  = .true.
+  
+    locks_calc_1   = .true.
+    DO i = 1, batch_size*buffer_size
+       locks_calc_1( : , i ) = .false.
+    ENDDO
+
+    dfft%first_loading = .true.
+    dfft%rem = .false.
+  
+    CALL MPI_BARRIER(dfft%comm, ierr)
+
+    CALL SYSTEM_CLOCK( time(1) )
+  
+    !!! Initializiation finished
+  
+    !$omp parallel IF( nthreads .eq. 2 ) num_threads( nthreads ) &
+    !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, work_buffer, finished ) &
+    !$omp proc_bind( close )
+    
+    do_calc = .false.
+    do_com  = .false.
+    batch_size = dfft%batch_size_save
+    next = -1
+    counter = 0
+    finished = .false.
+    last_buffer = 0
+    finished_all = .false.
+    first_step = dfft%first_step
+
+    !$  IF( nthreads .eq. 2 ) THEN
+    !$     my_thread_num = omp_get_thread_num()
+    !$     IF( my_thread_num .eq. 1 ) THEN
+    !$        CALL omp_set_max_active_levels( 2 )
+    !$        CALL omp_set_num_threads( nested_threads )
+    !$        CALL mkl_set_dynamic(0) 
+    !$        ierr = mkl_set_num_threads_local( nested_threads )
+    !$        do_calc = .true.
+    !$     ELSE
+    !$        do_com  = .true.
+    !$     END IF
+    !$  END IF
+  
+    IF( nthreads .eq. 1 ) THEN
+       IF( dfft%my_node_rank .eq. 0 .and. .not. dfft%single_node ) do_com = .true.
+!       CALL omp_set_num_threads( 5 )
+       my_thread_num = 1
+       do_calc = .true.
+    ENDIF
+   
+    DO WHILE( .not. finished_all )
+  
+       next = mod( next, buffer_size ) + 1
+       IF( next .eq. 0 ) THEN
+          work_buffer = 1
+       ELSE
+          work_buffer = dfft%buffer_sequence( next )
+       END IF
+  
+       IF( dfft%rem_size .ne. 0 .and. ( ( first_step( work_buffer ) .and. last_buffer .eq. 0 .and. ( counter( 1, 1 ) .eq. dfft%max_nbnd - 1 .or. counter( 2, 1 ) .eq. dfft%max_nbnd - 1 ) ) .or. last_buffer .eq. work_buffer ) ) THEN
+          last_buffer = work_buffer
+          batch_size = dfft%rem_size
+          IF( do_com  ) dfft%sendsize = sendsize_rem
+          IF( do_calc ) dfft%rem = .true.
+       END IF
+    
+       IF( first_step( work_buffer ) ) THEN
+  
+          IF( do_calc ) THEN
+  
+             ! First Step
+  
+             IF( finished(1) ) THEN
+                CONTINUE
+             ELSE
+  
+                counter( 1, 1 ) = counter( 1, 1 ) + 1
+
+                CALL SYSTEM_CLOCK( time(10) )
+                CALL invfft_pwbatch( dfft, 1, batch_size, counter( 1, 1 ), work_buffer, psi, comm_send, comm_recv(:,work_buffer) )
+                CALL SYSTEM_CLOCK( time(11) )
+                dfft%time_adding( 19 ) = dfft%time_adding( 19 ) + ( time(11) - time(10) )
+
+                IF( counter( 1, 1 ) .eq. dfft%max_nbnd ) finished(1) = .true.
+  
+             END IF
+     
+          END IF
+     
+          IF( do_com ) THEN
+     
+             IF( finished(2) ) THEN
+                CONTINUE
+             ELSE
+
+                counter( 2, 1 ) = counter( 2, 1 ) + 1
+  
+                CALL SYSTEM_CLOCK( time(12) )
+                CALL invfft_pwbatch( dfft, 2, batch_size, counter( 2, 1 ), work_buffer, comm_send, comm_recv )
+                CALL SYSTEM_CLOCK( time(13) )
+                dfft%time_adding( 16 ) = dfft%time_adding( 16 ) + ( time(13) - time(12) )
+ 
+                IF( counter( 2, 1 ) .eq. dfft%max_nbnd ) finished(2) = .true.
+                IF( counter( 2, 1 ) .eq. dfft%max_nbnd .and. .not. do_calc ) finished_all = .true.
+     
+             END IF
+     
+          END IF
+  
+          IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr) 
+  
+          first_step( work_buffer ) = .false.
+  
+       ELSE
+  
+          ! Last Step
+  
+          IF( do_calc ) THEN
+     
+             IF( finished(3) ) THEN
+                CONTINUE
+             ELSE
+
+                counter( 1, 2 ) = counter( 1, 2 ) + 1
+   
+                CALL invfft_pwbatch( dfft, 3, batch_size, counter( 1, 2 ), work_buffer, comm_recv, &
+                                     hpsi( : , (1+((counter(1,2)-1)*dfft%batch_size_save)):(1+((counter(1,2)-1)*dfft%batch_size_save)+batch_size-1 ) ) )
+   
+                !Maybe a problem with buffer being freed too early... could be all and well tho
+   
+                DO ibatch = 1, batch_size
+                   CALL Build_CD( dfft, hpsi(:, ((counter(1,2)-1)*dfft%batch_size_save)+ibatch ), rhoe, 2*(((counter(1,2)-1)*dfft%batch_size_save)+ibatch)-1 )
+                ENDDO
+   
+                IF( counter( 1, 2 ) .eq. dfft%max_nbnd ) finished(3) = .true.
+                IF( counter( 1, 2 ) .eq. dfft%max_nbnd ) finished_all = .true.
+
+             END IF
+  
+          END IF
+  
+          IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr) 
+  
+          first_step( work_buffer ) = .true.
+  
+       END IF
+  
+       IF( batch_size .ne. dfft%batch_size_save ) THEN
+          batch_size = dfft%batch_size_save
+          IF( do_com  ) dfft%sendsize = sendsize_save
+          IF( do_calc ) dfft%rem = .false.
+       END IF
+  
+    ENDDO 
+  
+    !$  IF( nthreads .eq. 2 .and. my_thread_num .eq. 1 ) THEN
+    !$     CALL omp_set_max_active_levels( 1 )
+    !$     CALL omp_set_num_threads( dfft%cpus_per_task )
+    !$     CALL mkl_set_dynamic(1) 
+    !$     ierr = mkl_set_num_threads_local( dfft%cpus_per_task )
+    !$  END IF
+    !$omp barrier
+    !$omp end parallel
+  
+    CALL SYSTEM_CLOCK( time(4) )
+    dfft%time_adding( 98 ) = time(4) - time(1)
+
+    DO i = 1, 29
+       timer( i ) = REAL( dfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
+    ENDDO
+
+    IF( dfft%mype .eq. 0 .and. .false. ) THEN
+
+          WRITE(6,*)" "
+          WRITE(6,*)"Some extra RHOOFR times"
+          write(6,*)"==================================="
+          write(6,*)"INV FFT before Com"
+          write(6,*)"CALC LOCK 1", timer(22)
+          write(6,*)"Prepare_psi ",           timer(1)
+          write(6,*)"INV z_fft ",             timer(2)
+          write(6,*)"INV Pre_com_copy ",      timer(3)
+  
+          write(6,*)"INV FFT before Com sum  ",timer(1)+timer(2)+timer(3)+timer(22)
+          write(6,*)"Control:", timer(19)
+          write(6,*)"==================================="
+          write(6,*)"INV FFT after Com"
+          write(6,*)"CALC LOCK 2", timer(24)
+          write(6,*)"INV After_com_copy ",    timer(4)
+          write(6,*)"INV y_fft ",             timer(5)
+          write(6,*)"INV xy_scatter ",        timer(6)
+          write(6,*)"INV x_fft ",             timer(7)
+  
+          write(6,*)"INV FFT after Com sum ",  timer(4)+timer(5)+timer(6)+timer(7)+timer(24)
+          write(6,*)"Control:", timer(20)
+          write(6,*)"==================================="
+          write(6,*)"COM LOCK 1", timer(23)
+          write(6,*)"FIRST COMM TIMES:", timer(28)
+          write(6,*)"Control:", timer(16)
+          write(6,*)"==================================="
+          write(6,*)"Adding up CALC:", timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+                                  timer(7)+timer(22)+timer(24)
+          write(6,*)"Adding up COMM:", timer(23)+timer(28)
+          write(6,*)"Control:", REAL( REAL( dfft%time_adding( 98 ) ) / REAL( cr ), KIND = REAL64 )
+          WRITE(6,*)" "
+
+    END IF
+
+    dfft%wave = .false.
+  
+  END SUBROUTINE rhoofr_pwfft
 
 END MODULE rhoofr_utils

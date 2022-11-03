@@ -166,6 +166,8 @@ MODULE fftpw_types
     INTEGER :: my_node_rank = 0
     INTEGER :: my_inter_node_rank = 0
     INTEGER :: my_node = 0
+    INTEGER :: remember_batch  = 0
+    INTEGER :: remember_buffer = 0
     INTEGER :: nr3px
     INTEGER :: my_nr1p
     INTEGER :: small_chunks
@@ -183,6 +185,7 @@ MODULE fftpw_types
     INTEGER, ALLOCATABLE :: map_acinv_rem_one(:)
     INTEGER, ALLOCATABLE :: map_pcfw(:)
 
+    LOGICAL :: wave = .false.
     LOGICAL :: vpsi = .false.
     INTEGER, ALLOCATABLE :: buffer_sequence(:)
     LOGICAL, ALLOCATABLE :: first_loading(:)

@@ -88,9 +88,7 @@ MODULE forces_driver
                                              zclean_k
   USE vpsi_utils,                      ONLY: vpsi,&
                                              vpsi_batchfft,&
-                                             do_the_vpsi_thing,&
-                                             TIME_the_vpsi_thing,&
-                                             TIME_vpsi_batchfft
+                                             do_the_vpsi_thing
 !!use rotate_utils, only : rotate_c
 !!use ovlap_utils, only : ovlap_c
   USE zeroing_utils,                   ONLY: zeroing
@@ -358,18 +356,18 @@ CONTAINS
 !               clsd%nlsd,redist_c2)
           IF( .true. .and. .not. tunning_finished ) THEN
              CALL SYSTEM_CLOCK( time(1) )
-             CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,jgw,nstate)
+             CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,nstate)
              CALL SYSTEM_CLOCK( time(2) )
              CALL SYSTEM_CLOCK( count_rate = cr )
              total_time = REAL( time(2)-time(1) ) / REAL( cr )
-             IF (paral%io_parent) write(6,*) "TIME OF NEW VPSI", total_time
+!             IF (paral%io_parent) write(6,*) "TIME OF NEW VPSI", total_time
              CALL autotune_pw_vpsi( total_time , tunning_finished )
           ELSE
              CALL SYSTEM_CLOCK( time(1) )
-             CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,jgw,nstate)
+             CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,nstate)
              CALL SYSTEM_CLOCK( time(2) )
              CALL SYSTEM_CLOCK( count_rate = cr )
-             IF (paral%io_parent) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
+!             IF (paral%io_parent) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
           END IF
        ELSE
           CALL vpsi(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,&
