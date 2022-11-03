@@ -72,6 +72,9 @@ CONTAINS
 
     CALL fft_type_init( dfft, which, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
 
+    dfft%batch_size_save = 1
+    dfft%buffer_size_save = 1
+
     ALLOCATE( dfft%time_adding( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)

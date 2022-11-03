@@ -44,7 +44,7 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
 
   END IF
 
-  IF( last_buffer .ne. num_buff .and. dfft%vpsi ) THEN
+  IF( last_buffer .ne. num_buff .and. dfft%wave ) THEN
 
      last_buffer = num_buff
   
@@ -65,7 +65,7 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
 
   END IF
 
-  IF( last_batch .ne. batch_size .and. dfft%vpsi ) THEN
+  IF( last_batch .ne. batch_size .and. dfft%wave ) THEN
 
      last_batch = batch_size
 
@@ -119,7 +119,7 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
 
   END IF
 
-  IF( last_batch .ne. batch_size .and. dfft%vpsi ) THEN
+  IF( last_batch .ne. batch_size .and. dfft%wave ) THEN
 
      last_batch = batch_size
 

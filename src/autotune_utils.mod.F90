@@ -9,8 +9,7 @@ MODULE autotune_utils
   USE fft,                             ONLY: batch_fft,&
                                              fft_tune_max_it
   USE fftprp_utils,                    ONLY: autotune_fftbatchsize
-  USE fftpw_base,                      ONLY: dfft,&
-                                             d_vpsi
+  USE fftpw_base,                      ONLY: dfft
   USE fftpw_param,                     ONLY: DP
   USE mp_interface,                    ONLY: mp_bcast
   USE system,                          ONLY: cnti, cntl
@@ -89,25 +88,25 @@ CONTAINS
   IF( mod( times_called, repeats ) .eq. 0 ) THEN
   
      final_time( bb_counter ) = final_time( bb_counter ) / ( repeats - omit )
-     IF( dfft%mype .eq. 0 ) write(6,*) "vpsi tunning buffer:", d_vpsi%buffer_size_save, "batch:", d_vpsi%batch_size_save, "TIME:", final_time( bb_counter )
+     IF( dfft%mype .eq. 0 ) write(6,*) "vpsi tunning buffer:", dfft%buffer_size_save, "batch:", dfft%batch_size_save, "TIME:", final_time( bb_counter )
 
-     d_vpsi%buffer_size_save = ( bb_counter / mbatch ) + 1
-     d_vpsi%batch_size_save  = mod( bb_counter, mbatch ) + 1
+     dfft%buffer_size_save = ( bb_counter / mbatch ) + 1
+     dfft%batch_size_save  = mod( bb_counter, mbatch ) + 1
      bb_counter = bb_counter + 1
   
-     IF( d_vpsi%buffer_size_save .eq. mbuff+1 ) THEN
+     IF( dfft%buffer_size_save .eq. mbuff+1 ) THEN
         IF( dfft%mype .eq. 0 ) THEN
-           d_vpsi%buffer_size_save = ( ( MINLOC( final_time, 1 ) - 1 ) / mbatch ) + 1
-           d_vpsi%batch_size_save  = mod( MINLOC( final_time, 1 ) - 1, mbatch ) + 1
+           dfft%buffer_size_save = ( ( MINLOC( final_time, 1 ) - 1 ) / mbatch ) + 1
+           dfft%batch_size_save  = mod( MINLOC( final_time, 1 ) - 1, mbatch ) + 1
            write(6,*) " "
            write(6,*) "VPSI TUNNING FINISHED"
-           write(6,*) "USED BUFFERSIZE:", d_vpsi%buffer_size_save, "USED BATCHSIZE:", d_vpsi%batch_size_save
+           write(6,*) "USED BUFFERSIZE:", dfft%buffer_size_save, "USED BATCHSIZE:", dfft%batch_size_save
            write(6,*) " "
            write(6,*) final_time
            write(6,*) " "
         END IF
-        CALL MP_BCAST( d_vpsi%buffer_size_save, 0, dfft%comm )
-        CALL MP_BCAST(  d_vpsi%batch_size_save, 0, dfft%comm )
+        CALL MP_BCAST( dfft%buffer_size_save, 0, dfft%comm )
+        CALL MP_BCAST(  dfft%batch_size_save, 0, dfft%comm )
         finished = .true.
      END IF
   
