@@ -132,9 +132,14 @@ MODULE fftpw_types
     LOGICAL :: rsactive = .false.
     LOGICAL :: singl = .false.
 
+    INTEGER :: z_group_size_save
+    INTEGER :: z_set_size_save
+    INTEGER :: max_batch_size = 10
+
     COMPLEX(DP), ALLOCATABLE :: temp_psic(:,:)
     COMPLEX(DP), ALLOCATABLE :: temp_aux(:,:)
     COMPLEX(DP), ALLOCATABLE :: aux(:)
+    COMPLEX(DP), ALLOCATABLE :: aux2(:)
     COMPLEX(DP), ALLOCATABLE :: wfn_keep(:,:)
     COMPLEX(DP), ALLOCATABLE :: bench_aux(:,:)
     COMPLEX(DP), ALLOCATABLE :: bench_aux_rem(:,:)

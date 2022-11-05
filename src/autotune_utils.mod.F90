@@ -68,26 +68,74 @@ CONTAINS
   REAL(DP), INTENT(IN) :: time
   LOGICAL, INTENT(OUT) :: finished
 
-  INTEGER, SAVE :: times_called = 0
   INTEGER, SAVE :: bb_counter = 1
-  INTEGER, SAVE  :: mbuff, mbatch, repeats, omit
-  REAL(DP), SAVE, ALLOCATABLE :: final_time(:)
+  INTEGER, SAVE  :: mbuff, mbatch, repeats, omit, set_repeats
+  REAL(DP), SAVE, ALLOCATABLE :: final_time(:), set_time(:)
+  LOGICAL, SAVE, ALLOCATABLE :: set_time_mask(:)
+  INTEGER, SAVE, ALLOCATABLE :: sets(:)
+  LOGICAL, SAVE :: first = .true.
+  LOGICAL, SAVE :: alloc = .true.
+  LOGICAL, SAVE :: set_timing = .true.
+  INTEGER, SAVE :: timed = 0
+  INTEGER, SAVE :: waiting = 0
+  LOGICAL :: next_batch
 
-  times_called = times_called + 1
+  INTEGER, SAVE :: set_called = 0
+
   finished = .false.
+  next_batch = .false.
 
-  IF( times_called .eq. 1 ) THEN 
+  IF( first ) THEN 
      mbuff = 3
-     mbatch = 10
-     repeats = 10
+     mbatch = dfft%max_batch_size
+     repeats = 5
+     set_repeats = 3
      omit = 3
      ALLOCATE( final_time( mbuff*mbatch ) )
+     ALLOCATE( set_time( mbatch ) )
+     ALLOCATE( set_time_mask( mbatch ) )
+     ALLOCATE( sets( mbuff*mbatch ) )
      final_time = 0.d0
+     set_time = 0.d0
+     set_time_mask = .false.
+     first = .false.
   END IF
-  IF( mod( times_called-1, repeats ) .gt. omit-1 ) final_time( bb_counter ) = final_time( bb_counter ) + time
-  IF( mod( times_called, repeats ) .eq. 0 ) THEN
-  
-     final_time( bb_counter ) = final_time( bb_counter ) / ( repeats - omit )
+
+  IF( alloc .and. waiting .le. omit-1 ) THEN
+     waiting = waiting + 1
+  ELSE
+     alloc = .false.
+     IF( set_timing ) THEN
+        set_called = set_called + 1
+        set_time( dfft%z_set_size_save ) = set_time( dfft%z_set_size_save ) + time
+        set_time_mask( dfft%z_set_size_save ) = .true.
+        IF( set_called .gt. set_repeats-1 ) THEN
+           IF( dfft%z_set_size_save .ge. (dfft%batch_size_save+1) / 2 ) THEN
+              IF( dfft%z_set_size_save .eq. dfft%batch_size_save ) THEN
+                 sets( bb_counter ) = MINLOC( set_time, 1, set_time_mask )
+                 dfft%z_set_size_save = MINLOC( set_time, 1, set_time_mask )
+                 final_time( bb_counter ) = final_time( bb_counter ) + MINVAL( set_time, 1, set_time_mask )
+                 set_timing = .false.
+                 IF( dfft%mype .eq. 0 ) write(6,*) "vpsi set tunning:", dfft%z_set_size_save, "TIME:", set_time( dfft%z_set_size_save ) / set_repeats
+              ELSE
+                 set_called = 0
+                  dfft%z_set_size_save = dfft%batch_size_save
+              END IF
+           ELSE
+              set_called = 0
+              dfft%z_set_size_save = dfft%z_set_size_save + 1
+           END IF
+        END IF
+     ELSE
+        final_time( bb_counter ) = final_time( bb_counter ) + time
+        timed = timed + 1
+        IF( timed .eq. repeats ) next_batch = .true.
+     END IF
+  END IF
+
+  IF( next_batch ) THEN
+ 
+     final_time( bb_counter ) = final_time( bb_counter ) / ( repeats + set_repeats )
      IF( dfft%mype .eq. 0 ) write(6,*) "vpsi tunning buffer:", dfft%buffer_size_save, "batch:", dfft%batch_size_save, "TIME:", final_time( bb_counter )
 
      dfft%buffer_size_save = ( bb_counter / mbatch ) + 1
@@ -98,9 +146,11 @@ CONTAINS
         IF( dfft%mype .eq. 0 ) THEN
            dfft%buffer_size_save = ( ( MINLOC( final_time, 1 ) - 1 ) / mbatch ) + 1
            dfft%batch_size_save  = mod( MINLOC( final_time, 1 ) - 1, mbatch ) + 1
+           dfft%z_set_size_save = sets( dfft%batch_size_save + (dfft%buffer_size_save-1) * mbatch )
            write(6,*) " "
            write(6,*) "VPSI TUNNING FINISHED"
            write(6,*) "USED BUFFERSIZE:", dfft%buffer_size_save, "USED BATCHSIZE:", dfft%batch_size_save
+           write(6,*) "USED z_set_size:", dfft%z_set_size_save
            write(6,*) " "
            write(6,*) final_time
            write(6,*) " "
@@ -109,6 +159,14 @@ CONTAINS
         CALL MP_BCAST(  dfft%batch_size_save, 0, dfft%comm )
         finished = .true.
      END IF
+     alloc = .true. 
+     dfft%z_set_size_save = 1
+     set_time = 0.d0
+     set_time_mask = .false.
+     set_called = 0
+     set_timing = .true.
+     timed = 0
+     waiting = 0
   
   END IF
 
