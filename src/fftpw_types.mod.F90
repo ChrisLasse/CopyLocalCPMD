@@ -19,6 +19,7 @@ MODULE fftpw_types
   TYPE PW_fft_type_descriptor
 
     INTEGER(INT64), allocatable :: time_adding(:)
+    INTEGER(INT64), allocatable :: auto_timings(:)
     INTEGER(INT64), allocatable :: averaged_times(:)
 
     INTEGER :: nr1    = 0  !

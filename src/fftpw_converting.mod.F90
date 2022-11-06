@@ -82,6 +82,10 @@ CONTAINS
     ALLOCATE( dfft%averaged_times( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
+    ALLOCATE( dfft%auto_timings( 3 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    dfft%auto_timings = 0
     ALLOCATE( dfft%nnr_all( dfft%nproc ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
