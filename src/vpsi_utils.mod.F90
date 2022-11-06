@@ -1994,7 +1994,7 @@ CONTAINS
        IF( dfft%rem_size .ne. 0 .and. ( ( first_step( work_buffer ) .and. last_buffer .eq. 0 .and. ( counter( 1, 1 ) .eq. dfft%max_nbnd - 1 .or. counter( 2, 1 ) .eq. dfft%max_nbnd - 1 ) ) .or. last_buffer .eq. work_buffer ) ) THEN
           last_buffer = work_buffer
           batch_size = dfft%rem_size
-          IF( z_set_size .gt. batch_size ) z_set_size = batch_size
+          IF( z_set_size .gt. (batch_size+1)/2 ) z_set_size = batch_size
           IF( do_com  ) dfft%sendsize = sendsize_rem
           IF( do_calc ) dfft%rem = .true.
        END IF
@@ -2017,14 +2017,19 @@ CONTAINS
                    last_start = .false.
                    last_start_triggered = .true.
                    batch_size = dfft%batch_size_save
+                   z_set_size = dfft%z_set_size_save
                 END IF
   
                 CALL SYSTEM_CLOCK( time(5) )
-                CALL fwfft_pwbatch( dfft, 3, batch_size, counter( 1, 3 ), work_buffer, psi, hpsi, comm_recv(:,work_buffer) )
+                CALL fwfft_pwbatch( dfft, 3, batch_size, z_set_size, counter( 1, 3 ), work_buffer, psi, hpsi, comm_recv(:,work_buffer) )
                 CALL SYSTEM_CLOCK( time(6) )
                 dfft%time_adding( 18 ) = dfft%time_adding( 18 ) + ( time(6) - time(5) )
   
-                IF( last_start_triggered ) batch_size = dfft%rem_size
+                IF( last_start_triggered ) THEN
+                   batch_size = dfft%rem_size
+                   IF( z_set_size .gt. (batch_size+1)/2 ) z_set_size = batch_size
+                END IF
+                   
   
                 IF( counter( 1, 3 ) .eq. dfft%max_nbnd ) finished_all = .true.
   
@@ -2096,7 +2101,7 @@ CONTAINS
                 dfft%time_adding( 20 ) = dfft%time_adding( 20 ) + ( time(15) - time(14) )
   
                 CALL SYSTEM_CLOCK( time(16) )
-                CALL fwfft_pwbatch( dfft, 1, batch_size, counter( 1, 2 ), work_buffer, dfft%bench_aux, comm_send, comm_recv(:,work_buffer) )
+                CALL fwfft_pwbatch( dfft, 1, batch_size, 1, counter( 1, 2 ), work_buffer, dfft%bench_aux, comm_send, comm_recv(:,work_buffer) )
                 CALL SYSTEM_CLOCK( time(17) )
                 dfft%time_adding( 21 ) = dfft%time_adding( 21 ) + ( time(17) - time(16) )
   
@@ -2115,7 +2120,7 @@ CONTAINS
                 counter( 2, 2 ) = counter( 2, 2 ) + 1
   
                 CALL SYSTEM_CLOCK( time(18) )
-                CALL fwfft_pwbatch( dfft, 2, batch_size, counter( 2, 2 ), work_buffer, comm_send, comm_recv )
+                CALL fwfft_pwbatch( dfft, 2, batch_size, 1, counter( 2, 2 ), work_buffer, comm_send, comm_recv )
                 CALL SYSTEM_CLOCK( time(19) )
                 dfft%time_adding( 17 ) = dfft%time_adding( 17 ) + ( time(19) - time(18) )
   

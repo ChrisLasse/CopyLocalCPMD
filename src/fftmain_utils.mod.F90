@@ -936,11 +936,11 @@ CONTAINS
   
   END SUBROUTINE invfft_pwbatch
   
-  SUBROUTINE fwfft_pwbatch( dfft, step, batch_size, counter, work_buffer, f_in, f_inout1, f_inout2 )
+  SUBROUTINE fwfft_pwbatch( dfft, step, batch_size, set_size, counter, work_buffer, f_in, f_inout1, f_inout2 )
     IMPLICIT NONE
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-    INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer
+    INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer, set_size
     COMPLEX(DP), INTENT(IN) :: f_in(:,:)
     COMPLEX(DP), INTENT(INOUT) :: f_inout1(:,:)
   
@@ -951,7 +951,7 @@ CONTAINS
     ELSE IF( step .eq. 2 ) THEN
        CALL fftpw_batch( dfft, 1, step, batch_size, 1, counter, work_buffer, f_in, f_inout1 )
     ELSE IF( step .eq. 3 ) THEN
-       CALL fftpw_batch( dfft, 1, step, batch_size, 1, counter, work_buffer, f_in, f_inout1, f_inout2 )
+       CALL fftpw_batch( dfft, 1, step, batch_size, set_size, counter, work_buffer, f_in, f_inout1, f_inout2 )
     END IF
   
   END SUBROUTINE fwfft_pwbatch
@@ -969,6 +969,7 @@ CONTAINS
   
     INTEGER :: ibatch, iset, current, howmany, group_size
     LOGICAL :: last
+    INTEGER(INT64) :: auto_time(4)
     INTEGER(INT64) :: time(17), cr
   
     current = (counter-1)*dfft%batch_size_save
@@ -978,7 +979,8 @@ CONTAINS
        IF( step .eq. 1 ) THEN
 
           CALL SYSTEM_CLOCK( time(1) )
-   
+  
+          !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
           !$omp flush( locks_calc_1 )
           !$  DO WHILE( ANY(locks_calc_1( :, 1+current:dfft%batch_size_save+current ) ) )
           !$omp flush( locks_calc_1 )
@@ -987,6 +989,7 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(2) )
           dfft%time_adding( 22 ) = dfft%time_adding( 22 ) + ( time(2) - time(1) )
 
+          CALL SYSTEM_CLOCK( auto_time(1) )
           DO iset = 1, set_size
 
              !Too slow? lets wait and see!
@@ -1018,6 +1021,8 @@ CONTAINS
              CALL invfft_pre_com( dfft, f_inout1(:,work_buffer), f_inout2, iset, batch_size, group_size, dfft%nsw )
 
           ENDDO 
+          CALL SYSTEM_CLOCK( auto_time(2) )
+          dfft%auto_timings(1) = dfft%auto_timings(1) + ( auto_time(2) - auto_time(1) )
  
           !$  locks_calc_inv( dfft%my_node_rank+1, counter ) = .false.
           !$omp flush( locks_calc_inv )
@@ -1130,31 +1135,44 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(13) )
           dfft%time_adding( 27 ) = dfft%time_adding( 27 ) + ( time(13) - time(12) )
   
-          DO ibatch = 1, batch_size
-             CALL fwfft_after_com( dfft, f_inout2, ibatch, batch_size, dfft%nsw )
+          CALL SYSTEM_CLOCK( auto_time(3) )
+          DO iset = 1, set_size
+
+             !Too slow? lets wait and see!
+             IF( iset .ne. set_size .or. iset .eq. 1 .or. group_size * set_size .eq. batch_size ) THEN
+                IF( mod( batch_size, set_size ) .eq. 0 ) THEN
+                   group_size = batch_size / set_size
+                ELSE
+                   group_size = batch_size / set_size + 1
+                ENDIF
+                dfft%z_group_size_save = group_size
+             ELSE
+                group_size = batch_size - (set_size-1) * group_size
+             END IF
+ 
+             IF( counter .eq. dfft%max_nbnd .and. iset .eq. set_size .and. dfft%uneven ) THEN
+                last = .true.
+             ELSE
+                last = .false.
+             END IF
+
+             CALL fwfft_after_com( dfft, f_inout2, iset, batch_size, group_size, dfft%nsw )
 
              CALL SYSTEM_CLOCK( time(14) )
 
-             IF( counter .eq. dfft%max_nbnd .and. ibatch .eq. batch_size .and. dfft%uneven ) THEN
-                CALL Accumulate_Psi_overlapp( dfft, f_inout1(:,1+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 1, f_in(:,1+((ibatch-1)+current)*2) )
-             ELSE
-                CALL Accumulate_Psi_overlapp( dfft, f_inout1(:,1+((ibatch-1)+current)*2:2+((ibatch-1)+current)*2), ibatch, dfft%ngms, &
-                                              batch_size, 2, f_in(:,1+((ibatch-1)+current)*2:2+((ibatch-1)+current)*2) )
-             END IF
+             CALL Accumulate_Psi_overlapp( dfft, f_inout1(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)), &
+                        dfft%ngms, group_size, last, dfft%nsw, f_in(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)) )
 
              CALL SYSTEM_CLOCK( time(15) )
   
              dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(15) - time(14) )
   
-             IF( .not. dfft%rsactive ) THEN
-                !$  locks_calc_1( dfft%my_node_rank+1, ibatch+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
-                !$omp flush( locks_calc_1 )
-             ELSE
-                !$  locks_calc_2( dfft%my_node_rank+1, ibatch+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
-                !$omp flush( locks_calc_2 )
-             END IF
-  
           ENDDO
+          CALL SYSTEM_CLOCK( auto_time(4) )
+          dfft%auto_timings(1) = dfft%auto_timings(1) + ( auto_time(4) - auto_time(3) )
+  
+          !$  locks_calc_1( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:batch_size+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
+          !$omp flush( locks_calc_1 )
   
        END IF
   
@@ -1251,13 +1269,13 @@ CALL MPI_BARRIER( dfft%comm, ierr )
        END IF
 CALL MPI_BARRIER( dfft%comm, ierr ) 
     
-       CALL fwfft_after_com( dfft, shared2, 1, 1, ns )
+       CALL fwfft_after_com( dfft, shared2, 1, 1, 1, ns )
 CALL MPI_BARRIER( dfft%comm, ierr )
 
        IF( .not. dfft%single_node ) CALL MPI_BARRIER( dfft%node_comm, ierr )
        IF( dfft%single_node ) CALL MPI_BARRIER( dfft%comm, ierr )
 
-       f = dfft%aux * dfft%tscale 
+       f = dfft%aux2 * dfft%tscale 
     
     END IF
 

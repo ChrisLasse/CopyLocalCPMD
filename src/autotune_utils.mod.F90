@@ -70,7 +70,7 @@ CONTAINS
 
   INTEGER, SAVE :: bb_counter = 1
   INTEGER, SAVE  :: mbuff, mbatch, repeats, omit, set_repeats
-  REAL(DP), SAVE, ALLOCATABLE :: final_time(:), set_time(:)
+  REAL(DP), SAVE, ALLOCATABLE :: final_time(:), set_time(:), save_time(:)
   LOGICAL, SAVE, ALLOCATABLE :: set_time_mask(:)
   INTEGER, SAVE, ALLOCATABLE :: sets(:)
   LOGICAL, SAVE :: first = .true.
@@ -81,6 +81,7 @@ CONTAINS
   LOGICAL :: next_batch
 
   INTEGER, SAVE :: set_called = 0
+  INTEGER(INT64), SAVE :: cr
 
   finished = .false.
   next_batch = .false.
@@ -92,31 +93,41 @@ CONTAINS
      set_repeats = 3
      omit = 3
      ALLOCATE( final_time( mbuff*mbatch ) )
+     ALLOCATE( save_time( mbatch ) )
      ALLOCATE( set_time( mbatch ) )
      ALLOCATE( set_time_mask( mbatch ) )
      ALLOCATE( sets( mbuff*mbatch ) )
      final_time = 0.d0
      set_time = 0.d0
+     save_time = 0.d0
      set_time_mask = .false.
      first = .false.
+     CALL SYSTEM_CLOCK( count_rate = cr )
   END IF
 
   IF( alloc .and. waiting .le. omit-1 ) THEN
      waiting = waiting + 1
+     dfft%auto_timings = 0
   ELSE
      alloc = .false.
      IF( set_timing ) THEN
         set_called = set_called + 1
-        set_time( dfft%z_set_size_save ) = set_time( dfft%z_set_size_save ) + time
+        save_time( dfft%z_set_size_save ) = save_time( dfft%z_set_size_save ) + time 
+        set_time( dfft%z_set_size_save ) = set_time( dfft%z_set_size_save ) + REAL( dfft%auto_timings(1) / REAL( cr ) )
+        dfft%auto_timings = 0
         set_time_mask( dfft%z_set_size_save ) = .true.
         IF( set_called .gt. set_repeats-1 ) THEN
+           IF( dfft%mype .eq. 0 .and. .true. ) write(6,*) "vpsi set tunning:", dfft%z_set_size_save, "TIME:", set_time( dfft%z_set_size_save ) / set_repeats
            IF( dfft%z_set_size_save .ge. (dfft%batch_size_save+1) / 2 ) THEN
               IF( dfft%z_set_size_save .eq. dfft%batch_size_save ) THEN
-                 sets( bb_counter ) = MINLOC( set_time, 1, set_time_mask )
-                 dfft%z_set_size_save = MINLOC( set_time, 1, set_time_mask )
-                 final_time( bb_counter ) = final_time( bb_counter ) + MINVAL( set_time, 1, set_time_mask )
+                 IF( dfft%mype .eq. 0 ) THEN
+                    sets( bb_counter ) = MINLOC( set_time, 1, set_time_mask )
+                    dfft%z_set_size_save = MINLOC( set_time, 1, set_time_mask )
+                    IF( .true. ) write(6,*) "vpsi set chosen:", dfft%z_set_size_save, "TIME:", set_time( dfft%z_set_size_save ) / set_repeats
+                    final_time( bb_counter ) = final_time( bb_counter ) + save_time( dfft%z_set_size_save )
+                 END IF
+                 CALL MP_BCAST( dfft%z_set_size_save, 0, dfft%comm )
                  set_timing = .false.
-                 IF( dfft%mype .eq. 0 ) write(6,*) "vpsi set tunning:", dfft%z_set_size_save, "TIME:", set_time( dfft%z_set_size_save ) / set_repeats
               ELSE
                  set_called = 0
                   dfft%z_set_size_save = dfft%batch_size_save
@@ -157,11 +168,13 @@ CONTAINS
         END IF
         CALL MP_BCAST( dfft%buffer_size_save, 0, dfft%comm )
         CALL MP_BCAST(  dfft%batch_size_save, 0, dfft%comm )
+        CALL MP_BCAST( dfft%z_set_size_save, 0, dfft%comm )
         finished = .true.
      END IF
      alloc = .true. 
      dfft%z_set_size_save = 1
      set_time = 0.d0
+     save_time = 0.d0
      set_time_mask = .false.
      set_called = 0
      set_timing = .true.

@@ -584,16 +584,16 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
 
 END SUBROUTINE fwfft_pre_com
 
-SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size, ns )
+SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, iset, batch_size, z_group_size, ns )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN) :: ibatch, batch_size
+  INTEGER, INTENT(IN) :: iset, batch_size, z_group_size
   COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: ns(:)
 
-  INTEGER :: j, l, k, i
-  INTEGER :: offset, kfrom, kdest, ierr
+  INTEGER :: j, l, k, i, igroup
+  INTEGER :: offset, offset2, kfrom, kdest, ierr
 
   INTEGER(INT64) :: time(3)
 
@@ -603,21 +603,24 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size, ns )
 
   !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
  
-  !$omp parallel private( kdest, kfrom, j, i, k, offset, l )
-  DO j = 1, dfft%nodes_numb
-     DO l = 1, dfft%node_task_size
-        offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * dfft%big_chunks
-        !$omp do
-        DO k = 0, ns(dfft%mype3+1)-1
-           kfrom = offset + dfft%nr3px * k
-           kdest = dfft%nr3p_offset( (j-1)*dfft%node_task_size + l ) + dfft%nr3 * k
-           !$omp simd
-           DO i = 1, dfft%nr3p( (j-1)*dfft%node_task_size + l )
-              dfft%aux( kdest + i ) = &
-              comm_mem_recv( kfrom + i )
+  !$omp parallel private( kdest, kfrom, j, i, k, offset, offset2, l, igroup )
+  DO igroup = 1, z_group_size
+     offset2 = (igroup-1) * ns(dfft%mype+1) * dfft%nr3
+     DO j = 1, dfft%nodes_numb
+        DO l = 1, dfft%node_task_size
+           offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (igroup-1) + (iset-1)*dfft%z_group_size_save ) * dfft%big_chunks
+           !$omp do
+           DO k = 0, ns(dfft%mype3+1)-1
+              kfrom = offset + dfft%nr3px * k
+              kdest = dfft%nr3p_offset( (j-1)*dfft%node_task_size + l ) + dfft%nr3 * k + offset2
+              !$omp simd
+              DO i = 1, dfft%nr3p( (j-1)*dfft%node_task_size + l )
+                 dfft%aux2( kdest + i ) = &
+                 comm_mem_recv( kfrom + i )
+              ENDDO
            ENDDO
+           !$omp end do
         ENDDO
-        !$omp end do nowait
      ENDDO
   ENDDO
   !$omp end parallel
@@ -630,7 +633,7 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size, ns )
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
-  CALL fft_1D( dfft%aux, ns(dfft%mype+1), dfft%nr3, -2 )
+  CALL fft_1D( dfft%aux2, ns(dfft%mype+1)*z_group_size, dfft%nr3, -2 )
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
@@ -642,17 +645,19 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size, ns )
 
 END SUBROUTINE fwfft_after_com
 
-SUBROUTINE Accumulate_Psi_overlapp( dfft, hpsi, ibatch, ngms, batch_size, howmany, psi )
+SUBROUTINE Accumulate_Psi_overlapp( dfft, hpsi, ngms, z_group_size, last, ns, psi )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN) :: ibatch, batch_size, ngms, howmany
+  INTEGER, INTENT(IN) :: z_group_size, ngms
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(IN), OPTIONAL :: psi( ngms, howmany )
-  COMPLEX(DP), INTENT(INOUT) :: hpsi( ngms, howmany )
+  COMPLEX(DP), INTENT(IN), OPTIONAL :: psi(:,:)
+  COMPLEX(DP), INTENT(INOUT) :: hpsi(:,:)
+  INTEGER, INTENT(IN) :: ns(:)
+  LOGICAL, INTENT(IN) :: last
 
   COMPLEX(DP) :: fp, fm
-  INTEGER :: j, l, k, i
-  INTEGER :: offset, kfrom, kdest
+  INTEGER :: j, l, k, i, igroup
+  INTEGER :: offset
 
   INTEGER(INT64) :: time(2)
 
@@ -660,23 +665,17 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, hpsi, ibatch, ngms, batch_size, howman
 !------------------------------------------------------
 !--------Accumulate_Psi Start--------------------------
 
-  IF( .false. ) THEN !dfft%singl ) THEN
+  DO igroup = 1, z_group_size
+     offset = (igroup-1) * ns(dfft%mype+1) * dfft%nr3
 
-     !$omp parallel do private( j )
-     DO j = 1, ngms
-        hpsi( j, 1 ) = hpsi ( j, 1 ) + dfft%aux( dfft%nl( j ) ) * dfft%tscale
-     END DO
-     !$omp end parallel do
-
-  ELSE
-     IF( howmany .eq. 2 ) THEN
+     IF( .not. ( last .and. igroup .eq. z_group_size ) ) THEN
      
         !$omp parallel do private( j, fp, fm )
         DO j = 1, ngms
-           fp = ( dfft%aux( dfft%nl(j) ) + dfft%aux( dfft%nlm(j) ) ) * (- dfft%tscale )
-           fm = ( dfft%aux( dfft%nl(j) ) - dfft%aux( dfft%nlm(j) ) ) * (- dfft%tscale )
-           hpsi ( j, 1 ) = -1 * ((parm%tpiba2*dfft%gg_pw(j))*psi( j, 1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
-           hpsi ( j, 2 ) = -1 * ((parm%tpiba2*dfft%gg_pw(j))*psi( j, 2 ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
+           fp = ( dfft%aux2( dfft%nl(j) + offset ) + dfft%aux2( dfft%nlm(j) + offset ) ) * (- dfft%tscale )
+           fm = ( dfft%aux2( dfft%nl(j) + offset ) - dfft%aux2( dfft%nlm(j) + offset ) ) * (- dfft%tscale )
+           hpsi ( j, (2*igroup)-1 ) = -1 * ((parm%tpiba2*dfft%gg_pw(j))*psi( j, (2*igroup)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
+           hpsi ( j, (2*igroup)   ) = -1 * ((parm%tpiba2*dfft%gg_pw(j))*psi( j, (2*igroup)   ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
         END DO
         !$omp end parallel do
      
@@ -684,12 +683,13 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, hpsi, ibatch, ngms, batch_size, howman
      
         !$omp parallel do private( j )
         DO j = 1, ngms
-           hpsi( j, 1 ) = dfft%aux( dfft%nl( j ) ) * dfft%tscale
+           hpsi( j, (2*igroup)-1 ) = dfft%aux2( dfft%nl( j ) + offset ) * dfft%tscale
         END DO
         !$omp end parallel do
        
      END IF
-  END IF
+
+  ENDDO
 
 !---------Accumulate_Psi End---------------------------
 !------------------------------------------------------
