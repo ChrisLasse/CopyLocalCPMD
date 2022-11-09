@@ -907,7 +907,8 @@ CONTAINS
     LOGICAL :: last
     INTEGER(INT64) :: auto_time(4)
     INTEGER(INT64) :: time(17), cr
-  
+ 
+    IF( .not. allocated( dfft%aux2 ) ) ALLOCATE( dfft%aux2( dfft%nnr * dfft%max_batch_size ) ) 
     current = (counter-1)*dfft%batch_size_save
   
     IF( isign .eq. -1 ) THEN !!  invfft
@@ -949,7 +950,7 @@ CONTAINS
              CALL SYSTEM_CLOCK( time(2) )
      
              CALL Prepare_Psi_overlapp( dfft, f_in(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)), &
-                                        dfft%ngms, group_size, dfft%nsw, last )
+                                        dfft%aux2( 1 : dfft%nr1 * dfft%nsw(dfft%mype+1) * group_size ), dfft%ngms, group_size, dfft%nsw, last )
 
              CALL SYSTEM_CLOCK( time(3) )
              dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(3) - time(2) )

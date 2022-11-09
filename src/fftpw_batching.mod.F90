@@ -28,17 +28,18 @@ MODULE fftpw_batching
 
 CONTAINS
 
-SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ngms, z_group_size, ns, last )
+SUBROUTINE Prepare_Psi_overlapp( dfft, psi, aux, ngms, z_group_size, ns, last )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN) :: ngms, z_group_size
-  COMPLEX(DP), INTENT(IN)  :: psi (:,:)
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: ns(:)
+  INTEGER, INTENT(IN) :: ngms, z_group_size
   LOGICAL, INTENT(IN) :: last
+  COMPLEX(DP), INTENT(IN)  :: psi (:,:)
+  COMPLEX(DP), INTENT(OUT)  :: aux ( dfft%nr1 , ns(dfft%mype+1)*z_group_size )
 
-  INTEGER :: j, i, igroup
-  INTEGER :: offset, offset2, offset3
+  INTEGER :: j, i, iter
+  INTEGER :: offset, offset2
 
   INTEGER(INT64) :: time(2), cr
 
@@ -46,80 +47,74 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ngms, z_group_size, ns, last )
 !------------------------------------------------------
 !----------Prepare_Psi Start---------------------------
 
-  DO igroup = 1, z_group_size
-     offset2 = (igroup-1) * ns(dfft%mype+1) * dfft%nr3
+  !$omp parallel do private( i, j, iter, offset, offset2 )
+  DO i = 1, ns( dfft%mype+1 ) * z_group_size
+     iter = mod( i-1, ns(dfft%mype+1) ) + 1
+     offset  = ( iter - 1 ) * dfft%nr3
+     offset2 = 2 * ( ( (i-1) / ns(dfft%mype+1) ) + 1 )
 
-     IF( .not. ( last .and. igroup .eq. z_group_size ) ) THEN
-        !$omp parallel do private( i, j, offset, offset3 )
-        DO i = 1, ns( dfft%mype+1 )
-           offset  = (i-1)*dfft%nr3
-           offset3 = (i-1)*dfft%nr3 + offset2
-           !$omp simd
-           DO j = 1, dfft%zero_prep_start(i,1)-1
-              dfft%aux2( offset3 + j ) = psi( dfft%nl_r( offset + j ), (2*igroup)-1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), (2*igroup) )
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
-              dfft%aux2( offset3 + j ) = (0.d0, 0.d0)
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
-              dfft%aux2( offset3 + j ) = psi( dfft%nl_r( offset + j ), (2*igroup)-1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), (2*igroup) )
-           ENDDO
-        ENDDO
-        !$omp end parallel do
-     
-        !$omp parallel do private( i, j, offset, offset3 )
-        DO i = 1, ns( dfft%mype+1 )
-           offset  = (i-1)*dfft%nr3
-           offset3 = (i-1)*dfft%nr3 + offset2
-           !$omp simd
-           DO j = 1, dfft%zero_prep_start(i,3)-1
-              dfft%aux2( offset3 + j ) = conjg( psi( dfft%nlm_r( offset + j ), (2*igroup)-1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), (2*igroup) ) )
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
-              dfft%aux2( offset3 + j ) = conjg( psi( dfft%nlm_r( offset + j ), (2*igroup)-1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), (2*igroup) ) )
-           ENDDO
-        ENDDO
-        !$omp end parallel do
-     ELSE
-        !$omp parallel do private( i, j, offset, offset3 )
-        DO i = 1, ns( dfft%mype+1 )
-           offset  = (i-1)*dfft%nr3
-           offset3 = (i-1)*dfft%nr3 + offset2
-           !$omp simd
-           DO j = 1, dfft%zero_prep_start(i,1)-1
-              dfft%aux2( offset3 + j ) = psi( dfft%nl_r( offset + j ), (2*igroup)-1 )
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
-              dfft%aux2( offset3 + j ) = (0.d0, 0.d0)
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
-              dfft%aux2( offset3 + j ) = psi( dfft%nl_r( offset + j ), (2*igroup)-1 )
-           ENDDO
-        ENDDO
-        !$omp end parallel do
-     
-        !$omp parallel do private( i, j, offset, offset3 )
-        DO i = 1, ns( dfft%mype+1 )
-           offset  = (i-1)*dfft%nr3
-           offset3 = (i-1)*dfft%nr3 + offset2
-           !$omp simd
-           DO j = 1, dfft%zero_prep_start(i,3)-1
-              dfft%aux2( offset3 + j ) = conjg( psi( dfft%nlm_r( offset + j ), (2*igroup)-1 ) )
-           ENDDO
-           !$omp simd
-           DO j = dfft%zero_prep_end(i,3)+1, dfft%nr3
-              dfft%aux2( offset3 + j ) = conjg( psi( dfft%nlm_r( offset + j ), (2*igroup)-1 ) )
-           ENDDO
-        ENDDO
-        !$omp end parallel do
-     END IF
+     !$omp simd
+     DO j = 1, dfft%zero_prep_start(iter,1)-1
+        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), offset2 )
+     ENDDO
+     !$omp simd
+     DO j = 1, dfft%zero_prep_start(iter,3)-1
+        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), offset2 ) )
+     ENDDO
+
+     !$omp simd
+     DO j = dfft%zero_prep_start(iter,2), dfft%zero_prep_end(iter,2)
+        aux( j, i ) = (0.d0, 0.d0)
+     ENDDO
+
+     !$omp simd
+     DO j = dfft%zero_prep_end(iter,1)+1, dfft%nr3
+        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), offset2 )
+     ENDDO
+     !$omp simd
+     DO j = dfft%zero_prep_end(iter,3)+1, dfft%nr3
+        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), offset2 ) )
+     ENDDO
 
   ENDDO
+  !$omp end parallel do
+
+! Waiting for case where 
+!  !$omp parallel do private( i, j, iter, offset, offset2 )
+!  DO i = 1, ns( dfft%mype+1 ) * z_group_size
+!     iter = mod( i-1, ns(dfft%mype+1) ) + 1
+!     offset  = ( iter - 1 ) * dfft%nr3
+!     offset2 = 2 * ( ( (i-1) / ns(dfft%mype+1) ) + 1 )
+!     !$omp simd
+!     DO j = 1, dfft%zero_prep_start(iter,1)-1
+!        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 )
+!     ENDDO
+!     !$omp simd
+!     DO j = dfft%zero_prep_start(iter,2), dfft%zero_prep_end(iter,2)
+!        aux( j, i ) = (0.d0, 0.d0)
+!     ENDDO
+!     !$omp simd
+!     DO j = dfft%zero_prep_end(iter,1)+1, dfft%nr3
+!        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 )
+!     ENDDO
+!  ENDDO
+!  !$omp end parallel do
+!  
+!  !$omp parallel do private( i, j, iter, offset, offset2 )
+!  DO i = 1, ns( dfft%mype+1 ) * z_group_size
+!     iter = mod( i-1, ns(dfft%mype+1) ) + 1
+!     offset  = ( iter - 1 ) * dfft%nr3
+!     offset2 = 2 * ( ( (i-1) / ns(dfft%mype+1) ) + 1 )
+!     !$omp simd
+!     DO j = 1, dfft%zero_prep_start(iter,3)-1
+!        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) )
+!     ENDDO
+!     !$omp simd
+!     DO j = dfft%zero_prep_end(iter,3)+1, dfft%nr3
+!        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) )
+!     ENDDO
+!  ENDDO
+!  !$omp end parallel do
 
 !----------Prepare_Psi End-----------------------------
 !------------------------------------------------------

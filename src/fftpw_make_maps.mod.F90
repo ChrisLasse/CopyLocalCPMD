@@ -41,7 +41,6 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
      dfft%tscale_gamma = 0.5d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
 
      ALLOCATE( dfft%aux( dfft%nnr ) )
-     ALLOCATE( dfft%aux2( ns(dfft%mype+1) * dfft%nr3 * dfft%max_batch_size ) )
 
   END IF
 
