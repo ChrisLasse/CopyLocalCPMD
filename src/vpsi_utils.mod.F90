@@ -1830,7 +1830,7 @@ CONTAINS
     INTEGER, INTENT(IN)    :: nbnd_source
     REAL(DP), INTENT(IN) :: v(dfft%nnr)
  
-    LOGICAL, ALLOCATABLE :: first_step(:)
+    LOGICAL, ALLOCATABLE, SAVE :: first_step(:)
 
     LOGICAL, SAVE :: do_calc = .false.
     LOGICAL, SAVE :: do_com = .false.
@@ -1883,6 +1883,13 @@ CONTAINS
        
        nbnd = ( nbnd_source + 1 ) / 2
        IF( mod( nbnd_source, 2 ) .ne. 0 ) dfft%uneven = .true.
+       IF( dfft%mype .eq. 0 .and. dfft%uneven ) THEN
+          write(6,*) "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+          write(6,*) "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+          write(6,*) "WARNING: UNEVEN NUMBER OF STATES, NOT TESTED!"
+          write(6,*) "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+          write(6,*) "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+       END IF
   
     END IF
 
@@ -2167,7 +2174,7 @@ CONTAINS
        timer( i ) = REAL( dfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
     ENDDO
 
-    IF( dfft%mype .eq. 0 .and. .false. ) THEN
+    IF( dfft%mype .eq. 0 .and. .true. ) THEN
 
           WRITE(6,*)" "
           WRITE(6,*)"Some extra VPSI times"
