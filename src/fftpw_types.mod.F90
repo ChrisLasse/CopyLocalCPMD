@@ -140,7 +140,6 @@ MODULE fftpw_types
     COMPLEX(DP), ALLOCATABLE :: temp_psic(:,:)
     COMPLEX(DP), ALLOCATABLE :: temp_aux(:,:)
     COMPLEX(DP), ALLOCATABLE :: aux(:)
-    COMPLEX(DP), ALLOCATABLE :: aux2(:)
     COMPLEX(DP), ALLOCATABLE :: wfn_keep(:,:)
     COMPLEX(DP), ALLOCATABLE :: bench_aux(:,:)
     COMPLEX(DP), ALLOCATABLE :: bench_aux_rem(:,:)
