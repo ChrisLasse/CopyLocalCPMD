@@ -996,18 +996,15 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(7) )
           dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(7) - time(6) )
   
-          DO ibatch = 1, batch_size
-             CALL invfft_after_com( dfft, f_inout1(:,ibatch), f_in(:,work_buffer), dfft%map_acinv, dfft%map_acinv_rem, ibatch, dfft%nr1w )
+          CALL invfft_after_com( dfft, f_inout1(:,1:batch_size), f_in(:,work_buffer), dfft%map_acinv, dfft%map_acinv_rem, set_size1, set_size2, batch_size, dfft%nr1w )
   
-             IF( dfft%vpsi ) THEN
-                !$  locks_calc_2( dfft%my_node_rank+1, ibatch+current ) = .false.
-                !$omp flush( locks_calc_2 )
-             ELSE
-                !$  locks_calc_1( dfft%my_node_rank+1, ibatch+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
-                !$omp flush( locks_calc_1 )
-             END IF
-  
-          ENDDO
+          IF( dfft%vpsi ) THEN
+             !$  locks_calc_2( dfft%my_node_rank+1, 1+current:batch_size+current ) = .false.
+             !$omp flush( locks_calc_2 )
+          ELSE
+             !$  locks_calc_1( dfft%my_node_rank+1, 1+current+(dfft%batch_size_save*dfft%buffer_size_save):batch_size+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
+             !$omp flush( locks_calc_1 )
+          END IF
   
        END IF
   
