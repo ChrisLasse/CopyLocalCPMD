@@ -98,7 +98,8 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
      !Prepare_Psi
      ALLOCATE( dfft%zero_prep_start( ns( dfft%mype+1), 4 ) )
      ALLOCATE( dfft%zero_prep_end( ns( dfft%mype+1), 4 ) )
-     CALL Make_PrepPsi_Maps( dfft%zero_prep_start, dfft%zero_prep_end, dfft%nr3, ns(dfft%mype+1), ngms, dfft%nl, dfft%nlm )
+     ALLOCATE( dfft%prep_map( 6, ns( dfft%mype+1 ) ) )
+     CALL Make_PrepPsi_Maps( dfft%zero_prep_start, dfft%zero_prep_end, dfft%prep_map, dfft%nr3, ns(dfft%mype+1), ngms, dfft%nl, dfft%nlm )
    
      !INV_After_Com
      ALLOCATE( dfft%zero_acinv_start( dfft%my_nr1p ) ) 
@@ -134,13 +135,13 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
 END SUBROUTINE Prep_Copy_Maps
 
 
-SUBROUTINE Make_PrepPsi_Maps( zero_start, zero_end, nr3, my_nsw, ngms, nl, nlm )
+SUBROUTINE Make_PrepPsi_Maps( zero_start, zero_end, prep_map, nr3, my_nsw, ngms, nl, nlm )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN)  :: nr3, my_nsw, ngms
   INTEGER, INTENT(IN)  :: nl( : )
   INTEGER, OPTIONAL, INTENT(IN)  :: nlm( : )
-  INTEGER, INTENT(OUT) :: zero_start( :, : ), zero_end( :, : )
+  INTEGER, INTENT(OUT) :: zero_start( :, : ), zero_end( :, : ), prep_map( :, : )
 
   LOGICAL :: l_map( nr3 * my_nsw )
   LOGICAL :: l_map_m( nr3 * my_nsw )
@@ -242,6 +243,17 @@ SUBROUTINE Make_PrepPsi_Maps( zero_start, zero_end, nr3, my_nsw, ngms, nl, nlm )
   DO i = 1, my_nsw
      zero_start( i, 4 ) = MAXVAL( zero_start( i, 1:3 ), 1 )
      zero_end  ( i, 4 ) = MINVAL( zero_end  ( i, 1:3 ), 1 )
+  ENDDO
+
+  DO i = 1, my_nsw
+
+     prep_map( 1 , i ) = zero_start( i , 3 )
+     prep_map( 2 , i ) = zero_start( i , 1 )
+     prep_map( 3 , i ) = zero_start( i , 2 )
+     prep_map( 4 , i ) = zero_end  ( i , 2 )
+     prep_map( 5 , i ) = zero_end  ( i , 1 )
+     prep_map( 6 , i ) = zero_end  ( i , 3 )
+
   ENDDO
 
 END SUBROUTINE Make_PrepPsi_Maps
