@@ -183,6 +183,7 @@ MODULE fftpw_types
     DOUBLE PRECISION :: tscale_gamma
     INTEGER, ALLOCATABLE :: zero_prep_start(:,:)
     INTEGER, ALLOCATABLE :: zero_prep_end(:,:)
+    INTEGER, ALLOCATABLE :: prep_map(:,:)
     INTEGER, ALLOCATABLE :: zero_acinv_start(:)
     INTEGER, ALLOCATABLE :: zero_acinv_end(:)
     INTEGER, ALLOCATABLE :: map_acinv(:)

@@ -1005,21 +1005,21 @@ CONTAINS
                 group_size = batch_size - (set_size-1) * group_size
              END IF
  
-             IF( counter .eq. dfft%max_nbnd .and. iset .eq. set_size .and. dfft%uneven ) THEN
-                last = .true.
-             ELSE
-                last = .false.
-             END IF
+!             IF( counter .eq. dfft%max_nbnd .and. iset .eq. set_size .and. dfft%uneven ) THEN
+!                last = .true.
+!             ELSE
+!                last = .false.
+!             END IF
 
              CALL SYSTEM_CLOCK( time(2) )
      
              CALL Prepare_Psi_overlapp( dfft, f_in(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)), &
-                                        dfft%aux2( 1 : dfft%nr1 * dfft%nsw(dfft%mype+1) * group_size ), dfft%ngms, group_size, dfft%nsw, last )
+                                        dfft%aux2( 1 : dfft%nr3 * dfft%nsw(dfft%mype+1) * group_size ), dfft%ngms, group_size, dfft%nsw, last )
 
              CALL SYSTEM_CLOCK( time(3) )
              dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(3) - time(2) )
 
-             CALL invfft_pre_com( dfft, f_inout1(:,work_buffer), f_inout2, iset, batch_size, group_size, dfft%nsw )
+             CALL invfft_pre_com( dfft, dfft%aux2( 1 : dfft%nr3 * dfft%nsw(dfft%mype+1) * group_size ), f_inout1(:,work_buffer), f_inout2, iset, batch_size, group_size, dfft%nsw )
 
           ENDDO 
           CALL SYSTEM_CLOCK( auto_time(2) )
@@ -1151,18 +1151,20 @@ CONTAINS
                 group_size = batch_size - (set_size-1) * group_size
              END IF
  
-             IF( counter .eq. dfft%max_nbnd .and. iset .eq. set_size .and. dfft%uneven ) THEN
-                last = .true.
-             ELSE
-                last = .false.
-             END IF
+!             IF( counter .eq. dfft%max_nbnd .and. iset .eq. set_size .and. dfft%uneven ) THEN
+!                last = .true.
+!             ELSE
+!                last = .false.
+!             END IF
 
-             CALL fwfft_after_com( dfft, f_inout2, iset, batch_size, group_size, dfft%nsw )
+             CALL fwfft_after_com( dfft, f_inout2, dfft%aux2( 1 : dfft%nr3 * dfft%nsw(dfft%mype+1) * group_size ), iset, batch_size, group_size, dfft%nsw )
 
              CALL SYSTEM_CLOCK( time(14) )
 
-             CALL Accumulate_Psi_overlapp( dfft, f_inout1(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)), &
-                        dfft%ngms, group_size, last, dfft%nsw, f_in(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)) )
+             CALL Accumulate_Psi_overlapp( dfft, dfft%aux2( 1 : dfft%nr3 * dfft%nsw(dfft%mype+1) * group_size ), &
+                                           f_inout1(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)), &
+                                           dfft%ngms, group_size, last, dfft%nsw, &
+                                           f_in    (:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)) )
 
              CALL SYSTEM_CLOCK( time(15) )
   
@@ -1233,7 +1235,7 @@ CONTAINS
        IF( .not. dfft%single_node ) CALL MPI_BARRIER( dfft%node_comm, ierr )
 CALL MPI_BARRIER( dfft%comm, ierr )
 
-       CALL invfft_pre_com( dfft, shared1, shared2, 1, 1, 1, ns )
+       CALL invfft_pre_com( dfft, dfft%aux2, shared1, shared2, 1, 1, 1, ns )
 
        IF( dfft%single_node ) THEN
           CALL MPI_BARRIER( dfft%comm, ierr )
@@ -1270,7 +1272,7 @@ CALL MPI_BARRIER( dfft%comm, ierr )
        END IF
 CALL MPI_BARRIER( dfft%comm, ierr ) 
     
-       CALL fwfft_after_com( dfft, shared2, 1, 1, 1, ns )
+       CALL fwfft_after_com( dfft, shared2, dfft%aux2, 1, 1, 1, ns )
 CALL MPI_BARRIER( dfft%comm, ierr )
 
        IF( .not. dfft%single_node ) CALL MPI_BARRIER( dfft%node_comm, ierr )
