@@ -7,6 +7,7 @@ MODULE fftpw_batching
   USE elct,                                     ONLY: crge
   USE fftpw_legacy_routines,                    ONLY: fft_1D,&
                                                       fft_scatter_xy,&
+                                                      fft_scatter_xy_t,&
                                                       fft_1d_t
   USE fftpw_param
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
@@ -269,133 +270,51 @@ SUBROUTINE fft_com( dfft, comm_mem_send, comm_mem_recv, sendsize, intra_me, inte
 
 END SUBROUTINE fft_com
 
-
-SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, y_set_size, x_set_size, batch_size, nr1s )
+SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, aux, map_acinv, map_acinv_rem, y_set_size, batch_size, nr1s )
   USE mpi_f08
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN) :: y_set_size, x_set_size, batch_size
+  INTEGER, INTENT(IN) :: y_set_size, batch_size
   COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(OUT) :: f( : , : )
-  INTEGER, INTENT(IN) :: map_acinv(:), map_acinv_rem(:)
+  COMPLEX(DP), INTENT(OUT) :: f( dfft%nnr, batch_size )
   INTEGER, INTENT(IN) :: nr1s(:)
+  COMPLEX(DP), INTENT(INOUT) :: aux( nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * batch_size )
+  INTEGER, INTENT(IN) :: map_acinv(:), map_acinv_rem(:)
 
-  INTEGER :: i, j, k, igroup
-  INTEGER :: offset1, offset2, offset3, ierr
-  INTEGER :: size_per_state
+  INTEGER :: iset, y_group_size, ibatch
 
   INTEGER(INT64) :: time(6)
 
-
-  !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
-
   DO iset = 1, y_set_size
 
-     CALL SYSTEM_CLOCK( time(1) )
-!------------------------------------------------------
-!--------After-Com-Copy Start--------------------------
-
      !Too slow? lets wait and see!
-     IF( iset .ne. y_set_size .or. iset .eq. 1 .or. group_size * y_set_size .eq. batch_size ) THEN
+     IF( iset .ne. y_set_size .or. iset .eq. 1 .or. y_group_size * y_set_size .eq. batch_size ) THEN
         IF( mod( batch_size, y_set_size ) .eq. 0 ) THEN
-           group_size = batch_size / y_set_size
+           y_group_size = batch_size / y_set_size
         ELSE
-           group_size = batch_size / y_set_size + 1
+           y_group_size = batch_size / y_set_size + 1
         ENDIF
-        dfft%z_group_size_save = group_size
+        dfft%y_group_size_save = y_group_size
      ELSE
-        group_size = batch_size - (y_set_size-1) * group_size
-     END IF
-  
-     IF( dfft%rem ) THEN
-
-        !$omp parallel private( i, j, k, offset1, offset2, offset3, igroup )
-        DO igroup = 1, group_size
-           offset3 = (igroup-1) * nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 
-           !$omp do
-           DO i = 1, dfft%my_nr3p
-              DO j = 1, dfft%my_nr1p
-                 offset1 = (i-1)*dfft%my_nr1p*dfft%nr2 + (j-1)*dfft%nr2 + offset3
-                 offset2 = offset1 + ((igroup-1)+(iset-1)*dfft%z_group_size_save)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
-                 !omp simd
-                 DO k = 1, dfft%zero_acinv_start( j )-1
-                    dfft%aux_y( offset1 + k ) = &
-                    comm_mem_recv( map_acinv_rem( offset2 + k ) )
-                 END DO
-                 !omp simd
-                 DO k = dfft%zero_acinv_start( j ), dfft%zero_acinv_end( j )
-                    dfft%aux_y( offset1 + k ) = (0.0_DP,0.0_DP)
-                 END DO
-                 !omp simd
-                 DO k = dfft%zero_acinv_end( j )+1, dfft%nr2
-                    dfft%aux_y( offset1 + k ) = &
-                    comm_mem_recv( map_acinv_rem( offset2 + k ) )
-                 END DO
-              END DO
-           END DO
-           !$omp end do nowait
-        ENDDO
-        !$omp end parallel
-
-     ELSE
-
-        !$omp parallel private( i, j, k, offset1, offset2, offset3, igroup )
-        DO igroup = 1, group_size
-           offset3 = (igroup-1) * nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 
-           !$omp do
-           DO i = 1, dfft%my_nr3p
-              DO j = 1, dfft%my_nr1p
-                 offset1 = (i-1)*dfft%my_nr1p*dfft%nr2 + (j-1)*dfft%nr2 + offset3
-                 offset2 = offset1 + ((igroup-1)+(iset-1)*dfft%z_group_size_save)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
-                 !omp simd
-                 DO k = 1, dfft%zero_acinv_start( j )-1
-                    dfft%aux( offset1 + k ) = &
-                    comm_mem_recv( map_acinv( offset2 + k ) )
-                 END DO
-                 !omp simd
-                 DO k = dfft%zero_acinv_start( j ), dfft%zero_acinv_end( j )
-                    dfft%aux( offset1 + k ) = (0.0_DP,0.0_DP)
-                 END DO
-                 !omp simd
-                 DO k = dfft%zero_acinv_end( j )+1, dfft%nr2
-                    dfft%aux( offset1 + k ) = &
-                    comm_mem_recv( map_acinv( offset2 + k ) )
-                 END DO
-              END DO
-           END DO
-           !$omp end do nowait
-        ENDDO
-        !$omp end parallel
-
+        y_group_size = batch_size - (y_set_size-1) * y_group_size
      END IF
 
-!---------After-Com-Copy End---------------------------
-!------------------------------------------------------
-     CALL SYSTEM_CLOCK( time(2) )
-!------------------------------------------------------
-!------------y-FFT Start-------------------------------
-
-     size_per_state = nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2
-     CALL fft_1D( dfft%aux_y( 1+size_per_state*dfft%y_group_size_save*(iset-1):size_per_state*y_group_size+size_per_state*dfft%y_group_size_save*(iset-1) ) , &
-                              nr1s(dfft%mype2+1) * dfft%my_nr3p * y_group_size, dfft%nr2, 2 )
-
-!-------------y-FFT End--------------------------------
-!------------------------------------------------------
-     CALL SYSTEM_CLOCK( time(3) )
-
-     dfft%time_adding( 4 ) = dfft%time_adding( 4 ) + ( time(2) - time(1) )
-     dfft%time_adding( 5 ) = dfft%time_adding( 5 ) + ( time(3) - time(2) )
+     CALL invfft_y_portion( dfft, comm_mem_recv, aux( 1+(iset-1)*nr1s(dfft%mype2+1)*dfft%my_nr3p*dfft%nr2*dfft%y_group_size_save : &
+                            nr1s(dfft%mype2+1)*dfft%my_nr3p*dfft%nr2*y_group_size+(iset-1)*nr1s(dfft%mype2+1)*dfft%my_nr3p*dfft%nr2*dfft%y_group_size_save ), &
+                            map_acinv, map_acinv_rem, y_group_size, nr1s, iset )
 
   ENDDO
-
-  !CALL mpi_win_unlock_all( dfft%mpi_window( 2 ), ierr )
 
   CALL SYSTEM_CLOCK( time(3) )
 !------------------------------------------------------
 !------Forward xy-scatter Start------------------------
 
-  CALL fft_scatter_xy( dfft, dfft%aux, f, dfft%nnr, 2 )
+  DO ibatch = 1, batch_size
+
+     CALL fft_scatter_xy_t( dfft, aux( 1+nr1s(dfft%mype2+1)*dfft%my_nr3p*dfft%nr2*(ibatch-1) : nr1s(dfft%mype2+1)*dfft%my_nr3p*dfft%nr2*ibatch ), f(:,ibatch), dfft%nnr, 2 )
+
+  ENDDO
 
 !-------Forward xy-scatter End-------------------------
 !------------------------------------------------------
@@ -403,7 +322,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, y
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
-  CALL fft_1D( f, dfft%my_nr2p * dfft%my_nr3p, dfft%nr1, 2 )
+  CALL fft_1D_t( f( 1 : dfft%my_nr3p * dfft%nr2 * dfft%nr1 , : ), dfft%my_nr2p * dfft%my_nr3p * batch_size, dfft%nr1, 2 )
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
@@ -414,6 +333,89 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, y
   dfft%counter(3) = dfft%counter(3) + 1
 
 END SUBROUTINE invfft_after_com
+
+SUBROUTINE invfft_y_portion( dfft, comm_mem_recv, aux, map_acinv, map_acinv_rem, y_group_size, nr1s, iset )
+  IMPLICIT NONE
+
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN) :: y_group_size, iset
+  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
+  INTEGER, INTENT(IN) :: nr1s(:)
+  COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr2 , nr1s(dfft%mype2+1) * dfft%my_nr3p *  y_group_size )
+  INTEGER, INTENT(IN) :: map_acinv(:), map_acinv_rem(:)
+
+  INTEGER :: i, k, offset, jter
+
+  INTEGER(INT64) :: time(6)
+
+  CALL SYSTEM_CLOCK( time(1) )
+!------------------------------------------------------
+!--------After-Com-Copy Start--------------------------
+
+  !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
+  
+  IF( dfft%rem ) THEN
+
+     !$omp parallel do private( i, jter, k, offset )
+     DO i = 1, dfft%my_nr1p * dfft%my_nr3p * y_group_size
+        jter = mod( i-1, dfft%my_nr1p ) + 1
+        offset = ( mod( i-1, dfft%my_nr1p * dfft%my_nr3p ) + ( ( (i-1) / ( dfft%my_nr1p * dfft%my_nr3p ) ) + (iset-1)*dfft%y_group_size_save ) * dfft%my_nr3p * dfft%my_nr1p ) * dfft%nr2
+        !omp simd
+        DO k = 1, dfft%zero_acinv_start( jter ) - 1
+           aux( k, i ) = comm_mem_recv( map_acinv_rem( offset + k ) )
+        END DO
+        !omp simd
+        DO k = dfft%zero_acinv_start( jter ), dfft%zero_acinv_end( jter )
+           aux( k, i ) = (0.0_DP,0.0_DP)
+        END DO
+        !omp simd
+        DO k = dfft%zero_acinv_end( jter ) + 1, dfft%nr2
+           aux( k, i ) = comm_mem_recv( map_acinv_rem( offset + k ) )
+        END DO
+     END DO
+     !$omp end parallel do
+
+  ELSE
+
+     !$omp parallel do private( i, jter, k, offset )
+     DO i = 1, dfft%my_nr1p * dfft%my_nr3p * y_group_size
+        jter = mod( i-1, dfft%my_nr1p ) + 1
+        offset = ( mod( i-1, dfft%my_nr1p * dfft%my_nr3p ) + ( ( (i-1) / ( dfft%my_nr1p * dfft%my_nr3p ) ) + (iset-1)*dfft%y_group_size_save ) * dfft%my_nr3p * dfft%my_nr1p ) * dfft%nr2
+        !omp simd
+        DO k = 1, dfft%zero_acinv_start( jter ) - 1
+           aux( k, i ) = comm_mem_recv( map_acinv( offset + k ) )
+        END DO
+        !omp simd
+        DO k = dfft%zero_acinv_start( jter ), dfft%zero_acinv_end( jter )
+           aux( k, i ) = (0.0_DP,0.0_DP)
+        END DO
+        !omp simd
+        DO k = dfft%zero_acinv_end( jter ) + 1, dfft%nr2
+           aux( k, i ) = comm_mem_recv( map_acinv( offset + k ) )
+        END DO
+     END DO
+     !$omp end parallel do
+
+  END IF
+
+  !CALL mpi_win_unlock_all( dfft%mpi_window( 2 ), ierr )
+
+!---------After-Com-Copy End---------------------------
+!------------------------------------------------------
+  CALL SYSTEM_CLOCK( time(2) )
+!------------------------------------------------------
+!------------y-FFT Start-------------------------------
+
+  CALL fft_1D_t( aux, nr1s(dfft%mype2+1) * dfft%my_nr3p * y_group_size, dfft%nr2, 2 )
+
+!-------------y-FFT End--------------------------------
+!------------------------------------------------------
+  CALL SYSTEM_CLOCK( time(3) )
+
+  dfft%time_adding( 4 ) = dfft%time_adding( 4 ) + ( time(2) - time(1) )
+  dfft%time_adding( 5 ) = dfft%time_adding( 5 ) + ( time(3) - time(2) )
+
+END SUBROUTINE invfft_y_portion
 
 SUBROUTINE Apply_V( dfft, f, v, ibatch ) 
   IMPLICIT NONE
@@ -687,7 +689,8 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, aux, hpsi, ngms, z_group_size, last, n
   CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !--------Accumulate_Psi Start--------------------------
-
+   
+  !Somehow slower in the beginning than previous  implementation... needs investigation
   !$omp parallel private( j, igroup, fp, fm )
   DO igroup = 1, z_group_size
      !$omp do

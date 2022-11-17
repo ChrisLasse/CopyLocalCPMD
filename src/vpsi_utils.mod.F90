@@ -2151,7 +2151,7 @@ CONTAINS
        timer( i ) = REAL( dfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
     ENDDO
 
-    IF( dfft%mype .eq. 0 .and. .false. ) THEN
+    IF( dfft%mype .eq. 0 .and. .true. ) THEN
 
           WRITE(6,*)" "
           WRITE(6,*)"Some extra VPSI times"

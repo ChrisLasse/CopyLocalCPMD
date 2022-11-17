@@ -29,8 +29,9 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
   INTEGER, SAVE :: last_buffer = 0
   INTEGER :: i, j, k, l, f
 
-  IF( .not. allocated( dfft%aux ) ) THEN
+  IF( dfft%make_first ) THEN
 
+     dfft%make_first = .false.
      dfft%rsactive = rsactive
      dfft%nr3px = MAXVAL ( dfft%nr3p )
      dfft%my_nr1p = count ( ir1 > 0 )
