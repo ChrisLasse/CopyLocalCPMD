@@ -972,7 +972,7 @@ CONTAINS
     INTEGER(INT64) :: auto_time(4)
     INTEGER(INT64) :: time(17), cr
  
-    IF( .not. allocated( dfft%aux2 ) ) ALLOCATE( dfft%aux2( dfft%nnr * dfft%max_batch_size ) ) 
+    IF( .not. allocated( dfft%aux2 ) ) ALLOCATE( dfft%aux2( dfft%nr1p(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * dfft%max_batch_size ) ) 
     current = (counter-1)*dfft%batch_size_save
   
     IF( isign .eq. -1 ) THEN !!  invfft
@@ -1059,8 +1059,10 @@ CONTAINS
 
           CALL SYSTEM_CLOCK( time(7) )
           dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(7) - time(6) )
-  
-          CALL invfft_after_com( dfft, f_inout1(:,1:batch_size), f_in(:,work_buffer), dfft%map_acinv, dfft%map_acinv_rem, set_size1, set_size2, batch_size, dfft%nr1w )
+
+          CALL invfft_after_com( dfft, f_inout1(:,1:batch_size), f_in(:,work_buffer), &
+                                 dfft%aux2( 1 : dfft%my_nr1p * dfft%my_nr3p * dfft%nr2 * batch_size ), &
+                                 dfft%map_acinv, dfft%map_acinv_rem, set_size, batch_size, dfft%nr1w )
   
           IF( dfft%vpsi ) THEN
              !$  locks_calc_2( dfft%my_node_rank+1, 1+current:batch_size+current ) = .false.
@@ -1245,7 +1247,7 @@ CALL MPI_BARRIER( dfft%comm, ierr )
 CALL MPI_BARRIER( dfft%comm, ierr )
        END IF
    
-       CALL invfft_after_com( dfft, f, shared2, dfft%map_acinv_one, dfft%map_acinv_rem_one, 1, nr1s )
+       CALL invfft_after_com( dfft, f, shared2, dfft%aux2, dfft%map_acinv_one, dfft%map_acinv_rem_one, 1, 1, nr1s )
 CALL MPI_BARRIER( dfft%comm, ierr )
        IF( .not. dfft%single_node ) CALL MPI_BARRIER( dfft%node_comm, ierr )
        IF( dfft%single_node ) CALL MPI_BARRIER( dfft%comm, ierr )
