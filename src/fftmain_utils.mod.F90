@@ -969,7 +969,7 @@ CONTAINS
   
     INTEGER :: ibatch, iset, current, howmany, group_size
     LOGICAL :: last
-    INTEGER(INT64) :: auto_time(4)
+    INTEGER(INT64) :: auto_time(6)
     INTEGER(INT64) :: time(17), cr
  
     IF( .not. allocated( dfft%aux2 ) ) ALLOCATE( dfft%aux2( dfft%nr1p(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * dfft%max_batch_size ) ) 
@@ -1060,9 +1060,14 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(7) )
           dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(7) - time(6) )
 
+          CALL SYSTEM_CLOCK( auto_time(5) )
+
           CALL invfft_after_com( dfft, f_inout1(:,1:batch_size), f_in(:,work_buffer), &
                                  dfft%aux2( 1 : dfft%my_nr1p * dfft%my_nr3p * dfft%nr2 * batch_size ), &
                                  dfft%map_acinv, dfft%map_acinv_rem, set_size, batch_size, dfft%nr1w )
+
+          CALL SYSTEM_CLOCK( auto_time(6) )
+          dfft%auto_timings(2) = dfft%auto_timings(2) + ( auto_time(6) - auto_time(5) )
   
           IF( dfft%vpsi ) THEN
              !$  locks_calc_2( dfft%my_node_rank+1, 1+current:batch_size+current ) = .false.
