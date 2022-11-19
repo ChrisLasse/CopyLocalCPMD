@@ -138,6 +138,10 @@ MODULE fftpw_types
     INTEGER :: z_set_size_save
     INTEGER :: y_group_size_save
     INTEGER :: y_set_size_save
+    INTEGER :: scatter_group_size_save
+    INTEGER :: scatter_set_size_save
+    INTEGER :: x_group_size_save
+    INTEGER :: x_set_size_save
     INTEGER :: max_batch_size = 10
 
     COMPLEX(DP), ALLOCATABLE :: temp_psic(:,:)
@@ -194,6 +198,9 @@ MODULE fftpw_types
     INTEGER, ALLOCATABLE :: map_acinv_one(:)
     INTEGER, ALLOCATABLE :: map_acinv_rem_one(:)
     INTEGER, ALLOCATABLE :: map_pcfw(:)
+    INTEGER, ALLOCATABLE :: map_scatter_inv(:)
+    INTEGER :: zero_scatter_start
+    INTEGER :: zero_scatter_end
 
     LOGICAL :: wave = .false.
     LOGICAL :: vpsi = .false.

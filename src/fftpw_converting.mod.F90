@@ -76,6 +76,8 @@ CONTAINS
     dfft%buffer_size_save = 1
     dfft%z_set_size_save = 1
     dfft%y_set_size_save = 1
+    dfft%scatter_set_size_save = 1
+    dfft%x_set_size_save = 1
 
     ALLOCATE( dfft%time_adding( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
