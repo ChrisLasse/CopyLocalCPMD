@@ -106,6 +106,14 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
      ALLOCATE( dfft%zero_acinv_start( dfft%my_nr1p ) ) 
      ALLOCATE( dfft%zero_acinv_end( dfft%my_nr1p ) ) 
    
+     !Scatter_xy
+     ALLOCATE( dfft%map_scatter_inv( dfft%nnr ) )
+     IF( dfft%what .eq. 1 ) THEN 
+        CALL Make_scatter_Map( dfft, dfft%nr1p, dfft%indp )
+     ELSE
+        CALL Make_scatter_Map( dfft, dfft%nr1w, dfft%indw )
+     END IF 
+
      !FW_Pre_Com
      ALLOCATE( dfft%map_pcfw( dfft%nproc3 * dfft%small_chunks ) )
      CALL Make_fw_yzCOM_Map( dfft, ir1, ns )
@@ -365,6 +373,60 @@ SUBROUTINE Make_inv_yzCOM_Maps( dfft, map_acinv, map_acinv_rem, batch_size, rem_
   CALL MPI_BCAST( dfft%zero_acinv_end  , dfft%my_nr1p, MPI_INTEGER, 0, dfft%node_comm, ierr)
   
 END SUBROUTINE Make_inv_yzCOM_Maps
+
+SUBROUTINE Make_scatter_Map( dfft, nr1s, inds )
+  IMPLICIT NONE
+
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN)  :: nr1s( dfft%nproc2 )
+  INTEGER, INTENT(IN)  :: inds( dfft%nr1 , dfft%nproc2 )
+
+  INTEGER :: ncpx, sendsize, it, m3, i1, m1, icompact, iproc2, i, j, l
+  LOGICAL :: first
+
+  ncpx = MAXVAL( nr1s ) * dfft%my_nr3p       ! maximum number of Y columns to be disributed
+  sendsize = ncpx * MAXVAL( dfft%nr2p )       ! dimension of the scattered chunks (safe value)
+
+  dfft%map_scatter_inv = 0
+
+  !$omp parallel private(it,m3,i1,m1,icompact)
+  DO iproc2 = 1, dfft%nproc2
+     !$omp do 
+     DO i = 0, ncpx-1
+        IF(i>=nr1s(iproc2)*dfft%my_nr3p) CYCLE ! control i from 0 to nr1p_(iproc2)*desc%my_nr3p-1
+        it = ( iproc2 - 1 ) * sendsize + MAXVAL( dfft%nr2p ) * i
+        m3 = i/nr1s(iproc2)+1
+        i1 = mod(i,nr1s(iproc2))+1
+        m1 = inds(i1,iproc2)
+        icompact = m1 + (m3-1)*dfft%nr1*dfft%my_nr2p
+        DO j = 1, dfft%my_nr2p
+           dfft%map_scatter_inv( icompact ) = j + it
+           icompact = icompact + dfft%nr1
+        ENDDO
+     ENDDO
+     !$omp end do nowait
+  ENDDO
+  !$omp end parallel
+
+  first = .true.
+  
+  do l = 1, dfft%nr1
+  
+     IF( dfft%map_scatter_inv( l ) .eqv. .true. ) THEN
+        IF( first .eqv. .false. ) THEN
+           dfft%zero_scatter_end = l-1
+           EXIT
+        END IF
+     ELSE
+        IF( first .eqv. .true. ) THEN
+           dfft%zero_scatter_start = l
+           first = .false.
+        END IF
+     END IF
+  
+  end do
+
+END SUBROUTINE Make_scatter_Map
 
 SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
   IMPLICIT NONE
