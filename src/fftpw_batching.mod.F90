@@ -7,6 +7,7 @@ MODULE fftpw_batching
   USE elct,                                     ONLY: crge
   USE fftpw_legacy_routines,                    ONLY: fft_1D,&
                                                       fft_scatter_xy,&
+                                                      fft_scatter_xy_a,&
                                                       fft_1d_t
   USE fftpw_param
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
@@ -356,24 +357,25 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, aux, map_acinv, map_acinv_r
 
   CALL SYSTEM_CLOCK( auto_time(5) )
 
-  DO iset = 1, x_set_size
-
-     !Too slow? lets wait and see!
-     IF( iset .ne. x_set_size .or. iset .eq. 1 .or. x_group_size * x_set_size .eq. batch_size ) THEN
-        IF( mod( batch_size, x_set_size ) .eq. 0 ) THEN
-           x_group_size = batch_size / x_set_size
-        ELSE
-           x_group_size = batch_size / x_set_size + 1
-        ENDIF
-        dfft%x_group_size_save = x_group_size
-     ELSE
-        x_group_size = batch_size - (x_set_size-1) * x_group_size
-     END IF
-
-     CALL fft_1D_t( f( 1 : dfft%my_nr3p * dfft%nr2 * dfft%nr1 , 1+(iset-1)*dfft%x_group_size_save:x_group_size+(iset-1)*dfft%x_group_size_save ), &
-                    dfft%my_nr2p * dfft%my_nr3p * x_group_size, dfft%nr1, 2 )
-
-  ENDDO
+!  DO iset = 1, x_set_size
+!
+!     !Too slow? lets wait and see!
+!     IF( iset .ne. x_set_size .or. iset .eq. 1 .or. x_group_size * x_set_size .eq. batch_size ) THEN
+!        IF( mod( batch_size, x_set_size ) .eq. 0 ) THEN
+!           x_group_size = batch_size / x_set_size
+!        ELSE
+!           x_group_size = batch_size / x_set_size + 1
+!        ENDIF
+!        dfft%x_group_size_save = x_group_size
+!     ELSE
+!        x_group_size = batch_size - (x_set_size-1) * x_group_size
+!     END IF
+!
+!     CALL fft_1D_t( f( 1 : dfft%my_nr3p * dfft%nr2 * dfft%nr1 , 1+(iset-1)*dfft%x_group_size_save:x_group_size+(iset-1)*dfft%x_group_size_save ), &
+!                    dfft%my_nr2p * dfft%my_nr3p * x_group_size, dfft%nr1, 2 )
+!
+!  ENDDO
+  CALL fft_1D_t( f( 1 : dfft%my_nr3p * dfft%nr2 * dfft%nr1 , : ), dfft%my_nr2p * dfft%my_nr3p * batch_size, dfft%nr1, 2 )
 
   CALL SYSTEM_CLOCK( auto_time(6) )
   dfft%auto_timings(4) = dfft%auto_timings(4) + ( auto_time(6) - auto_time(5) )
@@ -400,7 +402,7 @@ SUBROUTINE invfft_y_portion( dfft, comm_mem_recv, aux, map_acinv, map_acinv_rem,
 
   INTEGER :: i, k, offset, jter
 
-  INTEGER(INT64) :: time(6)
+  INTEGER(INT64) :: time(3)
 
   CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
@@ -546,19 +548,11 @@ SUBROUTINE Apply_V( dfft, f, v, ibatch )
 !------------------------------------------------------
 !-----------Apply V Start------------------------------
 
-  IF( .not. dfft%rsactive ) THEN
-     !$omp parallel do private ( j )
-     DO j = 1, dfft%nnr
-        f( j )= - f( j ) * v( j )
-     END DO
-     !$omp end parallel do
-  ELSE
-     !$omp parallel do private ( j )
-     DO j = 1, dfft%nnr
-        f( j )= dfft%wfn_keep( j, ibatch ) * v(j)
-     END DO
-     !$omp end parallel do
-  END IF
+  !$omp parallel do private ( j )
+  DO j = 1, dfft%nnr
+     f( j )= - f( j ) * v( j )
+  END DO
+  !$omp end parallel do
 
 !------------Apply V End-------------------------------
 !------------------------------------------------------
@@ -599,46 +593,98 @@ SUBROUTINE Build_CD( dfft, f, rhoe, num )
 
 END SUBROUTINE Build_CD
 
-SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_size, nr1s, ns )
+SUBROUTINE fwfft_pre_com( dfft, f, aux, comm_mem_send, comm_mem_recv, y_set_size, batch_size, nr1s, ns )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN) :: ibatch, batch_size
-  COMPLEX(DP), INTENT(INOUT)  :: f( : )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN) :: batch_size, y_set_size
+  COMPLEX(DP), INTENT(INOUT)  :: f( dfft%nnr , batch_size )
   COMPLEX(DP), INTENT(OUT) :: comm_mem_send( : )
   COMPLEX(DP), INTENT(INOUT) :: comm_mem_recv( : )
   INTEGER, INTENT(IN) :: nr1s(:), ns(:)
+  COMPLEX(DP), INTENT(INOUT) :: aux( nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * batch_size )
 
   INTEGER :: i, j, k, l, m
-  INTEGER :: offset, ierr
+  INTEGER :: offset, ierr, ibatch, iset
+  INTEGER :: y_group_size
 
   INTEGER(INT64) :: time(5)
+  INTEGER(INT64) :: auto_time(2)
 
   CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
-  CALL fft_1D( f, dfft%my_nr2p * dfft%my_nr3p, dfft%nr1, -2 )
+  CALL fft_1D_t( f( 1 : dfft%my_nr3p * dfft%nr2 * dfft%nr1, : ), dfft%my_nr2p * dfft%my_nr3p * batch_size, dfft%nr1, -2 )
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
   CALL SYSTEM_CLOCK( time(2) )
 !------------------------------------------------------
 !------Forward xy-scatter Start------------------------
-    
-  CALL fft_scatter_xy( dfft, dfft%aux, f, dfft%nnr, -2 )
+  DO ibatch = 1, batch_size
+     CALL fft_scatter_xy_a( dfft, aux( 1+nr1s(dfft%mype2+1)*dfft%my_nr3p*dfft%nr2*(ibatch-1) : nr1s(dfft%mype2+1)*dfft%my_nr3p*dfft%nr2*ibatch ), f(:,ibatch), dfft%nnr, -2 )
+  ENDDO
 
 !-------Forward xy-scatter End-------------------------
 !------------------------------------------------------
   CALL SYSTEM_CLOCK( time(3) )
+
+  CALL SYSTEM_CLOCK( auto_time(1) )
+
+  DO iset = 1, y_set_size
+
+     !Too slow? lets wait and see!
+     IF( iset .ne. y_set_size .or. iset .eq. 1 .or. y_group_size * y_set_size .eq. batch_size ) THEN
+        IF( mod( batch_size, y_set_size ) .eq. 0 ) THEN
+           y_group_size = batch_size / y_set_size
+        ELSE
+           y_group_size = batch_size / y_set_size + 1
+        ENDIF
+        dfft%y_group_size_save = y_group_size
+     ELSE
+        y_group_size = batch_size - (y_set_size-1) * y_group_size
+     END IF
+
+     CALL fwfft_y_portion( dfft, comm_mem_send, comm_mem_recv, aux( 1+(iset-1)*nr1s(dfft%mype2+1)*dfft%my_nr3p*dfft%nr2*dfft%y_group_size_save : &
+                           nr1s(dfft%mype2+1)*dfft%my_nr3p*dfft%nr2*y_group_size+(iset-1)*nr1s(dfft%mype2+1)*dfft%my_nr3p*dfft%nr2*dfft%y_group_size_save ), &
+                           dfft%map_pcfw, y_group_size, batch_size, nr1s, ns, iset )
+
+  ENDDO
+
+  CALL SYSTEM_CLOCK( auto_time(2) )
+  dfft%auto_timings(2) = dfft%auto_timings(2) + ( auto_time(2) - auto_time(1) )
+
+  dfft%time_adding( 9 ) = dfft%time_adding( 9 ) + ( time(2) - time(1) )
+  dfft%time_adding( 10 ) = dfft%time_adding( 10 ) + ( time(3) - time(2) )
+  dfft%counter(5) = dfft%counter(5) + 1
+
+END SUBROUTINE fwfft_pre_com
+
+SUBROUTINE fwfft_y_portion( dfft, comm_mem_send, comm_mem_recv, aux, map_pcfw, y_group_size, batch_size, nr1s, ns, iset )
+  IMPLICIT NONE
+
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN) :: y_group_size, iset, batch_size
+  COMPLEX(DP), INTENT(INOUT)  :: comm_mem_send( : )
+  COMPLEX(DP), INTENT(INOUT)  :: comm_mem_recv( : )
+  INTEGER, INTENT(IN) :: nr1s(:), ns(:)
+  COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p , y_group_size )
+  INTEGER, INTENT(IN) :: map_pcfw(:)
+
+  INTEGER :: l, m, i, offset, j, k, igroup, jter, offset2, offset3
+
+  INTEGER(INT64) :: time(3)
+
+  CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !------------y-FFT Start-------------------------------
 
-  CALL fft_1D( dfft%aux, nr1s(dfft%mype2+1) * dfft%my_nr3p, dfft%nr2, -2 )
+  CALL fft_1D_t( aux( 1 : dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p , 1 : y_group_size ), nr1s(dfft%mype2+1) * dfft%my_nr3p * y_group_size, dfft%nr2, -2 )
 
 !-------------y-FFT End--------------------------------
 !------------------------------------------------------
-  CALL SYSTEM_CLOCK( time(4) )
+  CALL SYSTEM_CLOCK( time(2) )
 !------------------------------------------------------
 !---------Pre-Com-Copy Start---------------------------
 
@@ -646,18 +692,21 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
 
      !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 1 ), ierr )
 
-     !$omp parallel private( i, j, k, offset, l, m )
+     !$omp parallel private( i, j, k, offset, l, m, offset2, jter, igroup )
      DO l = 1, dfft%nodes_numb
         IF( dfft%non_blocking .and. l .eq. dfft%my_node+1 ) CYCLE
         DO m = 1, dfft%node_task_size
            i = (l-1)*dfft%node_task_size + m
-           offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (ibatch-1) ) * dfft%big_chunks
+           offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (iset-1)*dfft%y_group_size_save ) * dfft%big_chunks
            !$omp do
-           DO j = 1, ns( i )
+           DO j = 1, ns( i ) * y_group_size
+              jter = mod( j-1, ns( i ) ) 
+              igroup = ( (j-1) / ns( i ) )
+              offset2 =  igroup * dfft%big_chunks
               !$omp simd
               DO k = 1, dfft%my_nr3p
-                 comm_mem_send( offset + (j-1)*dfft%nr3px + k ) = &
-                 dfft%aux( dfft%map_pcfw( (i-1)*dfft%small_chunks + (j-1)*dfft%nr3px + k ) )
+                 comm_mem_send( offset + offset2 + jter*dfft%nr3px + k ) = &
+                 aux( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), igroup+1 )
               END DO
            END DO
            !$omp end do nowait
@@ -673,16 +722,19 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
 
   IF( .not. dfft%single_node .and. dfft%non_blocking ) THEN
 
-     !$omp parallel private( i, j, k, offset, m )
+     !$omp parallel private( i, j, k, offset, m, offset2, jter, igroup )
      DO m = 1, dfft%node_task_size
         i = dfft%my_node*dfft%node_task_size + m
-        offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (ibatch-1) ) * dfft%big_chunks
+        offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (iset-1)*dfft%y_group_size_save ) * dfft%big_chunks
         !$omp do
-        DO j = 1, ns( i )
+        DO j = 1, ns( i ) * y_group_size
+           jter = mod( j-1, ns( i ) ) 
+           igroup = ( (j-1) / ns( i ) )
+           offset2 =  igroup * dfft%big_chunks
            !$omp simd
            DO k = 1, dfft%my_nr3p
-              comm_mem_recv( offset + (j-1)*dfft%nr3px + k ) = &
-              dfft%aux( dfft%map_pcfw( (i-1)*dfft%small_chunks + (j-1)*dfft%nr3px + k ) )
+              comm_mem_recv( offset + offset2 + jter*dfft%nr3px + k ) = &
+              aux( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), igroup+1 )
            END DO
         END DO
         !$omp end do nowait
@@ -693,16 +745,19 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
 
   IF( dfft%single_node ) THEN
 
-     !$omp parallel private( i, j, k, offset, m )
+     !$omp parallel private( i, j, k, offset, m, offset2, jter, igroup )
      DO m = 1, dfft%node_task_size
         i = dfft%my_node*dfft%node_task_size + m
-        offset = ( dfft%my_node_rank+ (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (ibatch-1) ) * dfft%big_chunks
+        offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (iset-1)*dfft%y_group_size_save ) * dfft%big_chunks
         !$omp do
-        DO j = 1, ns( i )
+        DO j = 1, ns( i ) * y_group_size
+           jter = mod( j-1, ns( i ) ) 
+           igroup = ( (j-1) / ns( i ) )
+           offset2 =  igroup * dfft%big_chunks
            !$omp simd
            DO k = 1, dfft%my_nr3p
-              comm_mem_recv( offset + (j-1)*dfft%nr3px + k ) = &
-              dfft%aux( dfft%map_pcfw( (i-1)*dfft%small_chunks + (j-1)*dfft%nr3px + k ) )
+              comm_mem_recv( offset + offset2 + jter*dfft%nr3px + k ) = &
+              aux( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), igroup+1 )
            END DO
         END DO
         !$omp end do nowait
@@ -715,15 +770,12 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
 
 !----------Pre-Com-Copy End----------------------------
 !------------------------------------------------------
-  CALL SYSTEM_CLOCK( time(5) )
+  CALL SYSTEM_CLOCK( time(3) )
 
-  dfft%time_adding( 9 ) = dfft%time_adding( 9 ) + ( time(2) - time(1) )
-  dfft%time_adding( 10 ) = dfft%time_adding( 10 ) + ( time(3) - time(2) )
-  dfft%time_adding( 11 ) = dfft%time_adding( 11 ) + ( time(4) - time(3) )
-  dfft%time_adding( 12 ) = dfft%time_adding( 12 ) + ( time(5) - time(4) )
-  dfft%counter(5) = dfft%counter(5) + 1
+  dfft%time_adding( 11 ) = dfft%time_adding( 11 ) + ( time(2) - time(1) )
+  dfft%time_adding( 12 ) = dfft%time_adding( 12 ) + ( time(3) - time(2) )
 
-END SUBROUTINE fwfft_pre_com
+END SUBROUTINE fwfft_y_portion
 
 SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, aux, iset, batch_size, z_group_size, ns )
   IMPLICIT NONE
