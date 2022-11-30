@@ -35,6 +35,7 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
      dfft%rsactive = rsactive
      dfft%nr3px = MAXVAL ( dfft%nr3p )
      dfft%my_nr1p = count ( ir1 > 0 )
+     dfft%nsx = MAXVAL( ns )
      dfft%small_chunks = dfft%nr3px * MAXVAL( ns )
      dfft%big_chunks = dfft%small_chunks * dfft%node_task_size * dfft%node_task_size
    
@@ -115,7 +116,7 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
      END IF 
 
      !FW_Pre_Com
-     ALLOCATE( dfft%map_pcfw( dfft%nproc3 * dfft%small_chunks ) )
+     ALLOCATE( dfft%map_pcfw( dfft%nr3px * dfft%nproc3 * MAXVAL( ns ) ) )
      CALL Make_fw_yzCOM_Map( dfft, ir1, ns )
 
   END IF
@@ -435,7 +436,7 @@ SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
 
   INTEGER, INTENT(IN)  :: ir1(:), ns(:)
 
-  INTEGER :: iproc3, i, k, it, mc, m1, m2, i1 
+  INTEGER :: iproc3, i, k, it, mc, m1, m2, i1
 
   dfft%map_pcfw = 0
 
@@ -456,6 +457,11 @@ SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
      !$omp end do
   ENDDO
   !$omp end parallel
+
+  dfft%fw_off = 0
+  DO i = 1, dfft%node_task_size
+     dfft%fw_off = dfft%fw_off + ns( dfft%my_node * dfft%node_task_size + i )
+  ENDDO
 
 END SUBROUTINE Make_fw_yzCOM_Map
 

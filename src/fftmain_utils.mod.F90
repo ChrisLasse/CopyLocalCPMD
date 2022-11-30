@@ -1079,28 +1079,19 @@ CONTAINS
     ELSE !! fw fft
   
        IF( step .eq. 1 ) THEN
-  
-          DO ibatch = 1, batch_size
 
-             CALL SYSTEM_CLOCK( time(8) )
+          CALL SYSTEM_CLOCK( time(8) )
   
-             IF( batch_size .eq. dfft%rem_size ) THEN
-                !$omp flush( locks_calc_2 )
-                !$  DO WHILE( ANY(locks_calc_2( :, 1+current:batch_size+current ) ) )
-                !$omp flush( locks_calc_2 )
-                !$  END DO
-             ELSE
-                !$omp flush( locks_calc_2 )
-                !$  DO WHILE( ANY(locks_calc_2( :, ibatch+current ) ) )
-                !$omp flush( locks_calc_2 )
-                !$  END DO
-             END IF
+          !$omp flush( locks_calc_2 )
+          !$  DO WHILE( ANY(locks_calc_2( :, 1+current:batch_size+current ) ) )
+          !$omp flush( locks_calc_2 )
+          !$  END DO
 
-             CALL SYSTEM_CLOCK( time(9) )
-             dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(9) - time(8) )
+          CALL SYSTEM_CLOCK( time(9) )
+          dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(9) - time(8) )
   
-             CALL fwfft_pre_com( dfft, dfft%bench_aux(:,ibatch), f_inout1(:,work_buffer), f_inout2, ibatch, batch_size, dfft%nr1w, dfft%nsw )
-          ENDDO
+          CALL fwfft_pre_com( dfft, dfft%bench_aux, dfft%aux2( 1 : dfft%my_nr1p * dfft%my_nr3p * dfft%nr2 * batch_size ), &
+                              f_inout1(:,work_buffer), f_inout2, set_size_1, batch_size, dfft%nr1w, dfft%nsw )
   
           !$  locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
           !$omp flush( locks_calc_fw )
@@ -1260,7 +1251,7 @@ CALL MPI_BARRIER( dfft%comm, ierr )
        IF( .not. dfft%single_node ) CALL MPI_BARRIER( dfft%node_comm, ierr )
 CALL MPI_BARRIER( dfft%comm, ierr )
 
-       CALL fwfft_pre_com( dfft, f, shared1, shared2, 1, 1, nr1s, ns )
+       CALL fwfft_pre_com( dfft, f, dfft%aux2, shared1, shared2, 1, 1, nr1s, ns )
     
 CALL MPI_BARRIER( dfft%comm, ierr )
        IF( dfft%single_node ) THEN

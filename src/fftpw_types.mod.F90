@@ -182,6 +182,7 @@ MODULE fftpw_types
     INTEGER :: remember_batch  = 0
     INTEGER :: remember_buffer = 0
     INTEGER :: nr3px
+    INTEGER :: nsx
     INTEGER :: my_nr1p
     INTEGER :: small_chunks
     INTEGER :: big_chunks
