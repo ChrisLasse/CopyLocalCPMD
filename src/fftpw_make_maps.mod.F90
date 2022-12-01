@@ -35,7 +35,6 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
      dfft%rsactive = rsactive
      dfft%nr3px = MAXVAL ( dfft%nr3p )
      dfft%my_nr1p = count ( ir1 > 0 )
-     dfft%nsx = MAXVAL( ns )
      dfft%small_chunks = dfft%nr3px * MAXVAL( ns )
      dfft%big_chunks = dfft%small_chunks * dfft%node_task_size * dfft%node_task_size
    
@@ -109,6 +108,7 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
    
      !Scatter_xy
      ALLOCATE( dfft%map_scatter_inv( dfft%nnr ) )
+     ALLOCATE( dfft%map_scatter_fw ( dfft%nnr ) )
      IF( dfft%what .eq. 1 ) THEN 
         CALL Make_scatter_Map( dfft, dfft%nr1p, dfft%indp )
      ELSE
@@ -385,6 +385,7 @@ SUBROUTINE Make_scatter_Map( dfft, nr1s, inds )
   INTEGER :: ncpx, sendsize, it, m3, i1, m1, icompact, iproc2, i, j, l
   LOGICAL :: first
 
+  dfft%nr1s = nr1s( 1 )
   ncpx = MAXVAL( nr1s ) * dfft%my_nr3p       ! maximum number of Y columns to be disributed
   sendsize = ncpx * MAXVAL( dfft%nr2p )       ! dimension of the scattered chunks (safe value)
 
@@ -427,6 +428,23 @@ SUBROUTINE Make_scatter_Map( dfft, nr1s, inds )
   
   end do
 
+  !$omp parallel do collapse(2) private(it,m3,i1,m1,icompact)
+  DO iproc2 = 1, dfft%nproc2
+     DO i = 0, ncpx-1
+        IF(i>=nr1s(iproc2)*dfft%my_nr3p) CYCLE ! control i from 0 to nr1p_(iproc2)*desc%my_nr3p-1
+        it = ( iproc2 - 1 ) * sendsize + MAXVAL( dfft%nr2p ) * i
+        m3 = i/nr1s(iproc2)+1
+        i1 = mod(i,nr1s(iproc2))+1
+        m1 = inds(i1,iproc2)
+        icompact = m1 + (m3-1)*dfft%nr1*dfft%my_nr2p
+        DO j = 1, dfft%my_nr2p
+           dfft%map_scatter_fw( j + it ) = icompact 
+           icompact = icompact + dfft%nr1
+        ENDDO
+     ENDDO
+  ENDDO
+  !$omp end parallel do
+
 END SUBROUTINE Make_scatter_Map
 
 SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
@@ -458,11 +476,6 @@ SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
   ENDDO
   !$omp end parallel
 
-  dfft%fw_off = 0
-  DO i = 1, dfft%node_task_size
-     dfft%fw_off = dfft%fw_off + ns( dfft%my_node * dfft%node_task_size + i )
-  ENDDO
-
 END SUBROUTINE Make_fw_yzCOM_Map
 
 SUBROUTINE MapVals_CleanUp( dfft )
@@ -483,7 +496,8 @@ SUBROUTINE MapVals_CleanUp( dfft )
   IF( ALLOCATED( dfft%zero_acinv_start ) ) DEALLOCATE( dfft%zero_acinv_start )
   IF( ALLOCATED( dfft%zero_acinv_end ) )   DEALLOCATE( dfft%zero_acinv_end )
   IF( ALLOCATED( dfft%map_pcfw ) )         DEALLOCATE( dfft%map_pcfw )
-
+  IF( ALLOCATED( dfft%map_scatter_inv ) )  DEALLOCATE( dfft%map_scatter_inv )
+  IF( ALLOCATED( dfft%map_scatter_fw ) )   DEALLOCATE( dfft%map_scatter_fw )
 
 END SUBROUTINE MapVals_CleanUp
 

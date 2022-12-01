@@ -182,7 +182,7 @@ MODULE fftpw_types
     INTEGER :: remember_batch  = 0
     INTEGER :: remember_buffer = 0
     INTEGER :: nr3px
-    INTEGER :: nsx
+    INTEGER :: nr1s
     INTEGER :: my_nr1p
     INTEGER :: small_chunks
     INTEGER :: big_chunks
@@ -200,6 +200,7 @@ MODULE fftpw_types
     INTEGER, ALLOCATABLE :: map_acinv_rem_one(:)
     INTEGER, ALLOCATABLE :: map_pcfw(:)
     INTEGER, ALLOCATABLE :: map_scatter_inv(:)
+    INTEGER, ALLOCATABLE :: map_scatter_fw(:)
     INTEGER :: zero_scatter_start
     INTEGER :: zero_scatter_end
 

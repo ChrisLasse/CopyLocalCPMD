@@ -1027,7 +1027,7 @@ CONTAINS
           dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(9) - time(8) )
   
           CALL fwfft_pre_com( dfft, dfft%bench_aux, dfft%aux2( 1 : dfft%my_nr1p * dfft%my_nr3p * dfft%nr2 * batch_size ), &
-                              f_inout1(:,work_buffer), f_inout2, set_size_1, batch_size, dfft%nr1w, dfft%nsw )
+                              f_inout1(:,work_buffer), f_inout2, set_size_1, set_size_2, batch_size, dfft%nr1w, dfft%nsw )
   
           !$  locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
           !$omp flush( locks_calc_fw )
@@ -1187,7 +1187,7 @@ CALL MPI_BARRIER( dfft%comm, ierr )
        IF( .not. dfft%single_node ) CALL MPI_BARRIER( dfft%node_comm, ierr )
 CALL MPI_BARRIER( dfft%comm, ierr )
 
-       CALL fwfft_pre_com( dfft, f, dfft%aux2, shared1, shared2, 1, 1, nr1s, ns )
+       CALL fwfft_pre_com( dfft, f, dfft%aux2, shared1, shared2, 1, 1, 1, nr1s, ns )
     
 CALL MPI_BARRIER( dfft%comm, ierr )
        IF( dfft%single_node ) THEN
