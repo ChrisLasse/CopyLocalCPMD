@@ -274,7 +274,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, aux, map_acinv, map_acinv_r
   INTEGER, INTENT(IN) :: y_set_size, scatter_set_size, x_set_size, batch_size
   COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(OUT) :: f( dfft%nnr, batch_size )
+  COMPLEX(DP), INTENT(OUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1, batch_size )
   INTEGER, INTENT(IN) :: nr1s(:)
   COMPLEX(DP), INTENT(INOUT) :: aux( nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * batch_size )
   INTEGER, INTENT(IN) :: map_acinv(:), map_acinv_rem(:)
@@ -345,7 +345,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, aux, map_acinv, map_acinv_r
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
-  CALL SYSTEM_CLOCK( auto_time(5) )
+!  CALL SYSTEM_CLOCK( auto_time(5) )
 
 !  DO iset = 1, x_set_size
 !
@@ -365,10 +365,10 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, aux, map_acinv, map_acinv_r
 !                    dfft%my_nr2p * dfft%my_nr3p * x_group_size, dfft%nr1, 2 )
 !
 !  ENDDO
-  CALL fft_1D( f( 1 : dfft%my_nr3p * dfft%nr2 * dfft%nr1 , : ), dfft%my_nr2p * dfft%my_nr3p * batch_size, dfft%nr1, 2 )
+  CALL fft_1D( f, dfft%my_nr2p * dfft%my_nr3p * batch_size, dfft%nr1, 2 )
 
-  CALL SYSTEM_CLOCK( auto_time(6) )
-  dfft%auto_timings(4) = dfft%auto_timings(4) + ( auto_time(6) - auto_time(5) )
+!  CALL SYSTEM_CLOCK( auto_time(6) )
+!  dfft%auto_timings(4) = dfft%auto_timings(4) + ( auto_time(6) - auto_time(5) )
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
@@ -524,7 +524,7 @@ SUBROUTINE Apply_V( dfft, f, v, ibatch )
 !-----------Apply V Start------------------------------
 
   !$omp parallel do private ( j )
-  DO j = 1, dfft%nnr
+  DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
      f( j )= - f( j ) * v( j )
   END DO
   !$omp end parallel do
@@ -561,7 +561,7 @@ SUBROUTINE Build_CD( dfft, f, rhoe, num )
 !  ELSE
      coef4=crge%f(num+1,1)/parm%omega
 !  ENDIF
-  CALL build_density_sum(coef3,coef4,f,rhoe,dfft%nnr)
+  CALL build_density_sum(coef3,coef4,f,rhoe, dfft%my_nr3p * dfft%nr2 * dfft%nr1 )
 
 !------------Build CD End------------------------------
 !------------------------------------------------------
@@ -573,7 +573,7 @@ SUBROUTINE fwfft_pre_com( dfft, f, aux, comm_mem_send, comm_mem_recv, y_set_size
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: batch_size, y_set_size
-  COMPLEX(DP), INTENT(INOUT)  :: f( dfft%nnr , batch_size )
+  COMPLEX(DP), INTENT(INOUT)  :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , batch_size )
   COMPLEX(DP), INTENT(OUT) :: comm_mem_send( : )
   COMPLEX(DP), INTENT(INOUT) :: comm_mem_recv( : )
   INTEGER, INTENT(IN) :: nr1s(:), ns(:)
@@ -590,7 +590,7 @@ SUBROUTINE fwfft_pre_com( dfft, f, aux, comm_mem_send, comm_mem_recv, y_set_size
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
-  CALL fft_1D( f( 1 : dfft%my_nr3p * dfft%nr2 * dfft%nr1, : ), dfft%my_nr2p * dfft%my_nr3p * batch_size, dfft%nr1, -2 )
+  CALL fft_1D( f, dfft%my_nr2p * dfft%my_nr3p * batch_size, dfft%nr1, -2 )
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------

@@ -150,7 +150,6 @@ MODULE fftpw_types
     COMPLEX(DP), ALLOCATABLE :: aux2(:)
     COMPLEX(DP), ALLOCATABLE :: wfn_keep(:,:)
     COMPLEX(DP), ALLOCATABLE :: bench_aux(:,:)
-    COMPLEX(DP), ALLOCATABLE :: bench_aux_rem(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_calc_inv(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_com_inv(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_calc_fw(:,:)
