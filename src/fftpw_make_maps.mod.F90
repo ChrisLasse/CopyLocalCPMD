@@ -71,10 +71,7 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
      last_batch = batch_size
 
      IF( ALLOCATED( dfft%bench_aux ) )        DEALLOCATE( dfft%bench_aux )
-     IF( ALLOCATED( dfft%bench_aux_rem ) )    DEALLOCATE( dfft%bench_aux_rem )
-   
-     ALLOCATE( dfft%bench_aux( dfft%nnr, batch_size ) )
-     ALLOCATE( dfft%bench_aux_rem( dfft%nnr, rem_size ) )
+     ALLOCATE( dfft%bench_aux( dfft%my_nr3p * dfft%nr2 * dfft%nr1, batch_size ) )
 
   END IF
 
@@ -485,7 +482,6 @@ SUBROUTINE MapVals_CleanUp( dfft )
 
   IF( ALLOCATED( dfft%aux ) )              DEALLOCATE( dfft%aux )
   IF( ALLOCATED( dfft%bench_aux ) )        DEALLOCATE( dfft%bench_aux )
-  IF( ALLOCATED( dfft%bench_aux_rem ) )    DEALLOCATE( dfft%bench_aux_rem )
   IF( ALLOCATED( dfft%first_step ) )       DEALLOCATE( dfft%first_step )
   IF( ALLOCATED( dfft%first_loading ) )    DEALLOCATE( dfft%first_loading )
   IF( ALLOCATED( dfft%buffer_sequence ) )  DEALLOCATE( dfft%buffer_sequence )
