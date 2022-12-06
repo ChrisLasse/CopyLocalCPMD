@@ -1818,7 +1818,7 @@ CONTAINS
   
     INTEGER :: counter( 2 , 3)
     LOGICAL :: finished( 2 , 3 )
-    INTEGER :: sendsize_save, next, last_buffer, ibatch, work_buffer, z_set_size, y_set_size, scatter_set_size, x_set_size
+    INTEGER :: sendsize_save, next, last_buffer, ibatch, work_buffer, z_set_size, y_set_size, scatter_set_size
     LOGICAL :: finished_all, last_start, last_start_triggered
 
     INTEGER(INT64) :: time(20)
@@ -1836,7 +1836,6 @@ CONTAINS
     z_set_size = dfft%z_set_size_save
     y_set_size = dfft%y_set_size_save
     scatter_set_size = dfft%scatter_set_size_save
-    x_set_size = dfft%x_set_size_save
     ngms = dfft%ngw
 
     CALL SYSTEM_CLOCK( count_rate = cr )
@@ -1936,12 +1935,15 @@ CONTAINS
     !!! Initializiation finished
   
     !$omp parallel IF( nthreads .eq. 2 ) num_threads( nthreads ) &
-    !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, work_buffer, finished ) &
+    !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, work_buffer, finished, z_set_size, y_set_size, scatter_set_size ) &
     !$omp proc_bind( close )
     
     do_calc = .false.
     do_com  = .false.
     batch_size = dfft%batch_size_save
+    z_set_size = dfft%z_set_size_save
+    y_set_size = dfft%y_set_size_save
+    scatter_set_size = dfft%scatter_set_size_save
     next = -1
     counter = 0
     finished = .false.
@@ -1984,7 +1986,6 @@ CONTAINS
           IF( z_set_size .gt. (batch_size+1)/2 ) z_set_size = batch_size
           IF( y_set_size .gt. (batch_size+1)/2 ) y_set_size = batch_size
           IF( scatter_set_size .gt. (batch_size+1)/2 ) scatter_set_size = batch_size
-          IF( x_set_size .gt. (batch_size+1)/2 ) x_set_size = batch_size
           IF( do_com  ) dfft%sendsize = sendsize_rem
           IF( do_calc ) dfft%rem = .true.
        END IF
@@ -2081,7 +2082,7 @@ CONTAINS
 
                 CALL SYSTEM_CLOCK( time(14) )
                 IF( .not. dfft%rsactive ) THEN
-                   CALL invfft_pwbatch( dfft, 3, batch_size, y_set_size, scatter_set_size, x_set_size, counter( 1, 2 ), work_buffer, comm_recv, dfft%bench_aux )
+                   CALL invfft_pwbatch( dfft, 3, batch_size, y_set_size, scatter_set_size, 0, counter( 1, 2 ), work_buffer, comm_recv, dfft%bench_aux )
                 END IF
  
                 DO ibatch = 1, batch_size
@@ -2136,7 +2137,6 @@ CONTAINS
           z_set_size = dfft%z_set_size_save
           y_set_size = dfft%y_set_size_save
           scatter_set_size = dfft%scatter_set_size_save
-          x_set_size = dfft%x_set_size_save
           IF( do_com  ) dfft%sendsize = sendsize_save
           IF( do_calc ) dfft%rem = .false.
        END IF
