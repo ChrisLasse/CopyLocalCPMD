@@ -42,6 +42,7 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
      dfft%tscale_gamma = 0.5d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
 
      ALLOCATE( dfft%aux( dfft%nnr ) )
+     ALLOCATE( dfft%aux2( dfft%nr1p(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * dfft%max_batch_size ) ) 
 
   END IF
 
@@ -480,7 +481,9 @@ SUBROUTINE MapVals_CleanUp( dfft )
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
 
+  dfft%make_first = .true.
   IF( ALLOCATED( dfft%aux ) )              DEALLOCATE( dfft%aux )
+  IF( ALLOCATED( dfft%aux2 ) )             DEALLOCATE( dfft%aux2 )
   IF( ALLOCATED( dfft%bench_aux ) )        DEALLOCATE( dfft%bench_aux )
   IF( ALLOCATED( dfft%first_step ) )       DEALLOCATE( dfft%first_step )
   IF( ALLOCATED( dfft%first_loading ) )    DEALLOCATE( dfft%first_loading )

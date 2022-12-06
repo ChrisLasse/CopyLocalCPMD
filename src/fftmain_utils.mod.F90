@@ -974,7 +974,6 @@ CONTAINS
     INTEGER(INT64) :: auto_time(4)
     INTEGER(INT64) :: time(17), cr
  
-    IF( .not. allocated( dfft%aux2 ) ) ALLOCATE( dfft%aux2( dfft%nr1p(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * dfft%max_batch_size ) ) 
     current = (counter-1)*dfft%batch_size_save
   
     IF( isign .eq. -1 ) THEN !!  invfft
@@ -1015,7 +1014,7 @@ CONTAINS
 
              CALL SYSTEM_CLOCK( time(2) )
      
-             CALL Prepare_Psi_overlapp( dfft, f_in(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)), &
+             CALL Prepare_Psi_overlapp( dfft, f_in(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)*2), &
                                         dfft%aux2( 1 : dfft%nr3 * dfft%nsw(dfft%mype+1) * group_size ), dfft%ngms, group_size, dfft%nsw, last )
 
              CALL SYSTEM_CLOCK( time(3) )
@@ -1154,9 +1153,9 @@ CONTAINS
              CALL SYSTEM_CLOCK( time(14) )
 
              CALL Accumulate_Psi_overlapp( dfft, dfft%aux2( 1 : dfft%nr3 * dfft%nsw(dfft%mype+1) * group_size ), &
-                                           f_inout1(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)), &
+                                           f_inout1(:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)*2), &
                                            dfft%ngms, group_size, last, dfft%nsw, &
-                                           f_in    (:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)) )
+                                           f_in    (:,1+(((iset-1)*dfft%z_group_size_save)+current)*2:2*group_size+(((iset-1)*dfft%z_group_size_save)+current)*2) )
 
              CALL SYSTEM_CLOCK( time(15) )
   

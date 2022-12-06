@@ -116,7 +116,6 @@ CONTAINS
         set_time( dfft%z_set_size_save, 1 ) = set_time( dfft%z_set_size_save, 1 ) + REAL( dfft%auto_timings(1) / REAL( cr ) )
         set_time( dfft%y_set_size_save, 2 ) = set_time( dfft%y_set_size_save, 2 ) + REAL( dfft%auto_timings(2) / REAL( cr ) )
         set_time( dfft%scatter_set_size_save, 3 ) = set_time( dfft%scatter_set_size_save, 3 ) + REAL( dfft%auto_timings(3) / REAL( cr ) )
-!        set_time( dfft%x_set_size_save, 4 ) = set_time( dfft%x_set_size_save, 4 ) + REAL( dfft%auto_timings(4) / REAL( cr ) )
         dfft%auto_timings = 0
         set_time_mask( dfft%z_set_size_save ) = .true.
         IF( set_called .gt. set_repeats-1 ) THEN
@@ -124,7 +123,6 @@ CONTAINS
               write(6,*) "vpsi z set tunning:", dfft%z_set_size_save, "TIME:", set_time( dfft%z_set_size_save, 1 ) / set_repeats
               write(6,*) "vpsi y set tunning:", dfft%y_set_size_save, "TIME:", set_time( dfft%y_set_size_save, 2 ) / set_repeats
               write(6,*) "vpsi scatter set tunning:", dfft%scatter_set_size_save, "TIME:", set_time( dfft%scatter_set_size_save, 3 ) / set_repeats
- !             write(6,*) "vpsi x set tunning:", dfft%x_set_size_save, "TIME:", set_time( dfft%x_set_size_save, 4 ) / set_repeats
            END IF
            IF( dfft%z_set_size_save .ge. (dfft%batch_size_save+1) / 2 ) THEN
               IF( dfft%z_set_size_save .eq. dfft%batch_size_save ) THEN
@@ -132,37 +130,30 @@ CONTAINS
                     sets( bb_counter, 1 ) = MINLOC( set_time(:,1), 1, set_time_mask )
                     sets( bb_counter, 2 ) = MINLOC( set_time(:,2), 1, set_time_mask )
                     sets( bb_counter, 3 ) = MINLOC( set_time(:,3), 1, set_time_mask )
-!                    sets( bb_counter, 4 ) = MINLOC( set_time(:,4), 1, set_time_mask )
                     dfft%z_set_size_save = MINLOC( set_time(:,1), 1, set_time_mask )
                     dfft%y_set_size_save = MINLOC( set_time(:,2), 1, set_time_mask )
                     dfft%scatter_set_size_save = MINLOC( set_time(:,3), 1, set_time_mask )
-!                    dfft%x_set_size_save = MINLOC( set_time(:,4), 1, set_time_mask )
                     IF( .true. ) THEN
                        write(6,*) "vpsi z set chosen:", dfft%z_set_size_save, "TIME:", set_time( dfft%z_set_size_save, 1 ) / set_repeats
                        write(6,*) "vpsi y set chosen:", dfft%y_set_size_save, "TIME:", set_time( dfft%y_set_size_save, 2 ) / set_repeats
                        write(6,*) "vpsi scatter set chosen:", dfft%scatter_set_size_save, "TIME:", set_time( dfft%scatter_set_size_save, 3 ) / set_repeats
-!                       write(6,*) "vpsi x set chosen:", dfft%x_set_size_save, "TIME:", set_time( dfft%x_set_size_save, 4 ) / set_repeats
                     END IF
-!                    final_time( bb_counter ) = final_time( bb_counter ) + save_time( dfft%z_set_size_save )
                  END IF
                  CALL MP_BCAST( dfft%z_set_size_save, 0, dfft%comm )
                  CALL MP_BCAST( dfft%y_set_size_save, 0, dfft%comm )
                  CALL MP_BCAST( dfft%scatter_set_size_save, 0, dfft%comm )
-!                 CALL MP_BCAST( dfft%x_set_size_save, 0, dfft%comm )
                  set_timing = .false.
               ELSE
                  set_called = 0
                  dfft%z_set_size_save = dfft%batch_size_save
                  dfft%y_set_size_save = dfft%batch_size_save
                  dfft%scatter_set_size_save = dfft%batch_size_save
-!                 dfft%x_set_size_save = dfft%batch_size_save
               END IF
            ELSE
               set_called = 0
               dfft%z_set_size_save = dfft%z_set_size_save + 1
               dfft%y_set_size_save = dfft%y_set_size_save + 1
               dfft%scatter_set_size_save = dfft%scatter_set_size_save + 1
-!              dfft%x_set_size_save = dfft%x_set_size_save + 1
            END IF
         END IF
      ELSE
