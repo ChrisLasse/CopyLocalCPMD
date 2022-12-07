@@ -1847,6 +1847,7 @@ CONTAINS
     INTEGER(INT64) :: time(20)
     INTEGER(INT64), SAVE :: cr
     REAL(DP) :: timer(29)
+    LOGICAL, SAVE :: first = .true.
 
     dfft%wave = .true.
     dfft%vpsi = .true.
@@ -1864,9 +1865,9 @@ CONTAINS
     CALL SYSTEM_CLOCK( count_rate = cr )
     CALL SYSTEM_CLOCK( time(3) )
 
-    IF( .not. allocated( first_step ) ) THEN
+    IF( first ) THEN
  
-       ALLOCATE( first_step( dfft%buffer_size_save ) ) 
+       first = .false.
        dfft%use_maps = .true.
        dfft%ngms = ngms
 
@@ -1923,6 +1924,8 @@ CONTAINS
        ELSE
           dfft%max_nbnd = ( nbnd / batch_size )
        END IF
+       IF( ALLOCATED( first_step ) )   DEALLOCATE( first_step )
+       ALLOCATE( first_step( dfft%buffer_size_save ) ) 
   
     END IF
   
