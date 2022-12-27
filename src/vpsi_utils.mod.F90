@@ -1802,13 +1802,15 @@ CONTAINS
   SUBROUTINE do_the_vpsi_thing( psi, hpsi, v, nbnd_source )
   
     IMPLICIT NONE
-    COMPLEX(DP), INTENT(IN)  :: psi(dfft%ngw, nbnd_source)
+    COMPLEX(DP), INTENT(INOUT)  :: psi(dfft%ngw, nbnd_source)
     COMPLEX(DP), INTENT(INOUT) :: hpsi(dfft%ngw, nbnd_source)
     INTEGER, INTENT(IN)    :: nbnd_source
     REAL(DP), INTENT(IN) :: v(dfft%nnr)
- 
-    LOGICAL, ALLOCATABLE, SAVE :: first_step(:)
 
+    COMPLEX(DP), SAVE, POINTER  :: rs_wave(:,:)
+    COMPLEX(DP), ALLOCATABLE, SAVE, TARGET :: batch_aux(:,:)
+
+    LOGICAL, ALLOCATABLE, SAVE :: first_step(:)
     LOGICAL, SAVE :: do_calc = .false.
     LOGICAL, SAVE :: do_com = .false.
     INTEGER, SAVE :: sendsize_rem, nthreads, nested_threads, nbnd, my_thread_num
@@ -1873,16 +1875,17 @@ CONTAINS
   
     END IF
 
-    IF( dfft%remember_batch .ne. batch_size .or. dfft%remember_buffer .ne. buffer_size ) THEN
+    IF( dfft%remember_batch_vpsi .ne. batch_size .or. dfft%remember_buffer_vpsi .ne. buffer_size ) THEN
 
-       dfft%remember_batch  = batch_size
-       dfft%remember_buffer = buffer_size
+       dfft%remember_batch_vpsi  = batch_size
+       dfft%remember_buffer_vpsi = buffer_size
        CALL Clean_up_shared( dfft, 1 ) 
 
        CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size, dfft%ir1w, dfft%nsw )
        CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
   
        dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
+!       indi_size = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
      
        CALL create_shared_memory_window_2d( comm_send, 1, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
        CALL create_shared_memory_window_2d( comm_recv, 2, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
@@ -1894,6 +1897,9 @@ CONTAINS
        
        CALL create_shared_locks_2d( locks_calc_1  , 22, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
        CALL create_shared_locks_2d( locks_calc_2  , 23, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
+
+       IF( ALLOCATED( batch_aux ) )        DEALLOCATE( batch_aux )
+       ALLOCATE( batch_aux( dfft%my_nr3p * dfft%nr2 * dfft%nr1, batch_size ) )
   
        dfft%num_buff = buffer_size
        IF( dfft%rem_size .ne. 0 ) THEN
@@ -1930,7 +1936,11 @@ CONTAINS
 
     dfft%first_loading = .true.
     dfft%rem = .false.
-  
+
+    IF( .not. dfft%rsactive) THEN
+       rs_wave => batch_aux( : , 1:batch_size )
+    END IF
+ 
     CALL MPI_BARRIER(dfft%comm, ierr)
 
     CALL SYSTEM_CLOCK( time(1) )
@@ -2084,18 +2094,21 @@ CONTAINS
                 counter( 1, 2 ) = counter( 1, 2 ) + 1
 
                 CALL SYSTEM_CLOCK( time(14) )
-                IF( .not. dfft%rsactive ) THEN
-                   CALL invfft_pwbatch( dfft, 3, batch_size, y_set_size, scatter_set_size, 0, counter( 1, 2 ), work_buffer, comm_recv, dfft%bench_aux )
+                IF( dfft%rsactive ) THEN
+!                   rs_wave => wfn_real( : , 1+(counter(1,2)-1)*batch_size : batch_size+(counter(1,2)-1)*batch_size )
+                    CONTINUE
+                ELSE
+                   CALL invfft_pwbatch( dfft, 3, batch_size, y_set_size, scatter_set_size, 0, counter( 1, 2 ), work_buffer, comm_recv, rs_wave )
                 END IF
  
                 DO ibatch = 1, batch_size
-                   CALL Apply_V( dfft, dfft%bench_aux(:,ibatch), v, ibatch )
+                   CALL Apply_V( dfft, rs_wave(:,ibatch), v, ibatch )
                 ENDDO
                 CALL SYSTEM_CLOCK( time(15) )
                 dfft%time_adding( 20 ) = dfft%time_adding( 20 ) + ( time(15) - time(14) )
   
                 CALL SYSTEM_CLOCK( time(16) )
-                CALL fwfft_pwbatch( dfft, 1, batch_size, 1, counter( 1, 2 ), work_buffer, dfft%bench_aux, comm_send, comm_recv(:,work_buffer) )
+                CALL fwfft_pwbatch( dfft, 1, batch_size, 1, counter( 1, 2 ), work_buffer, rs_wave, comm_send, comm_recv(:,work_buffer) )
                 CALL SYSTEM_CLOCK( time(17) )
                 dfft%time_adding( 21 ) = dfft%time_adding( 21 ) + ( time(17) - time(16) )
   
