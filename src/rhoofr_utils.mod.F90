@@ -76,7 +76,8 @@ MODULE rhoofr_utils
                                              invfft_pwbatch,&
                                              fwfft_pwbatch
   USE fftnew_utils,                    ONLY: setfftn
-  USE fftpw_base,                      ONLY: dfft
+  USE fftpw_base,                      ONLY: dfft,&
+                                             wfn_real
   USE fftpw_batching,                  ONLY: Build_CD
   USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
                                              Set_Req_Vals,&
@@ -1331,7 +1332,8 @@ CONTAINS
     REAL(real_8), TARGET __CONTIGUOUS        :: rhoe(:,:)
     COMPLEX(real_8), TARGET __CONTIGUOUS     :: psi(:)
     INTEGER                                  :: nstate
-    COMPLEX(real_8), ALLOCATABLE     :: psi_all(:,:)
+    COMPLEX(real_8), TARGET, SAVE, ALLOCATABLE     :: psi_nors(:,:)
+    COMPLEX(real_8), POINTER, SAVE           :: psi_work(:,:)
 
     CHARACTER(*), PARAMETER                  :: procedureN = 'rhoofr'
     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
@@ -1381,9 +1383,16 @@ CONTAINS
 
     ! Initialize
     CALL zeroing(rhoe)!,clsd%nlsd*nnr1)
-
-    IF( .not. allocated(psi_all) ) ALLOCATE( psi_all( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , (nstate/2)+1 ) )
-    CALL rhoofr_pwfft(c0,psi_all,rhoe(:,1),nstate)
+    
+    IF( dfft%rsactive ) THEN
+       IF( .not. allocated( wfn_real ) ) ALLOCATE( wfn_real( dfft%my_nr3p * dfft%nr2 * dfft%nr1, (nstate/2)+1 ) )
+       psi_work => wfn_real
+       CONTINUE
+    ELSE
+       IF( .not. allocated( psi_nors ) ) ALLOCATE( psi_nors( dfft%my_nr3p * dfft%nr2 * dfft%nr1, (nstate/2)+1 ) )
+       psi_work => psi_nors
+    END IF
+    CALL rhoofr_pwfft(c0,psi_work,rhoe(:,1),nstate)
 
     ! ==--------------------------------------------------------------==
     ! redistribute RHOE over the groups if needed

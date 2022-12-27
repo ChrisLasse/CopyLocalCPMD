@@ -72,7 +72,8 @@ MODULE vpsi_utils
                                              invfft_pwbatch,&
                                              fwfft_pwbatch
   USE fftnew_utils,                    ONLY: setfftn
-  USE fftpw_base,                      ONLY: dfft
+  USE fftpw_base,                      ONLY: dfft,&
+                                             wfn_real
   USE fftpw_batching,                  ONLY: Apply_v
   USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
                                              Set_Req_Vals,&
@@ -2118,8 +2119,8 @@ CONTAINS
 
                 CALL SYSTEM_CLOCK( time(14) )
                 IF( dfft%rsactive ) THEN
-!                   rs_wave => wfn_real( : , 1+(counter(1,2)-1)*batch_size : batch_size+(counter(1,2)-1)*batch_size )
-                    CONTINUE
+                   rs_wave => wfn_real( : , 1+(counter(1,2)-1)*batch_size : batch_size+(counter(1,2)-1)*batch_size )
+                   CONTINUE
                 ELSE
                    CALL invfft_pwbatch( dfft, 3, batch_size, y_set_size, scatter_set_size, 0, counter( 1, 2 ), work_buffer, comm_recv, rs_wave )
                 END IF
