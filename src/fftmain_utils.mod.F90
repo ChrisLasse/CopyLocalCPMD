@@ -922,7 +922,7 @@ CONTAINS
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
     INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer
     INTEGER, INTENT(IN) :: set_size_1, set_size_2, set_size_3
-    COMPLEX(DP), INTENT(IN) :: f_in(:,:)
+    COMPLEX(DP), INTENT(INOUT) :: f_in(:,:)
     COMPLEX(DP), INTENT(INOUT) :: f_inout1(:,:)
   
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:)
@@ -942,7 +942,7 @@ CONTAINS
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
     INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer, set_size
-    COMPLEX(DP), INTENT(IN) :: f_in(:,:)
+    COMPLEX(DP), INTENT(INOUT) :: f_in(:,:)
     COMPLEX(DP), INTENT(INOUT) :: f_inout1(:,:)
   
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:)
@@ -964,7 +964,7 @@ CONTAINS
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
     INTEGER, INTENT(IN) :: isign, step, batch_size, counter, work_buffer
     INTEGER, INTENT(IN) :: set_size_1, set_size_2, set_size_3
-    COMPLEX(DP), INTENT(IN) :: f_in(:,:)
+    COMPLEX(DP), INTENT(INOUT) :: f_in(:,:)
     COMPLEX(DP), INTENT(INOUT) :: f_inout1(:,:)
   
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:)
@@ -1089,7 +1089,7 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(9) )
           dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(9) - time(8) )
   
-          CALL fwfft_pre_com( dfft, dfft%bench_aux, dfft%aux2( 1 : dfft%my_nr1p * dfft%my_nr3p * dfft%nr2 * batch_size ), &
+          CALL fwfft_pre_com( dfft, f_in, dfft%aux2( 1 : dfft%my_nr1p * dfft%my_nr3p * dfft%nr2 * batch_size ), &
                               f_inout1(:,work_buffer), f_inout2, set_size_1, set_size_2, batch_size, dfft%nr1w, dfft%nsw )
   
           !$  locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
@@ -1164,9 +1164,14 @@ CONTAINS
           ENDDO
           CALL SYSTEM_CLOCK( auto_time(4) )
           dfft%auto_timings(1) = dfft%auto_timings(1) + ( auto_time(4) - auto_time(3) )
-  
-          !$  locks_calc_1( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:batch_size+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
+ 
+          !$  IF( dfft%rsactive ) THEN
+          !$     locks_calc_2( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:batch_size+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
+          !$omp flush( locks_calc_2 )
+          !$  ELSE 
+          !$     locks_calc_1( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:batch_size+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
           !$omp flush( locks_calc_1 )
+          !$  END IF
   
        END IF
   

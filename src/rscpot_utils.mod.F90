@@ -118,8 +118,8 @@ CONTAINS
           IF(.false.) THEN !batch_fft)THEN
              CALL rhoofr_batchfft(c0,rhoe,psi(:,1),nstate)
           ELSE
-             CALL rhoofr(c0,rhoe,psi(:,1),nstate)
-!             CALL do_the_rhoofr_thing(c0,rhoe,psi(:,1),nstate)
+!             CALL rhoofr(c0,rhoe,psi(:,1),nstate)
+             CALL do_the_rhoofr_thing(c0,rhoe,psi(:,1),nstate)
           END IF
        ENDIF
     ENDIF
