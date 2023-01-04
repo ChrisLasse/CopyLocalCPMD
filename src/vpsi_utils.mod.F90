@@ -2017,7 +2017,11 @@ CONTAINS
           work_buffer = dfft%buffer_sequence( next )
        END IF
   
-       IF( dfft%rem_size .ne. 0 .and. ( ( first_step( work_buffer ) .and. last_buffer .eq. 0 .and. ( counter( 1, 1 ) .eq. dfft%max_nbnd - 1 .or. counter( 2, 1 ) .eq. dfft%max_nbnd - 1 ) ) .or. last_buffer .eq. work_buffer ) ) THEN
+       IF( dfft%rem_size .ne. 0 .and. ( ( ( ( .not. dfft%rsactive .and. first_step( work_buffer ) ) .or. ( dfft%rsactive .and. .not. first_step(work_buffer) ) ) .and. last_buffer .eq. 0 .and. &
+         ( &
+           ( counter( 1, 1 ) .eq. dfft%max_nbnd - 1 .or. counter( 2, 1 ) .eq. dfft%max_nbnd - 1 ) .or. &
+           ( dfft%rsactive .and. ( counter( 1, 2 ) .eq. dfft%max_nbnd - 1 .or. counter( 2, 2 ) .eq. dfft%max_nbnd - 1 )  ) &
+         ) ) .or. last_buffer .eq. work_buffer ) ) THEN
           last_buffer = work_buffer
           batch_size = dfft%rem_size
           IF( z_set_size .gt. (batch_size+1)/2 ) z_set_size = batch_size
@@ -2041,7 +2045,7 @@ CONTAINS
   
                 counter( 1, 3 ) = counter( 1, 3 ) + 1
   
-                IF( batch_size .ne. dfft%batch_size_save .and. last_start ) THEN
+                IF( batch_size .ne. dfft%batch_size_save .and. last_start .and. .not. dfft%rsactive ) THEN
                    last_start = .false.
                    last_start_triggered = .true.
                    batch_size = dfft%batch_size_save
@@ -2119,7 +2123,7 @@ CONTAINS
 
                 CALL SYSTEM_CLOCK( time(14) )
                 IF( dfft%rsactive ) THEN
-                   rs_wave => wfn_real( : , 1+(counter(1,2)-1)*batch_size : batch_size+(counter(1,2)-1)*batch_size )
+                   rs_wave => wfn_real( : , 1+(counter(1,2)-1)*dfft%batch_size_save : batch_size+(counter(1,2)-1)*dfft%batch_size_save )
                    CONTINUE
                 ELSE
                    CALL invfft_pwbatch( dfft, 3, batch_size, y_set_size, scatter_set_size, 0, counter( 1, 2 ), work_buffer, comm_recv, rs_wave )
@@ -2258,6 +2262,67 @@ CONTAINS
           write(6,*)"Adding up COMM:", timer(23)+timer(26)+timer(28)+timer(29)
           write(6,*)"Control:", REAL( REAL( dfft%time_adding( 98 ) ) / REAL( cr ), KIND = REAL64 )
           WRITE(6,*)" "
+
+    END IF
+
+    IF( .false. ) THEN
+
+       WRITE(6,*)" "
+       WRITE(6,*)"Some extra VPSI times"
+       write(6,*)"==================================="
+       write(6,*)"INV FFT before Com"
+       write(6,*)"CALC LOCK 1           ",            dfft%my_node_rank, timer(22)
+       write(6,*)"Prepare_psi           ",            dfft%my_node_rank, timer(1)
+       write(6,*)"INV z_fft             ",            dfft%my_node_rank, timer(2)
+       write(6,*)"INV Pre_com_copy      ",            dfft%my_node_rank, timer(3)
+     
+       write(6,*)"INV FFT before Com sum  ",timer(1)+timer(2)+timer(3)+timer(22)
+       write(6,*)"Control:", timer(19)
+       write(6,*)"==================================="
+       write(6,*)"INV FFT after Com"
+       write(6,*)"CALC LOCK 2           ",  dfft%my_node_rank,          timer(24)
+       write(6,*)"INV After_com_copy    ",  dfft%my_node_rank,  timer(4)
+       write(6,*)"INV y_fft             ",  dfft%my_node_rank,           timer(5)
+       write(6,*)"INV xy_scatter        ",  dfft%my_node_rank,      timer(6)
+       write(6,*)"INV x_fft             ",  dfft%my_node_rank,           timer(7)
+       write(6,*)"Apply V               ",  dfft%my_node_rank,             timer(8)
+     
+       write(6,*)"INV FFT after Com sum ",  timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(24)
+       write(6,*)"Control:", timer(20)
+       write(6,*)"==================================="
+       write(6,*)"FW FFT before Com"
+       write(6,*)"CALC LOCK 3           ",  dfft%my_node_rank,   timer(25)
+       write(6,*)"FW x_fft              ",  dfft%my_node_rank,           timer(9)
+       write(6,*)"FW xy_scatter         ",  dfft%my_node_rank,      timer(10)
+       write(6,*)"FW y_fft              ",  dfft%my_node_rank,           timer(11)
+       write(6,*)"FW Pre_com_copy       ",  dfft%my_node_rank,    timer(12)
+     
+       write(6,*)"FW FFT before Com sum  ",timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
+       write(6,*)"Control:", timer(21)
+       write(6,*)"==================================="
+       write(6,*)"FW FFT after Com"
+       write(6,*)"CALC LOCK 4           ",  dfft%my_node_rank,   timer(27)
+       write(6,*)"FW After_com_copy     ",  dfft%my_node_rank,  timer(13)
+       write(6,*)"FW z_fft              ",  dfft%my_node_rank,           timer(14)
+       write(6,*)"Accumulate_Psi        ",  dfft%my_node_rank,     timer(15)
+     
+       write(6,*)"FW FFT after Com sum",  timer(13)+timer(14)+timer(15)+timer(27)
+       write(6,*)"Control:", timer(18)
+       write(6,*)"==================================="
+       write(6,*)"COM LOCK 1            ", dfft%my_node_rank, timer(23)
+       write(6,*)"FIRST COMM TIMES:     ", dfft%my_node_rank, timer(28)
+       write(6,*)"Control:", timer(16)
+       write(6,*)"COM LOCK 2            ", dfft%my_node_rank, timer(26)
+       write(6,*)"SECOND COMM TIMES:    ", dfft%my_node_rank, timer(29)
+       write(6,*)"Control:", timer(17)
+       write(6,*)"==================================="
+       write(6,*)"Adding up CALC:       ", dfft%my_node_rank, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+                               timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
+                               timer(13)+timer(14)+timer(15)+timer(22)+timer(24)+&
+                               timer(25)+timer(27)
+       write(6,*)"Adding up COMM:       ", dfft%my_node_rank, timer(23)+timer(26)+timer(28)+timer(29)
+       write(6,*)"Control:", REAL( REAL( dfft%time_adding( 98 ) ) / REAL( cr ), KIND = REAL64 )
+       WRITE(6,*)" "
 
     END IF
 

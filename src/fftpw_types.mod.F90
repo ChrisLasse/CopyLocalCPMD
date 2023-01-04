@@ -130,7 +130,7 @@ MODULE fftpw_types
     INTEGER :: sendsize
     INTEGER :: max_nbnd
     LOGICAL :: uneven = .false.
-    LOGICAL :: rsactive = .true.
+    LOGICAL :: rsactive = .false.
     LOGICAL :: singl = .false.
     LOGICAL :: make_first = .true.
 

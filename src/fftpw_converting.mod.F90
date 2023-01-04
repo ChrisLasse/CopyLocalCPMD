@@ -15,6 +15,7 @@ MODULE fftpw_converting
   USE gvec,                          ONLY: gvec_com
   USE mp_interface,                  ONLY: mp_sum
   USE parac,                         ONLY: parai
+  USE rswfmod,                       ONLY: rsactive
   USE system,                        ONLY: spar,&
                                            ncpw 
   USE zeroing_utils,                 ONLY: zeroing
@@ -50,6 +51,8 @@ CONTAINS
     dfft%nnr = dfft%nr1 * dfft%nr2 * dfft%nr3
 
     dfft%nstate = crge%n
+!    dfft%rsactive = rsactive
+    dfft%rsactive = .true.
 
     dfft%nproc = parai%nproc
     dfft%mype  = parai%me
