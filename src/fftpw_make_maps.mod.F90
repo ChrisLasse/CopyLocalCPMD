@@ -6,7 +6,6 @@ MODULE fftpw_make_maps
                                             fft_batchsize,&
                                             fft_numbatches
   USE fftpw_param
-  USE rswfmod,                        ONLY: rsactive
   USE fftpw_types,                    ONLY: PW_fft_type_descriptor
   IMPLICIT NONE
 
@@ -32,7 +31,6 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
   IF( dfft%make_first ) THEN
 
      dfft%make_first = .false.
-     dfft%rsactive = rsactive
      dfft%nr3px = MAXVAL ( dfft%nr3p )
      dfft%my_nr1p = count ( ir1 > 0 )
      dfft%small_chunks = dfft%nr3px * MAXVAL( ns )
