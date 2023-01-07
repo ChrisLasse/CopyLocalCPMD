@@ -1808,7 +1808,7 @@ CONTAINS
     INTEGER, INTENT(IN)    :: nbnd_source
     REAL(DP), INTENT(IN) :: v(dfft%nnr)
 
-    COMPLEX(DP), SAVE, POINTER  :: rs_wave(:,:)
+    COMPLEX(DP), CONTIGUOUS, SAVE, POINTER  :: rs_wave(:,:)
     COMPLEX(DP), ALLOCATABLE, SAVE, TARGET :: batch_aux(:,:)
 
     LOGICAL, ALLOCATABLE, SAVE :: first_step(:)
@@ -2101,14 +2101,11 @@ CONTAINS
                 CALL SYSTEM_CLOCK( time(14) )
                 IF( dfft%rsactive ) THEN
                    rs_wave => wfn_real( : , 1+(counter(1,2)-1)*dfft%batch_size_save : batch_size+(counter(1,2)-1)*dfft%batch_size_save )
-                   CONTINUE
                 ELSE
                    CALL invfft_pwbatch( dfft, 3, batch_size, y_set_size, scatter_set_size, 0, counter( 1, 2 ), work_buffer, comm_recv, rs_wave )
                 END IF
  
-                DO ibatch = 1, batch_size
-                   CALL Apply_V( dfft, rs_wave(:,ibatch), v, ibatch )
-                ENDDO
+                CALL Apply_V( dfft, rs_wave, v, batch_size )
                 CALL SYSTEM_CLOCK( time(15) )
                 dfft%time_adding( 20 ) = dfft%time_adding( 20 ) + ( time(15) - time(14) )
   
@@ -2181,7 +2178,7 @@ CONTAINS
        timer( i ) = REAL( dfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
     ENDDO
 
-    IF( dfft%mype .eq. 0 .and. .false. ) THEN
+    IF( dfft%mype .eq. 0 .and. .true. ) THEN
 
           WRITE(6,*)" "
           WRITE(6,*)"Some extra VPSI times"
