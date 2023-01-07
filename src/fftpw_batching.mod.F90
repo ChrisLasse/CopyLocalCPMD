@@ -507,15 +507,15 @@ SUBROUTINE fft_scatter_xy ( dfft, f_in, f_aux, scatter_group_size, isgn )
 
 END SUBROUTINE fft_scatter_xy
 
-SUBROUTINE Apply_V( dfft, f, v, ibatch ) 
+SUBROUTINE Apply_V( dfft, f, v, batch_size ) 
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(INOUT) :: f( : )
-  REAL(DP), INTENT(IN) :: v( : )
-  INTEGER, INTENT(IN)  :: ibatch
+  COMPLEX(DP), INTENT(INOUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * )
+  REAL(DP), INTENT(IN) :: v( * )
+  INTEGER, INTENT(IN)  :: batch_size
 
-  INTEGER :: j
+  INTEGER :: j, ibatch
 
   INTEGER(INT64) :: time(2)
 
@@ -523,11 +523,15 @@ SUBROUTINE Apply_V( dfft, f, v, ibatch )
 !------------------------------------------------------
 !-----------Apply V Start------------------------------
 
-  !$omp parallel do private ( j )
-  DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
-     f( j )= - f( j ) * v( j )
+  !$omp parallel private( j, ibatch )
+  DO ibatch = 1, batch_size
+     !$omp do
+     DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
+        f( j, ibatch )= - f( j, ibatch ) * v( j )
+     END DO
+     !$omp end do
   END DO
-  !$omp end parallel do
+  !$omp end parallel
 
 !------------Apply V End-------------------------------
 !------------------------------------------------------
