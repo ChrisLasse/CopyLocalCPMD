@@ -52,7 +52,7 @@ CONTAINS
 
     dfft%nstate = crge%n
 !    dfft%rsactive = rsactive
-    dfft%rsactive = .true.
+!    dfft%rsactive = .true.
 
     dfft%nproc = parai%nproc
     dfft%mype  = parai%me
@@ -81,6 +81,7 @@ CONTAINS
     dfft%y_set_size_save = 1
     dfft%scatter_set_size_save = 1
     dfft%x_set_size_save = 1
+    dfft%apply_set_size_save = 1
        
     ALLOCATE( dfft%time_adding( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
@@ -88,7 +89,7 @@ CONTAINS
     ALLOCATE( dfft%averaged_times( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
-    ALLOCATE( dfft%auto_timings( 3 ), STAT=ierr )
+    ALLOCATE( dfft%auto_timings( 4 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
     dfft%auto_timings = 0

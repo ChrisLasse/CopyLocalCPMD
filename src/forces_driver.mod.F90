@@ -19,6 +19,7 @@ MODULE forces_driver
                                              fft_tune_max_it,&
                                              jgw
   USE fftprp_utils,                    ONLY: autotune_fftbatchsize
+  USE fftpw_base,                      ONLY: dfft
   USE fftpw_param,                     ONLY: DP
   USE fnonloc_utils,                   ONLY: fnonloc
   USE func,                            ONLY: func1
@@ -360,14 +361,14 @@ CONTAINS
              CALL SYSTEM_CLOCK( time(2) )
              CALL SYSTEM_CLOCK( count_rate = cr )
              total_time = REAL( time(2)-time(1) ) / REAL( cr )
-             IF (paral%io_parent) write(6,*) "TIME OF NEW VPSI", total_time
+             IF ( dfft%timings .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", total_time
              CALL autotune_pw_vpsi( total_time , tunning_finished )
           ELSE
              CALL SYSTEM_CLOCK( time(1) )
              CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,nstate)
              CALL SYSTEM_CLOCK( time(2) )
              CALL SYSTEM_CLOCK( count_rate = cr )
-             IF (paral%io_parent) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
+             IF ( dfft%timings .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
           END IF
        ELSE
           CALL vpsi(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,&

@@ -1817,11 +1817,11 @@ CONTAINS
     INTEGER, SAVE :: sendsize_rem, nthreads, nested_threads, nbnd, my_thread_num
     INTEGER, SAVE :: times_called = 0
     REAL(DP), SAVE, ALLOCATABLE :: final_time(:)
-    INTEGER :: i, j, iter, ierr, buffer_size, batch_size, ng, ngms
+    INTEGER :: i, j, iter, ierr, buffer_size, batch_size, ng, ngms, c, rem
   
     INTEGER :: counter( 2 , 3)
     LOGICAL :: finished( 2 , 3 )
-    INTEGER :: sendsize_save, next, last_buffer, ibatch, work_buffer, z_set_size, y_set_size, scatter_set_size
+    INTEGER :: sendsize_save, next, last_buffer, ibatch, work_buffer, z_set_size, y_set_size, scatter_set_size, apply_set_size
     LOGICAL :: finished_all, last_start, last_start_triggered
 
     INTEGER(INT64) :: time(20)
@@ -1840,6 +1840,7 @@ CONTAINS
     z_set_size = dfft%z_set_size_save
     y_set_size = dfft%y_set_size_save
     scatter_set_size = dfft%scatter_set_size_save
+    apply_set_size = dfft%apply_set_size_save
     ngms = dfft%ngw
 
     CALL SYSTEM_CLOCK( count_rate = cr )
@@ -1942,6 +1943,7 @@ CONTAINS
        rs_wave => batch_aux( : , 1:batch_size )
     END IF
  
+    c = 0
     CALL MPI_BARRIER(dfft%comm, ierr)
 
     CALL SYSTEM_CLOCK( time(1) )
@@ -1949,7 +1951,8 @@ CONTAINS
     !!! Initializiation finished
   
     !$omp parallel IF( nthreads .eq. 2 ) num_threads( nthreads ) &
-    !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, work_buffer, finished, z_set_size, y_set_size, scatter_set_size ) &
+    !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, &
+    !$             work_buffer, finished, z_set_size, y_set_size, scatter_set_size, apply_set_size ) &
     !$omp proc_bind( close )
     
     do_calc = .false.
@@ -1958,6 +1961,7 @@ CONTAINS
     z_set_size = dfft%z_set_size_save
     y_set_size = dfft%y_set_size_save
     scatter_set_size = dfft%scatter_set_size_save
+    apply_set_size = dfft%apply_set_size_save
     next = -1
     counter = 0
     finished = .false.
@@ -1986,12 +1990,16 @@ CONTAINS
     ENDIF
    
     DO WHILE( .not. finished_all )
-  
-       next = mod( next, buffer_size ) + 1
-       IF( next .eq. 0 ) THEN
-          work_buffer = 1
-       ELSE
-          work_buffer = dfft%buffer_sequence( next )
+ 
+       IF( dfft%mype .eq. 0 .and. do_calc ) c = c + 1
+
+       IF( .not. dfft%rsactive .or. first_step( work_buffer ) .or. work_buffer .eq. 0 ) THEN 
+          next = mod( next, buffer_size ) + 1
+          IF( next .eq. 0 ) THEN
+             work_buffer = 1
+          ELSE
+             work_buffer = dfft%buffer_sequence( next )
+          END IF
        END IF
   
        IF( dfft%rem_size .ne. 0 .and. ( ( ( ( .not. dfft%rsactive .and. first_step( work_buffer ) ) .or. ( dfft%rsactive .and. .not. first_step(work_buffer) ) ) .and. last_buffer .eq. 0 .and. &
@@ -2004,6 +2012,7 @@ CONTAINS
           IF( z_set_size .gt. (batch_size+1)/2 ) z_set_size = batch_size
           IF( y_set_size .gt. (batch_size+1)/2 ) y_set_size = batch_size
           IF( scatter_set_size .gt. (batch_size+1)/2 ) scatter_set_size = batch_size
+          IF( apply_set_size .gt. (batch_size+1)/2 ) apply_set_size = batch_size
           IF( do_com  ) dfft%sendsize = sendsize_rem
           IF( do_calc ) dfft%rem = .true.
        END IF
@@ -2105,7 +2114,7 @@ CONTAINS
                    CALL invfft_pwbatch( dfft, 3, batch_size, y_set_size, scatter_set_size, 0, counter( 1, 2 ), work_buffer, comm_recv, rs_wave )
                 END IF
  
-                CALL Apply_V( dfft, rs_wave, v, batch_size )
+                CALL Apply_V( dfft, rs_wave, v, batch_size, apply_set_size )
                 CALL SYSTEM_CLOCK( time(15) )
                 dfft%time_adding( 20 ) = dfft%time_adding( 20 ) + ( time(15) - time(14) )
   
@@ -2155,6 +2164,7 @@ CONTAINS
           z_set_size = dfft%z_set_size_save
           y_set_size = dfft%y_set_size_save
           scatter_set_size = dfft%scatter_set_size_save
+          apply_set_size = dfft%apply_set_size_save
           IF( do_com  ) dfft%sendsize = sendsize_save
           IF( do_calc ) dfft%rem = .false.
        END IF
@@ -2174,11 +2184,18 @@ CONTAINS
     CALL SYSTEM_CLOCK( time(4) )
     dfft%time_adding( 98 ) = time(4) - time(1)
 
+    IF( dfft%rem_size .eq. 0 ) THEN
+       rem = 0
+    ELSE
+       rem = 1
+    END IF
+!    IF( dfft%mype .eq. 0 ) write(6,*) "LOOP EXECUTED" , c , (((c-1)/2)-rem)*dfft%batch_size_save+dfft%rem_size, ((nbnd/dfft%batch_size_save)+rem)*2+buffer_size
+
     DO i = 1, 29
        timer( i ) = REAL( dfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
     ENDDO
 
-    IF( dfft%mype .eq. 0 .and. .true. ) THEN
+    IF( dfft%mype .eq. 0 .and. dfft%timings ) THEN
 
           WRITE(6,*)" "
           WRITE(6,*)"Some extra VPSI times"
@@ -2239,7 +2256,7 @@ CONTAINS
 
     END IF
 
-    IF( .false. ) THEN
+    IF( dfft%timings2 ) THEN
 
        WRITE(6,*)" "
        WRITE(6,*)"Some extra VPSI times"
