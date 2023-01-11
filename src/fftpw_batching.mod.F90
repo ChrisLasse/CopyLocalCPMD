@@ -507,31 +507,55 @@ SUBROUTINE fft_scatter_xy ( dfft, f_in, f_aux, scatter_group_size, isgn )
 
 END SUBROUTINE fft_scatter_xy
 
-SUBROUTINE Apply_V( dfft, f, v, batch_size ) 
+SUBROUTINE Apply_V( dfft, f, v, batch_size, apply_set_size ) 
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   COMPLEX(DP), INTENT(INOUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * )
   REAL(DP), INTENT(IN) :: v( * )
-  INTEGER, INTENT(IN)  :: batch_size
+  INTEGER, INTENT(IN)  :: batch_size, apply_set_size
 
-  INTEGER :: j, ibatch
+  INTEGER :: apply_group_size
+  INTEGER :: j, igroup, iset
 
+  INTEGER(INT64) :: auto_time(2)
   INTEGER(INT64) :: time(2)
 
   CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !-----------Apply V Start------------------------------
 
-  !$omp parallel private( j, ibatch )
-  DO ibatch = 1, batch_size
-     !$omp do
-     DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
-        f( j, ibatch )= - f( j, ibatch ) * v( j )
+  CALL SYSTEM_CLOCK( auto_time(1) )
+
+  DO iset = 1, apply_set_size
+
+     !Too slow? lets wait and see!
+     IF( iset .ne. apply_set_size .or. iset .eq. 1 .or. apply_group_size * apply_set_size .eq. batch_size ) THEN
+        IF( mod( batch_size, apply_set_size ) .eq. 0 ) THEN
+           apply_group_size = batch_size / apply_set_size
+        ELSE
+           apply_group_size = batch_size / apply_set_size + 1
+        ENDIF
+        dfft%apply_group_size_save = apply_group_size
+     ELSE
+        apply_group_size = batch_size - (apply_set_size-1) * apply_group_size
+     END IF
+
+     !$omp parallel private( j, igroup )
+     DO igroup = 1, apply_group_size
+        !$omp do
+        DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
+           f( j, igroup+(iset-1)*dfft%apply_group_size_save )= - f( j, igroup+(iset-1)*dfft%apply_group_size_save ) * v( j )
+        END DO
+        !$omp end do
      END DO
-     !$omp end do
-  END DO
-  !$omp end parallel
+     !$omp end parallel
+
+  ENDDO
+
+  CALL SYSTEM_CLOCK( auto_time(2) )
+  dfft%auto_timings(4) = dfft%auto_timings(4) + ( auto_time(2) - auto_time(1) )
+
 
 !------------Apply V End-------------------------------
 !------------------------------------------------------

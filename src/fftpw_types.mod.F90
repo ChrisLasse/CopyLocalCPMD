@@ -130,9 +130,11 @@ MODULE fftpw_types
     INTEGER :: sendsize
     INTEGER :: max_nbnd
     LOGICAL :: uneven = .false.
-    LOGICAL :: rsactive = .false.
+    LOGICAL :: rsactive = .true.
     LOGICAL :: singl = .false.
     LOGICAL :: make_first = .true.
+    LOGICAL :: timings = .false.
+    LOGICAL :: timings2 = .false.
 
     INTEGER :: z_group_size_save
     INTEGER :: z_set_size_save
@@ -142,6 +144,8 @@ MODULE fftpw_types
     INTEGER :: scatter_set_size_save
     INTEGER :: x_group_size_save
     INTEGER :: x_set_size_save
+    INTEGER :: apply_group_size_save
+    INTEGER :: apply_set_size_save
     INTEGER :: max_batch_size = 10
 
     COMPLEX(DP), ALLOCATABLE :: temp_psic(:,:)
