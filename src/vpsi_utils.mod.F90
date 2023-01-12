@@ -1966,6 +1966,7 @@ CONTAINS
     counter = 0
     finished = .false.
     last_buffer = 0
+    work_buffer = 0
     finished_all = .false.
     first_step = dfft%first_step
 

@@ -82,6 +82,8 @@ CONTAINS
     dfft%scatter_set_size_save = 1
     dfft%x_set_size_save = 1
     dfft%apply_set_size_save = 1
+
+    IF( dfft%rsactive ) dfft%max_buffer_size = 2
        
     ALLOCATE( dfft%time_adding( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
