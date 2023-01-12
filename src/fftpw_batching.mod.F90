@@ -31,11 +31,11 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, aux, ngms, z_group_size, ns, last )
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  INTEGER, INTENT(IN) :: ns(:)
+  INTEGER, INTENT(IN) :: ns( * )
   INTEGER, INTENT(IN) :: ngms, z_group_size
   LOGICAL, INTENT(IN) :: last
-  COMPLEX(DP), INTENT(IN)  :: psi (:,:)
-  COMPLEX(DP), INTENT(OUT)  :: aux ( dfft%nr3 , ns(dfft%mype+1)*z_group_size )
+  COMPLEX(DP), INTENT(IN)  :: psi ( ngms, * )
+  COMPLEX(DP), INTENT(OUT)  :: aux ( dfft%nr3 , * ) !ns(dfft%mype+1)*z_group_size )
 
   INTEGER :: j, i, iter
   INTEGER :: offset, offset2
@@ -130,9 +130,9 @@ SUBROUTINE invfft_pre_com( dfft, aux, comm_mem_send, comm_mem_recv, iset, batch_
 
   INTEGER, INTENT(IN) :: iset, batch_size, z_group_size
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  INTEGER, INTENT(IN) :: ns(:)
-  COMPLEX(DP), INTENT(INOUT) :: comm_mem_send( : ), comm_mem_recv( : )
-  COMPLEX(DP), INTENT(INOUT)  :: aux ( dfft%nr3 , ns(dfft%mype+1)*z_group_size )
+  INTEGER, INTENT(IN) :: ns( * )
+  COMPLEX(DP), INTENT(INOUT) :: comm_mem_send( * ), comm_mem_recv( * )
+  COMPLEX(DP), INTENT(INOUT)  :: aux ( dfft%nr3 , * ) !ns(dfft%mype+1)*z_group_size )
 
   INTEGER :: l, m, j, k, i
   INTEGER :: offset, kdest, ierr
@@ -272,12 +272,12 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, aux, map_acinv, map_acinv_r
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: y_set_size, scatter_set_size, x_set_size, batch_size
-  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
+  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(OUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1, batch_size )
-  INTEGER, INTENT(IN) :: nr1s(:)
-  COMPLEX(DP), INTENT(INOUT) :: aux( nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * batch_size )
-  INTEGER, INTENT(IN) :: map_acinv(:), map_acinv_rem(:)
+  COMPLEX(DP), INTENT(OUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1, * ) !batch_size )
+  INTEGER, INTENT(IN) :: nr1s( * )
+  COMPLEX(DP), INTENT(INOUT) :: aux( * ) !nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * batch_size )
+  INTEGER, INTENT(IN) :: map_acinv( * ), map_acinv_rem( * )
 
   INTEGER :: iset, y_group_size, scatter_group_size, x_group_size, ibatch
 
@@ -385,10 +385,10 @@ SUBROUTINE invfft_y_portion( dfft, comm_mem_recv, aux, map_acinv, map_acinv_rem,
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: y_group_size, iset
-  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
-  INTEGER, INTENT(IN) :: nr1s(:)
-  COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr2 , nr1s(dfft%mype2+1) * dfft%my_nr3p *  y_group_size )
-  INTEGER, INTENT(IN) :: map_acinv(:), map_acinv_rem(:)
+  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
+  INTEGER, INTENT(IN) :: nr1s( * )
+  COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr2 , * ) !nr1s(dfft%mype2+1) * dfft%my_nr3p *  y_group_size )
+  INTEGER, INTENT(IN) :: map_acinv( * ), map_acinv_rem( * )
 
   INTEGER :: i, k, offset, jter
 
@@ -468,8 +468,8 @@ SUBROUTINE fft_scatter_xy ( dfft, f_in, f_aux, scatter_group_size, isgn )
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: scatter_group_size, isgn
-  COMPLEX(DP), INTENT(INOUT) :: f_in  ( dfft%my_nr1p * dfft%my_nr3p * dfft%nr2, scatter_group_size )
-  COMPLEX(DP), INTENT(INOUT) :: f_aux ( : , : ) !dfft%my_nr3p * dfft%nr2 * dfft%nr1 )
+  COMPLEX(DP), INTENT(INOUT) :: f_in  ( dfft%my_nr1p * dfft%my_nr3p * dfft%nr2, * ) !scatter_group_size )
+  COMPLEX(DP), INTENT(INOUT) :: f_aux ( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !dfft%my_nr3p * dfft%nr2 * dfft%nr1 )
 
   INTEGER :: i, k, iter, igroup, j, offset
 
@@ -601,11 +601,11 @@ SUBROUTINE fwfft_pre_com( dfft, f, aux, comm_mem_send, comm_mem_recv, y_set_size
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: batch_size, y_set_size
-  COMPLEX(DP), INTENT(INOUT)  :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , batch_size )
-  COMPLEX(DP), INTENT(OUT) :: comm_mem_send( : )
-  COMPLEX(DP), INTENT(INOUT) :: comm_mem_recv( : )
-  INTEGER, INTENT(IN) :: nr1s(:), ns(:)
-  COMPLEX(DP), INTENT(INOUT) :: aux( nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * batch_size )
+  COMPLEX(DP), INTENT(INOUT)  :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !batch_size )
+  COMPLEX(DP), INTENT(OUT) :: comm_mem_send( * )
+  COMPLEX(DP), INTENT(INOUT) :: comm_mem_recv( * )
+  INTEGER, INTENT(IN) :: nr1s( * ), ns( * )
+  COMPLEX(DP), INTENT(INOUT) :: aux( * ) !nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * batch_size )
 
   INTEGER :: i, j, k, l, m
   INTEGER :: offset, ierr, ibatch, iset
@@ -692,11 +692,11 @@ SUBROUTINE fwfft_y_portion( dfft, comm_mem_send, comm_mem_recv, aux, map_pcfw, y
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: y_group_size, iset, batch_size
-  COMPLEX(DP), INTENT(INOUT)  :: comm_mem_send( : )
-  COMPLEX(DP), INTENT(INOUT)  :: comm_mem_recv( : )
-  INTEGER, INTENT(IN) :: nr1s(:), ns(:)
-  COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p , y_group_size )
-  INTEGER, INTENT(IN) :: map_pcfw(:)
+  COMPLEX(DP), INTENT(INOUT)  :: comm_mem_send( * )
+  COMPLEX(DP), INTENT(INOUT)  :: comm_mem_recv( * )
+  INTEGER, INTENT(IN) :: nr1s( * ), ns( * )
+  COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p , * ) !y_group_size )
+  INTEGER, INTENT(IN) :: map_pcfw( * )
 
   INTEGER :: l, m, i, offset, j, k, igroup, jter, offset2, offset3
 
@@ -807,10 +807,10 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, aux, iset, batch_size, z_group_
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: iset, batch_size, z_group_size
-  INTEGER, INTENT(IN) :: ns(:)
+  INTEGER, INTENT(IN) :: ns( * )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
-  COMPLEX(DP), INTENT(INOUT)  :: aux ( dfft%nr3 , ns(dfft%mype+1)*z_group_size )
+  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
+  COMPLEX(DP), INTENT(INOUT)  :: aux ( dfft%nr3 , * ) !ns(dfft%mype+1)*z_group_size )
 
   INTEGER :: j, l, k, i
   INTEGER :: offset, kfrom, ierr
@@ -865,10 +865,10 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, aux, hpsi, ngms, z_group_size, last, n
 
   INTEGER, INTENT(IN) :: z_group_size, ngms
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  INTEGER, INTENT(IN) :: ns(:)
-  COMPLEX(DP), INTENT(IN), OPTIONAL :: psi(:,:)
-  COMPLEX(DP), INTENT(INOUT) :: hpsi(:,:)
-  COMPLEX(DP), INTENT(IN)  :: aux ( dfft%nr3 * ns(dfft%mype+1), z_group_size )
+  INTEGER, INTENT(IN) :: ns( * )
+  COMPLEX(DP), INTENT(IN), OPTIONAL :: psi( ngms , * )
+  COMPLEX(DP), INTENT(INOUT) :: hpsi( ngms , * )
+  COMPLEX(DP), INTENT(IN)  :: aux ( dfft%nr3 * ns(dfft%mype+1), * ) !z_group_size )
   LOGICAL, INTENT(IN) :: last
 
   COMPLEX(DP) :: fp, fm
