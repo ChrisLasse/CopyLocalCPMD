@@ -120,7 +120,6 @@ MODULE fftpw_types
     INTEGER :: nstate = 0
 
     INTEGER :: what = 0
-    LOGICAL :: overlapp = .true.
     LOGICAL :: tunned = .true.
     INTEGER :: rem_size = 0
     INTEGER :: batch_size_save  = 1
@@ -130,9 +129,11 @@ MODULE fftpw_types
     INTEGER :: sendsize
     INTEGER :: max_nbnd
     LOGICAL :: uneven = .false.
-    LOGICAL :: rsactive = .true.
     LOGICAL :: singl = .false.
     LOGICAL :: make_first = .true.
+
+    LOGICAL :: overlapp = .true.
+    LOGICAL :: rsactive = .true.
     LOGICAL :: timings = .false.
     LOGICAL :: timings2 = .false.
 
