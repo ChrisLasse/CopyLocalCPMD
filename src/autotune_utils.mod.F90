@@ -88,7 +88,7 @@ CONTAINS
   next_batch = .false.
 
   IF( first ) THEN 
-     mbuff = 3
+     mbuff = dfft%max_buffer_size
      mbatch = dfft%max_batch_size
      repeats = 5
      set_repeats = 3

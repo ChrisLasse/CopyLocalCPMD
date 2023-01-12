@@ -120,7 +120,7 @@ MODULE fftpw_types
     INTEGER :: nstate = 0
 
     INTEGER :: what = 0
-    LOGICAL :: overlapp = .false.
+    LOGICAL :: overlapp = .true.
     LOGICAL :: tunned = .true.
     INTEGER :: rem_size = 0
     INTEGER :: batch_size_save  = 1
@@ -147,6 +147,7 @@ MODULE fftpw_types
     INTEGER :: apply_group_size_save
     INTEGER :: apply_set_size_save
     INTEGER :: max_batch_size = 10
+    INTEGER :: max_buffer_size = 3
 
     COMPLEX(DP), ALLOCATABLE :: temp_psic(:,:)
     COMPLEX(DP), ALLOCATABLE :: temp_aux(:,:)
