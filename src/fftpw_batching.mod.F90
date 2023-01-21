@@ -212,15 +212,15 @@ SUBROUTINE invfft_pre_com( dfft, aux, comm_mem_send, comm_mem_recv, iset, batch_
 
 END SUBROUTINE invfft_pre_com 
 
-SUBROUTINE fft_com( dfft, comm_mem_send, comm_mem_recv, sendsize, intra_me, inter_node_comm, nodes_numb, inter_me, non_blocking )
+SUBROUTINE fft_com( dfft, comm_mem_send, comm_mem_recv, sendsize, intra_me, inter_node_comm, nodes_numb, inter_me, non_blocking, work_buffer )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN)                            :: sendsize, intra_me, nodes_numb, inter_me
+  INTEGER, INTENT(IN)                            :: sendsize, intra_me, nodes_numb, inter_me, work_buffer
   TYPE(MPI_COMM), INTENT(IN)                     :: inter_node_comm
   LOGICAL, INTENT(IN)                            :: non_blocking
-  TYPE(PW_fft_type_descriptor), INTENT(IN)       :: dfft
-  COMPLEX(DP), INTENT(IN)                        :: comm_mem_send( * )
-  COMPLEX(DP), INTENT(INOUT)                     :: comm_mem_recv( * )
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT)       :: dfft
+  COMPLEX(DP), INTENT(IN)                        :: comm_mem_send( : )
+  COMPLEX(DP), INTENT(INOUT)                     :: comm_mem_recv( : )
 
   INTEGER :: ierr, i, f
   TYPE( MPI_REQUEST ) :: handle( (nodes_numb-1)*2 )
@@ -237,26 +237,50 @@ SUBROUTINE fft_com( dfft, comm_mem_send, comm_mem_recv, sendsize, intra_me, inte
  
      ELSE
 
-        f = 0
-        DO i = 1, nodes_numb !SENDING
+        IF( work_buffer .lt. 0 .or. .false. ) THEN
 
-           IF( i-1 .eq. inter_me ) CYCLE
-           f = f + 1
-           CALL MPI_ISEND( comm_mem_send( 1 + (i-1)*sendsize ), sendsize, MPI_DOUBLE_COMPLEX, i-1, &
-                           inter_me, inter_node_comm, handle( f ), ierr )
+           f = 0
+           DO i = 1, nodes_numb !SENDING
 
-        END DO
+              IF( i-1 .eq. inter_me ) CYCLE
+              f = f + 1
+              CALL MPI_ISEND( comm_mem_send( 1 + (i-1)*sendsize ), sendsize, MPI_DOUBLE_COMPLEX, i-1, &
+                              inter_me, inter_node_comm, handle( f ), ierr )
 
-        DO i = 1, nodes_numb !RECEIVING
+           END DO
 
-           IF( i-1 .eq. inter_me ) CYCLE
-           f = f + 1
-           CALL MPI_IRECV( comm_mem_recv( 1 + (i-1)*sendsize ), sendsize, MPI_DOUBLE_COMPLEX, i-1, &
-                           MPI_ANY_TAG, inter_node_comm, handle( f ), ierr )
+           DO i = 1, nodes_numb !RECEIVING
 
-        END DO
+              IF( i-1 .eq. inter_me ) CYCLE
+              f = f + 1
+              CALL MPI_IRECV( comm_mem_recv( 1 + (i-1)*sendsize ), sendsize, MPI_DOUBLE_COMPLEX, i-1, &
+                              MPI_ANY_TAG, inter_node_comm, handle( f ), ierr )
 
-        CALL MPI_WAITALL( (nodes_numb-1)*2, handle, MPI_STATUSES_IGNORE, ierr )
+           END DO
+
+           CALL MPI_WAITALL( (nodes_numb-1)*2, handle, MPI_STATUSES_IGNORE, ierr )
+
+        ELSE
+
+           IF( sendsize .eq. dfft%sendsize_save ) THEN
+
+              CALL MPI_STARTALL( nodes_numb-1, dfft%send_handle(:,work_buffer) )
+              CALL MPI_STARTALL( nodes_numb-1, dfft%recv_handle(:,work_buffer) )
+
+              CALL MPI_WAITALL( nodes_numb-1, dfft%send_handle(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
+              CALL MPI_WAITALL( nodes_numb-1, dfft%recv_handle(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
+  
+           ELSE
+
+              CALL MPI_STARTALL( nodes_numb-1, dfft%send_handle_rem(:,work_buffer) )
+              CALL MPI_STARTALL( nodes_numb-1, dfft%recv_handle_rem(:,work_buffer) )
+
+              CALL MPI_WAITALL( nodes_numb-1, dfft%send_handle_rem(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
+              CALL MPI_WAITALL( nodes_numb-1, dfft%recv_handle_rem(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
+
+           END IF
+
+        END IF
 
      END IF
 

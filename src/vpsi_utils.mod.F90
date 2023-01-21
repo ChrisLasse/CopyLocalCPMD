@@ -81,7 +81,8 @@ MODULE vpsi_utils
   USE fftpw_batching,                  ONLY: Apply_v
   USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
                                              Set_Req_Vals,&
-                                             MapVals_CleanUp 
+                                             MapVals_CleanUp,&
+                                             Prep_fft_com 
   USE fftpw_param,                     ONLY: DP
   USE fftpw_types,                     ONLY: create_shared_memory_window_2d,&
                                              create_shared_locks_2d,&
@@ -1821,7 +1822,7 @@ CONTAINS
   
     INTEGER :: counter( 2 , 3)
     LOGICAL :: finished( 2 , 3 )
-    INTEGER :: sendsize_save, next, last_buffer, ibatch, work_buffer, z_set_size, y_set_size, scatter_set_size, apply_set_size
+    INTEGER :: next, last_buffer, ibatch, work_buffer, z_set_size, y_set_size, scatter_set_size, apply_set_size
     LOGICAL :: finished_all, last_start, last_start_triggered
 
     INTEGER(INT64) :: time(20)
@@ -1887,11 +1888,16 @@ CONTAINS
        CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
   
        dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
+       sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
 !       indi_size = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
      
        CALL create_shared_memory_window_2d( comm_send, 1, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
        CALL create_shared_memory_window_2d( comm_recv, 2, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
-     
+    
+       IF( dfft%non_blocking .and. dfft%my_node_rank .eq. 0 ) CALL Prep_fft_com( comm_send, comm_recv, dfft%sendsize, sendsize_rem, &
+                                                                                 dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, buffer_size, &
+                                                                                 dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem )
+ 
        CALL create_shared_locks_2d( locks_calc_inv, 20, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
        CALL create_shared_locks_2d( locks_calc_fw,  21, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
        CALL create_shared_locks_1d( locks_com_inv,  50, dfft, ( nbnd_source / batch_size ) + 1 )
@@ -1914,8 +1920,7 @@ CONTAINS
   
     END IF
   
-    sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
-    sendsize_save = dfft%sendsize
+    dfft%sendsize_save = dfft%sendsize
     last_start = .true.
     last_start_triggered = .false.
   
@@ -2166,7 +2171,7 @@ CONTAINS
           y_set_size = dfft%y_set_size_save
           scatter_set_size = dfft%scatter_set_size_save
           apply_set_size = dfft%apply_set_size_save
-          IF( do_com  ) dfft%sendsize = sendsize_save
+          IF( do_com  ) dfft%sendsize = dfft%sendsize_save
           IF( do_calc ) dfft%rem = .false.
        END IF
    
