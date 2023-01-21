@@ -355,7 +355,7 @@ CONTAINS
        IF(batch_fft.AND..NOT.tkpts%tkpnt)THEN
 !          CALL vpsi_batchfft(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
 !               clsd%nlsd,redist_c2)
-          IF( .true. .and. .not. tunning_finished ) THEN
+          IF( .true. .and. .not. tunning_finished .and. dfft%tunning ) THEN
              CALL SYSTEM_CLOCK( time(1) )
              CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,nstate)
              CALL SYSTEM_CLOCK( time(2) )

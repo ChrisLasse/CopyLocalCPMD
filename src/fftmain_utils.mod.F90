@@ -1042,7 +1042,7 @@ CONTAINS
           dfft%time_adding( 23 ) = dfft%time_adding( 23 ) + ( time(5) - time(4) )
   
           CALL fft_com( dfft, f_in(:,work_buffer), f_inout1(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
-                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
           CALL SYSTEM_CLOCK( time(16) )
           dfft%time_adding( 28 ) = dfft%time_adding( 28 ) + ( time(16) - time(5) )
   
@@ -1108,7 +1108,7 @@ CONTAINS
           dfft%time_adding( 26 ) = dfft%time_adding( 26 ) + ( time(11) - time(10) )
      
           CALL fft_com( dfft, f_in(:,work_buffer), f_inout1(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
-                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
           CALL SYSTEM_CLOCK( time(17) )
           dfft%time_adding( 29 ) = dfft%time_adding( 29 ) + ( time(17) - time(11) )
   
@@ -1239,7 +1239,7 @@ CALL MPI_BARRIER( dfft%comm, ierr )
 CALL MPI_BARRIER( dfft%comm, ierr )
           CALL MPI_BARRIER( dfft%node_comm, ierr )
           CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
-                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, -1 )
           CALL MPI_BARRIER( dfft%node_comm, ierr )
 CALL MPI_BARRIER( dfft%comm, ierr )
        END IF
@@ -1263,7 +1263,7 @@ CALL MPI_BARRIER( dfft%comm, ierr )
        ELSE 
           CALL MPI_BARRIER( dfft%node_comm, ierr )
           CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
-                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
+                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, -1 )
           CALL MPI_BARRIER( dfft%node_comm, ierr )
        END IF
 CALL MPI_BARRIER( dfft%comm, ierr ) 

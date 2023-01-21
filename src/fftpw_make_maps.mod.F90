@@ -11,7 +11,10 @@ MODULE fftpw_make_maps
 
   PRIVATE
   
-  PUBLIC :: Prep_Copy_Maps, Set_Req_Vals, MapVals_CleanUp
+  PUBLIC :: Prep_Copy_Maps
+  PUBLIC :: Set_Req_Vals
+  PUBLIC :: MapVals_CleanUp
+  PUBLIC :: Prep_fft_com
 
 CONTAINS
 
@@ -497,6 +500,87 @@ SUBROUTINE MapVals_CleanUp( dfft )
   IF( ALLOCATED( dfft%map_scatter_fw ) )   DEALLOCATE( dfft%map_scatter_fw )
 
 END SUBROUTINE MapVals_CleanUp
+
+SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, inter_node_comm, nodes_numb, inter_me, buffer_size, send_handle, recv_handle, send_handle_rem, recv_handle_rem )
+  IMPLICIT NONE
+
+  INTEGER, INTENT(IN)                            :: sendsize, sendsize_rem, nodes_numb, inter_me, buffer_size
+  TYPE(MPI_COMM), INTENT(IN)                     :: inter_node_comm
+  COMPLEX(DP), INTENT(IN)                        :: comm_send( : , : )
+  COMPLEX(DP), INTENT(INOUT)                     :: comm_recv( : , : )
+  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)               :: send_handle( : , : )
+  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)               :: recv_handle( : , : )
+  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)               :: send_handle_rem( : , : )
+  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)               :: recv_handle_rem( : , : )
+
+  INTEGER, SAVE :: sendsize_save = 0
+  LOGICAL, SAVE :: first = .true.
+  INTEGER :: ierr, i, f, j, k
+
+  IF( first ) THEN
+     first = .false.
+  ELSE
+     DO i = 1, buffer_size
+        DO j = 1, nodes_numb
+!           IF( send_handle( j , i ) .ne. 0 )     CALL MPI_REQUEST_FREE( send_handle( j , i ) )
+!           IF( recv_handle( j , i ) .ne. 0 )     CALL MPI_REQUEST_FREE( recv_handle( j , i ) )
+!           IF( send_handle_rem( j , i ) .ne. 0 ) CALL MPI_REQUEST_FREE( send_handle_rem( j , i ) )
+!           IF( recv_handle_rem( j , i ) .ne. 0 ) CALL MPI_REQUEST_FREE( recv_handle_rem( j , i ) )
+           CALL MPI_REQUEST_FREE( send_handle( j , i ) )
+           CALL MPI_REQUEST_FREE( recv_handle( j , i ) )
+           CALL MPI_REQUEST_FREE( send_handle_rem( j , i ) )
+           CALL MPI_REQUEST_FREE( recv_handle_rem( j , i ) )
+        ENDDO
+     ENDDO
+  END IF
+
+  IF( ALLOCATED( send_handle ) )       DEALLOCATE( send_handle )
+  IF( ALLOCATED( recv_handle ) )       DEALLOCATE( recv_handle )
+  IF( ALLOCATED( send_handle_rem ) )   DEALLOCATE( send_handle_rem )
+  IF( ALLOCATED( recv_handle_rem ) )   DEALLOCATE( recv_handle_rem )
+
+  ALLOCATE( send_handle    ( nodes_numb-1, buffer_size ) )
+  ALLOCATE( recv_handle    ( nodes_numb-1, buffer_size ) )
+  ALLOCATE( send_handle_rem( nodes_numb-1, buffer_size ) )
+  ALLOCATE( recv_handle_rem( nodes_numb-1, buffer_size ) )
+
+  DO k = 1, buffer_size !INITIALIZE SENDING AND RECEIVING
+
+     f = 0
+     DO i = 1, nodes_numb
+     
+        IF( i-1 .eq. inter_me ) CYCLE
+        f = f + 1
+        CALL MPI_SEND_INIT( comm_send( 1 + (i-1)*sendsize, k ), sendsize, MPI_DOUBLE_COMPLEX, i-1, &
+                        inter_me, inter_node_comm, send_handle( f , k ), ierr )
+        CALL MPI_RECV_INIT( comm_recv( 1 + (i-1)*sendsize, k ), sendsize, MPI_DOUBLE_COMPLEX, i-1, &
+                        MPI_ANY_TAG, inter_node_comm, recv_handle( f , k ), ierr )
+     
+     ENDDO
+
+  ENDDO
+
+  IF( sendsize_rem .ne. 0 ) THEN
+
+     DO k = 1, buffer_size !INITIALIZE SENDING AND RECEIVING
+   
+        f = 0
+        DO i = 1, nodes_numb
+        
+           IF( i-1 .eq. inter_me ) CYCLE
+           f = f + 1
+           CALL MPI_SEND_INIT( comm_send( 1 + (i-1)*sendsize_rem, k ), sendsize_rem, MPI_DOUBLE_COMPLEX, i-1, &
+                           inter_me, inter_node_comm, send_handle_rem( f , k ), ierr )
+           CALL MPI_RECV_INIT( comm_recv( 1 + (i-1)*sendsize_rem, k ), sendsize_rem, MPI_DOUBLE_COMPLEX, i-1, &
+                           MPI_ANY_TAG, inter_node_comm, recv_handle_rem( f , k ), ierr )
+        
+        ENDDO
+   
+     ENDDO
+
+  END IF
+
+END SUBROUTINE Prep_fft_com
 
 !=----------------------------------------------------------------------=
 END MODULE fftpw_make_maps

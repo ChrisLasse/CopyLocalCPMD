@@ -120,22 +120,28 @@ MODULE fftpw_types
     INTEGER :: nstate = 0
 
     INTEGER :: what = 0
-    LOGICAL :: tunned = .true.
     INTEGER :: rem_size = 0
     INTEGER :: batch_size_save  = 1
     INTEGER :: buffer_size_save = 1
     INTEGER :: num_buff = 1
     INTEGER :: ngms
     INTEGER :: sendsize
+    INTEGER :: sendsize_save
     INTEGER :: max_nbnd
     LOGICAL :: uneven = .false.
     LOGICAL :: singl = .false.
     LOGICAL :: make_first = .true.
 
+    LOGICAL :: tunning = .true.
     LOGICAL :: overlapp = .true.
     LOGICAL :: rsactive = .true.
     LOGICAL :: timings = .false.
     LOGICAL :: timings2 = .false.
+
+    TYPE( MPI_REQUEST ), ALLOCATABLE :: send_handle(:,:)
+    TYPE( MPI_REQUEST ), ALLOCATABLE :: recv_handle(:,:)
+    TYPE( MPI_REQUEST ), ALLOCATABLE :: send_handle_rem(:,:)
+    TYPE( MPI_REQUEST ), ALLOCATABLE :: recv_handle_rem(:,:)
 
     INTEGER :: z_group_size_save
     INTEGER :: z_set_size_save
