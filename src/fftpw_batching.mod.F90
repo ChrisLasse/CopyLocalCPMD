@@ -219,8 +219,8 @@ SUBROUTINE fft_com( dfft, comm_mem_send, comm_mem_recv, sendsize, intra_me, inte
   TYPE(MPI_COMM), INTENT(IN)                     :: inter_node_comm
   LOGICAL, INTENT(IN)                            :: non_blocking
   TYPE(PW_fft_type_descriptor), INTENT(INOUT)       :: dfft
-  COMPLEX(DP), INTENT(IN)                        :: comm_mem_send( : )
-  COMPLEX(DP), INTENT(INOUT)                     :: comm_mem_recv( : )
+  COMPLEX(DP), INTENT(IN)                        :: comm_mem_send( * )
+  COMPLEX(DP), INTENT(INOUT)                     :: comm_mem_recv( * )
 
   INTEGER :: ierr, i, f
   TYPE( MPI_REQUEST ) :: handle( (nodes_numb-1)*2 )
@@ -891,7 +891,7 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, aux, hpsi, ngms, z_group_size, last, n
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: ns( * )
   COMPLEX(DP), INTENT(IN), OPTIONAL :: psi( ngms , * )
-  COMPLEX(DP), INTENT(INOUT) :: hpsi( ngms , * )
+  COMPLEX(DP), INTENT(INOUT) :: hpsi( : , : )
   COMPLEX(DP), INTENT(IN)  :: aux ( dfft%nr3 * ns(dfft%mype+1), * ) !z_group_size )
   LOGICAL, INTENT(IN) :: last
 
