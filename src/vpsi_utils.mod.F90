@@ -1999,13 +1999,22 @@ CONTAINS
  
        IF( dfft%mype .eq. 0 .and. do_calc ) c = c + 1
 
-       IF( .not. dfft%rsactive .or. first_step( work_buffer ) .or. work_buffer .eq. 0 ) THEN 
+       IF( work_buffer .eq. 0 ) THEN
           next = mod( next, buffer_size ) + 1
           IF( next .eq. 0 ) THEN
              work_buffer = 1
           ELSE
              work_buffer = dfft%buffer_sequence( next )
           END IF
+       ELSE IF( .not. dfft%rsactive .or. first_step( work_buffer ) ) THEN 
+          next = mod( next, buffer_size ) + 1
+          IF( next .eq. 0 ) THEN
+             work_buffer = 1
+          ELSE
+             work_buffer = dfft%buffer_sequence( next )
+          END IF
+       ELSE
+          CONTINUE
        END IF
   
        IF( dfft%rem_size .ne. 0 .and. ( ( ( ( .not. dfft%rsactive .and. first_step( work_buffer ) ) .or. ( dfft%rsactive .and. .not. first_step(work_buffer) ) ) .and. last_buffer .eq. 0 .and. &
