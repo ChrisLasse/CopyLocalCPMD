@@ -34,7 +34,7 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, aux, ngms, z_group_size, ns, last )
   INTEGER, INTENT(IN) :: ns( * )
   INTEGER, INTENT(IN) :: ngms, z_group_size
   LOGICAL, INTENT(IN) :: last
-  COMPLEX(DP), INTENT(IN)  :: psi ( ngms, * )
+  COMPLEX(DP), INTENT(IN)  :: psi ( : , : )
   COMPLEX(DP), INTENT(OUT)  :: aux ( dfft%nr3 , * ) !ns(dfft%mype+1)*z_group_size )
 
   INTEGER :: j, i, iter
@@ -890,7 +890,7 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, aux, hpsi, ngms, z_group_size, last, n
   INTEGER, INTENT(IN) :: z_group_size, ngms
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: ns( * )
-  COMPLEX(DP), INTENT(IN), OPTIONAL :: psi( ngms , * )
+  COMPLEX(DP), INTENT(IN), OPTIONAL :: psi( : , : )
   COMPLEX(DP), INTENT(INOUT) :: hpsi( : , : )
   COMPLEX(DP), INTENT(IN)  :: aux ( dfft%nr3 * ns(dfft%mype+1), * ) !z_group_size )
   LOGICAL, INTENT(IN) :: last
