@@ -516,12 +516,14 @@ SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, inter_nod
   INTEGER, SAVE :: sendsize_save = 0
   LOGICAL, SAVE :: first = .true.
   INTEGER :: ierr, i, f, j, k
+  INTEGER, SAVE :: buffer_size_save
 
   IF( first ) THEN
      first = .false.
+     buffer_size_save = buffer_size
   ELSE
-     DO i = 1, buffer_size
-        DO j = 1, nodes_numb
+     DO i = 1, buffer_size_save
+        DO j = 1, nodes_numb-1
 !           IF( send_handle( j , i ) .ne. 0 )     CALL MPI_REQUEST_FREE( send_handle( j , i ) )
 !           IF( recv_handle( j , i ) .ne. 0 )     CALL MPI_REQUEST_FREE( recv_handle( j , i ) )
 !           IF( send_handle_rem( j , i ) .ne. 0 ) CALL MPI_REQUEST_FREE( send_handle_rem( j , i ) )
@@ -532,6 +534,7 @@ SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, inter_nod
            CALL MPI_REQUEST_FREE( recv_handle_rem( j , i ) )
         ENDDO
      ENDDO
+     buffer_size_save = buffer_size
   END IF
 
   IF( ALLOCATED( send_handle ) )       DEALLOCATE( send_handle )
