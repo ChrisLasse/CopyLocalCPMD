@@ -75,12 +75,12 @@ CONTAINS
 
     CALL fft_type_init( dfft, which, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
 
-    dfft%batch_size_save = 1
+    dfft%batch_size_save = 3
     dfft%buffer_size_save = 1
-    dfft%z_set_size_save = 1
-    dfft%y_set_size_save = 1
+    dfft%z_set_size_save = 2
+    dfft%y_set_size_save = 2
     dfft%scatter_set_size_save = 1
-    dfft%x_set_size_save = 1
+    dfft%x_set_size_save = 2
     dfft%apply_set_size_save = 1
 
     IF( dfft%rsactive ) dfft%max_buffer_size = 2
@@ -95,6 +95,10 @@ CONTAINS
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
     dfft%auto_timings = 0
+    ALLOCATE( dfft%auto_4Stimings( 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    dfft%auto_4Stimings = 0
     ALLOCATE( dfft%nnr_all( dfft%nproc ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)

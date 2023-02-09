@@ -20,6 +20,7 @@ MODULE fftpw_types
 
     INTEGER(INT64), allocatable :: time_adding(:)
     INTEGER(INT64), allocatable :: auto_timings(:)
+    INTEGER(INT64), allocatable :: auto_4Stimings(:)
     INTEGER(INT64), allocatable :: averaged_times(:)
 
     INTEGER :: nr1    = 0  !
@@ -132,11 +133,12 @@ MODULE fftpw_types
     LOGICAL :: singl = .false.
     LOGICAL :: make_first = .true.
 
-    LOGICAL :: tunning = .true.
-    LOGICAL :: overlapp = .true.
-    LOGICAL :: rsactive = .true.
+    LOGICAL :: tunning = .false.
+    LOGICAL :: overlapp = .false.
+    LOGICAL :: rsactive = .false.
     LOGICAL :: timings = .false.
     LOGICAL :: timings2 = .false.
+    LOGICAL :: VPSI_4S = .true.
 
     TYPE( MPI_REQUEST ), ALLOCATABLE :: send_handle(:,:)
     TYPE( MPI_REQUEST ), ALLOCATABLE :: recv_handle(:,:)
@@ -160,6 +162,7 @@ MODULE fftpw_types
     COMPLEX(DP), ALLOCATABLE :: temp_aux(:,:)
     COMPLEX(DP), ALLOCATABLE :: aux(:)
     COMPLEX(DP), ALLOCATABLE :: aux2(:)
+    COMPLEX(DP), ALLOCATABLE :: aux_array(:,:)
     COMPLEX(DP), ALLOCATABLE :: wfn_keep(:,:)
     COMPLEX(DP), ALLOCATABLE :: bench_aux(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_calc_inv(:,:)

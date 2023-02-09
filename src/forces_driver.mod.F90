@@ -2,7 +2,8 @@
 
 MODULE forces_driver
   USE autotune_utils,                  ONLY: autotune,&
-                                             autotune_pw_vpsi
+                                             autotune_pw_vpsi,&
+                                             autotune_pw_4Svpsi
   USE benc,                            ONLY: ibench
   USE cp_grp_utils,                    ONLY: cp_grp_get_cp_rank,&
                                              cp_grp_get_sizes,&
@@ -362,7 +363,11 @@ CONTAINS
              CALL SYSTEM_CLOCK( count_rate = cr )
              total_time = REAL( time(2)-time(1) ) / REAL( cr )
              IF ( ( dfft%timings .or. dfft%timings2 ) .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", total_time
-             CALL autotune_pw_vpsi( total_time , tunning_finished )
+             IF( dfft%VPSI_4S ) THEN
+                CALL autotune_pw_4Svpsi( total_time , tunning_finished )
+             ELSE
+                CALL autotune_pw_vpsi( total_time , tunning_finished )
+             END IF
           ELSE
              CALL SYSTEM_CLOCK( time(1) )
              CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,nstate)
