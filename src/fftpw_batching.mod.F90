@@ -24,6 +24,11 @@ MODULE fftpw_batching
   PUBLIC :: fwfft_pre_com
   PUBLIC :: fwfft_after_com
   PUBLIC :: Accumulate_Psi_overlapp
+  PUBLIC :: invfft_y_section
+  PUBLIC :: invfft_x_section
+  PUBLIC :: Apply_V_4S
+  PUBLIC :: fwfft_x_section
+  PUBLIC :: fwfft_y_section
 
 CONTAINS
 
@@ -934,6 +939,351 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, aux, hpsi, ngms, z_group_size, last, n
   dfft%counter(7) = dfft%counter(7) + 1
 
 END SUBROUTINE Accumulate_Psi_overlapp
+
+SUBROUTINE invfft_y_section( dfft, comm_mem_recv, aux, aux2_r, map_acinv, map_acinv_rem, nr1s, y_group_size, yset )
+  IMPLICIT NONE
+
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN) :: y_group_size, yset
+  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
+  INTEGER, INTENT(IN) :: nr1s( * )
+  COMPLEX(DP), INTENT(INOUT) :: aux ( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !y_group_size
+  COMPLEX(DP), INTENT(INOUT) :: aux2_r( : , : )
+  INTEGER, INTENT(IN) :: map_acinv( * ), map_acinv_rem( * )
+
+  INTEGER :: i, k, offset, iter, igroup
+
+  INTEGER(INT64) :: time(3)
+
+  Call First_Part_y_section( aux2_r )
+
+  Call Second_Part_y_section( aux2_r )
+
+  CONTAINS
+
+    SUBROUTINE First_Part_y_section( aux2 )
+      
+      Implicit NONE
+      COMPLEX(DP), INTENT(INOUT) :: aux2( dfft%nr2 , * ) !nr1s(dfft%mype2+1) * dfft%my_nr3p *  y_group_size )
+
+
+      !  CALL SYSTEM_CLOCK( time(1) )
+      !------------------------------------------------------
+      !--------After-Com-Copy Start--------------------------
+      
+        !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
+        
+        IF( dfft%rem ) THEN
+      
+           !$omp parallel do private( i, iter, k, offset )
+           DO i = 1, dfft%my_nr1p * dfft%my_nr3p * y_group_size
+              iter = mod( i-1, dfft%my_nr1p ) + 1
+              offset = ( mod( i-1, dfft%my_nr1p * dfft%my_nr3p ) + ( ( (i-1) / ( dfft%my_nr1p * dfft%my_nr3p ) ) + (yset-1)*dfft%y_group_size_save ) * dfft%my_nr3p * dfft%my_nr1p ) * dfft%nr2
+              !omp simd
+              DO k = 1, dfft%zero_acinv_start( iter ) - 1
+                 aux2( k, i ) = comm_mem_recv( map_acinv_rem( offset + k ) )
+              END DO
+              !omp simd
+              DO k = dfft%zero_acinv_start( iter ), dfft%zero_acinv_end( iter )
+                 aux2( k, i ) = (0.0_DP,0.0_DP)
+              END DO
+              !omp simd
+              DO k = dfft%zero_acinv_end( iter ) + 1, dfft%nr2
+                 aux2( k, i ) = comm_mem_recv( map_acinv_rem( offset + k ) )
+              END DO
+           END DO
+           !$omp end parallel do
+      
+        ELSE
+      
+           !$omp parallel do private( i, iter, k, offset )
+           DO i = 1, dfft%my_nr1p * dfft%my_nr3p * y_group_size
+              iter = mod( i-1, dfft%my_nr1p ) + 1
+              offset = ( mod( i-1, dfft%my_nr1p * dfft%my_nr3p ) + ( ( (i-1) / ( dfft%my_nr1p * dfft%my_nr3p ) ) + (yset-1)*dfft%y_group_size_save ) * dfft%my_nr3p * dfft%my_nr1p ) * dfft%nr2
+              !omp simd
+              DO k = 1, dfft%zero_acinv_start( iter ) - 1
+                 aux2( k, i ) = comm_mem_recv( map_acinv( offset + k ) )
+              END DO
+              !omp simd
+              DO k = dfft%zero_acinv_start( iter ), dfft%zero_acinv_end( iter )
+                 aux2( k, i ) = (0.0_DP,0.0_DP)
+              END DO
+              !omp simd
+              DO k = dfft%zero_acinv_end( iter ) + 1, dfft%nr2
+                 aux2( k, i ) = comm_mem_recv( map_acinv( offset + k ) )
+              END DO
+           END DO
+           !$omp end parallel do
+      
+        END IF
+      
+        !CALL mpi_win_unlock_all( dfft%mpi_window( 2 ), ierr )
+      
+      !---------After-Com-Copy End---------------------------
+      !------------------------------------------------------
+      !  CALL SYSTEM_CLOCK( time(2) )
+      !------------------------------------------------------
+      !------------y-FFT Start-------------------------------
+      
+        CALL fft_1D( aux2, nr1s(dfft%mype2+1) * dfft%my_nr3p * y_group_size, dfft%nr2, 2 )
+      
+      !-------------y-FFT End--------------------------------
+      !------------------------------------------------------
+      !  CALL SYSTEM_CLOCK( time(3) )
+
+    END SUBROUTINE First_Part_y_section
+
+    SUBROUTINE Second_Part_y_section( aux2 )
+
+      IMPLICIT NONE
+      COMPLEX(DP), INTENT(INOUT) :: aux2  ( dfft%my_nr1p * dfft%my_nr3p * dfft%nr2, * ) !y_group_size
+
+      !------------------------------------------------------
+      !-------------yx-scatter-------------------------------
+      
+        !$omp parallel do private( i, k, offset, igroup )
+        DO i = 1, dfft%my_nr3p * dfft%my_nr2p * y_group_size
+           offset = mod( i-1, dfft%my_nr3p * dfft%my_nr2p ) * dfft%nr1
+           igroup = ( ( (i-1) / ( dfft%my_nr3p * dfft%my_nr2p ) ) + 1 )
+           DO k = 1, dfft%zero_scatter_start - 1
+              aux( offset + k, igroup ) = aux2( dfft%map_scatter_inv( offset + k ), igroup )
+           END DO
+           DO k = dfft%zero_scatter_start, dfft%zero_scatter_end
+              aux( offset + k, igroup ) = (0.0_DP, 0.0_DP)
+           END DO
+           DO k = dfft%zero_scatter_end + 1, dfft%nr1
+              aux( offset + k, igroup ) = aux2( dfft%map_scatter_inv( offset + k ), igroup )
+           END DO
+        END DO
+        !$omp end parallel do
+      
+      !-------------yx-scatter-------------------------------
+      !------------------------------------------------------
+      
+      !  dfft%time_adding( 4 ) = dfft%time_adding( 4 ) + ( time(2) - time(1) )
+      !  dfft%time_adding( 5 ) = dfft%time_adding( 5 ) + ( time(3) - time(2) )
+
+    END SUBROUTINE Second_Part_y_section
+
+END SUBROUTINE invfft_y_section
+
+SUBROUTINE invfft_x_section( dfft, aux, x_group_size )
+  IMPLICIT NONE
+
+  INTEGER, INTENT(IN) :: x_group_size
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr1, * ) !dfft%my_nr3p * dfft%nr2 * x_group_size )
+
+  INTEGER(INT64) :: time(6)
+
+!  CALL SYSTEM_CLOCK( time(4) )
+!------------------------------------------------------
+!------------x-FFT Start-------------------------------
+
+  CALL fft_1D( aux, dfft%my_nr2p * dfft%my_nr3p * x_group_size, dfft%nr1, 2 )
+
+!-------------x-FFT End--------------------------------
+!------------------------------------------------------
+!  CALL SYSTEM_CLOCK( time(5) )
+
+!  dfft%time_adding( 6 ) = dfft%time_adding( 6 ) + ( time(4) - time(3) )
+!  dfft%time_adding( 7 ) = dfft%time_adding( 7 ) + ( time(5) - time(4) )
+
+END SUBROUTINE invfft_x_section
+
+SUBROUTINE Apply_V_4S( dfft, f, v, x_group_size ) 
+  IMPLICIT NONE
+
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  COMPLEX(DP), INTENT(INOUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size
+  REAL(DP), INTENT(IN) :: v( * )
+  INTEGER, INTENT(IN)  :: x_group_size
+
+  INTEGER :: j, igroup
+
+  INTEGER(INT64) :: time(2)
+
+  CALL SYSTEM_CLOCK( time(1) )
+!------------------------------------------------------
+!-----------Apply V Start------------------------------
+
+  !$omp parallel private( j, igroup )
+  DO igroup = 1, x_group_size
+     !$omp do
+     DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
+        f( j, igroup )= - f( j, igroup ) * v( j )
+     END DO
+     !$omp end do
+  END DO
+  !$omp end parallel
+
+!------------Apply V End-------------------------------
+!------------------------------------------------------
+  CALL SYSTEM_CLOCK( time(2) )
+
+  dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
+
+END SUBROUTINE Apply_V_4S
+
+SUBROUTINE fwfft_x_section( dfft, aux, aux2, nr1s, x_group_size )
+  IMPLICIT NONE
+
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN) :: x_group_size
+  INTEGER, INTENT(IN) :: nr1s( * )
+  COMPLEX(DP), INTENT(INOUT)  :: aux( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size )
+  COMPLEX(DP), INTENT(INOUT) :: aux2( nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 , * ) !x_group_size )
+
+  INTEGER :: i, j, igroup, offset
+
+  INTEGER(INT64) :: time(5)
+
+!  CALL SYSTEM_CLOCK( time(1) )
+!------------------------------------------------------
+!------------x-FFT Start-------------------------------
+
+  CALL fft_1D( aux, dfft%my_nr2p * dfft%my_nr3p * x_group_size, dfft%nr1, -2 )
+
+!-------------x-FFT End--------------------------------
+!------------------------------------------------------
+!  CALL SYSTEM_CLOCK( time(2) )
+!------------------------------------------------------
+!------Forward xy-scatter Start------------------------
+
+  !$omp parallel do private( i, igroup, offset, j )
+  DO i = 1, dfft%nr1s * dfft%my_nr3p * x_group_size
+     igroup = ( ( (i-1) / ( dfft%my_nr3p * dfft%nr1s ) ) + 1 )
+     offset = dfft%my_nr2p * mod( i-1, dfft%nr1s * dfft%my_nr3p )
+     DO j = 1, dfft%my_nr2p
+        aux2( j + offset , igroup ) = aux( dfft%map_scatter_fw( j + offset ), igroup )
+     ENDDO
+  ENDDO
+  !$omp end parallel do
+
+!-------Forward xy-scatter End-------------------------
+!------------------------------------------------------
+!  CALL SYSTEM_CLOCK( time(3) )
+
+!  dfft%time_adding( 9 ) = dfft%time_adding( 9 ) + ( time(2) - time(1) )
+!  dfft%time_adding( 10 ) = dfft%time_adding( 10 ) + ( time(3) - time(2) )
+
+END SUBROUTINE fwfft_x_section
+
+SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, nr1s, ns, batch_size, y_group_size, yset )
+  IMPLICIT NONE
+
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN) :: y_group_size, yset, batch_size
+  COMPLEX(DP), INTENT(INOUT)  :: comm_mem_send( * )
+  COMPLEX(DP), INTENT(INOUT)  :: comm_mem_recv( * )
+  INTEGER, INTENT(IN) :: nr1s( * ), ns( * )
+  COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p , * ) !y_group_size )
+  INTEGER, INTENT(IN) :: map_pcfw( * )
+
+  INTEGER :: l, m, i, offset, j, k, igroup, jter, offset2, offset3
+
+  INTEGER(INT64) :: time(3)
+
+!  CALL SYSTEM_CLOCK( time(1) )
+!------------------------------------------------------
+!------------y-FFT Start-------------------------------
+
+  CALL fft_1D( aux( 1 : dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p , 1 : y_group_size ), nr1s(dfft%mype2+1) * dfft%my_nr3p * y_group_size, dfft%nr2, -2 )
+
+!-------------y-FFT End--------------------------------
+!------------------------------------------------------
+!  CALL SYSTEM_CLOCK( time(2) )
+!------------------------------------------------------
+!---------Pre-Com-Copy Start---------------------------
+
+  IF( .not. dfft%single_node ) THEN
+
+     !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 1 ), ierr )
+
+     !$omp parallel private( i, j, k, offset, l, m, offset2, jter, igroup )
+     DO l = 1, dfft%nodes_numb
+        IF( dfft%non_blocking .and. l .eq. dfft%my_node+1 ) CYCLE
+        DO m = 1, dfft%node_task_size
+           i = (l-1)*dfft%node_task_size + m
+           offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (yset-1)*dfft%y_group_size_save ) * dfft%big_chunks
+           !$omp do
+           DO j = 1, ns( i ) * y_group_size
+              jter = mod( j-1, ns( i ) ) 
+              igroup = ( (j-1) / ns( i ) )
+              offset2 =  igroup * dfft%big_chunks
+              !$omp simd
+              DO k = 1, dfft%my_nr3p
+                 comm_mem_send( offset + offset2 + jter*dfft%nr3px + k ) = &
+                 aux( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), igroup+1 )
+              END DO
+           END DO
+           !$omp end do nowait
+        END DO
+     END DO
+     !$omp end parallel
+
+     !CALL mpi_win_unlock_all( dfft%mpi_window( 1 ), ierr )
+
+  END IF
+
+  !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
+
+  IF( .not. dfft%single_node .and. dfft%non_blocking ) THEN
+
+     !$omp parallel private( i, j, k, offset, m, offset2, jter, igroup )
+     DO m = 1, dfft%node_task_size
+        i = dfft%my_node*dfft%node_task_size + m
+        offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (yset-1)*dfft%y_group_size_save ) * dfft%big_chunks
+        !$omp do
+        DO j = 1, ns( i ) * y_group_size
+           jter = mod( j-1, ns( i ) ) 
+           igroup = ( (j-1) / ns( i ) )
+           offset2 =  igroup * dfft%big_chunks
+           !$omp simd
+           DO k = 1, dfft%my_nr3p
+              comm_mem_recv( offset + offset2 + jter*dfft%nr3px + k ) = &
+              aux( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), igroup+1 )
+           END DO
+        END DO
+        !$omp end do nowait
+     END DO
+     !$omp end parallel
+
+  END IF
+
+  IF( dfft%single_node ) THEN
+
+     !$omp parallel private( i, j, k, offset, m, offset2, jter, igroup )
+     DO m = 1, dfft%node_task_size
+        i = dfft%my_node*dfft%node_task_size + m
+        offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (yset-1)*dfft%y_group_size_save ) * dfft%big_chunks
+        !$omp do
+        DO j = 1, ns( i ) * y_group_size
+           jter = mod( j-1, ns( i ) ) 
+           igroup = ( (j-1) / ns( i ) )
+           offset2 =  igroup * dfft%big_chunks
+           !$omp simd
+           DO k = 1, dfft%my_nr3p
+              comm_mem_recv( offset + offset2 + jter*dfft%nr3px + k ) = &
+              aux( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), igroup+1 )
+           END DO
+        END DO
+        !$omp end do nowait
+     END DO
+     !$omp end parallel
+
+  END IF
+
+  !CALL mpi_win_unlock_all( dfft%mpi_window( 2 ), ierr )
+
+!----------Pre-Com-Copy End----------------------------
+!------------------------------------------------------
+!  CALL SYSTEM_CLOCK( time(3) )
+
+!  dfft%time_adding( 11 ) = dfft%time_adding( 11 ) + ( time(2) - time(1) )
+!  dfft%time_adding( 12 ) = dfft%time_adding( 12 ) + ( time(3) - time(2) )
+
+END SUBROUTINE fwfft_y_section
 
 !=----------------------------------------------------------------------=
 END MODULE fftpw_batching
