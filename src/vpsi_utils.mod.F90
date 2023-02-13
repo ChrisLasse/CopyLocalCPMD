@@ -2461,11 +2461,11 @@ CONTAINS
             ) ) .or. last_buffer .eq. work_buffer ) ) THEN
              last_buffer = work_buffer
              batch_size = dfft%rem_size
-             IF( z_set_size .gt. (batch_size+1)/2 ) z_set_size = batch_size
-             IF( y_set_size .gt. (batch_size+1)/2 ) y_set_size = batch_size
-             IF( x_set_size .gt. (batch_size+1)/2 ) x_set_size = batch_size
-             IF( scatter_set_size .gt. (batch_size+1)/2 ) scatter_set_size = batch_size
-             IF( apply_set_size .gt. (batch_size+1)/2 ) apply_set_size = batch_size
+             IF( do_calc ) THEN
+                IF( z_set_size .gt. (batch_size+1)/2 ) z_set_size = batch_size
+                IF( y_set_size .gt. (batch_size+1)/2 ) y_set_size = batch_size
+                IF( x_set_size .gt. (batch_size+1)/2 ) x_set_size = batch_size
+             END IF
              IF( do_com  ) dfft%sendsize = sendsize_rem
              IF( do_calc ) dfft%rem = .true.
           END IF
@@ -2584,6 +2584,7 @@ CONTAINS
                                          comm_recv, rs_wave( : , 1 : y_group_size ), dfft%aux_array( : , 1 : y_group_size ) )                        
                       END IF
 
+                      IF( x_set_size .gt. y_group_size ) x_set_size = y_group_size
                       DO xset = 1, x_set_size
                     
                          !Too slow? lets wait and see!
@@ -2611,6 +2612,7 @@ CONTAINS
                                         dfft%aux_array( : , 1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ) )
 
                       ENDDO   
+                      x_set_size = dfft%x_set_size_save
 
                       CALL fwfft_4S( dfft, 2, batch_size, y_group_size, yset, y_set_size, counter( 1, 2 ), work_buffer, &
                                      dfft%aux_array( : , 1 : y_group_size ), comm_send, comm_recv )
@@ -2658,11 +2660,11 @@ CONTAINS
    
           IF( batch_size .ne. dfft%batch_size_save ) THEN
              batch_size = dfft%batch_size_save
-             z_set_size = dfft%z_set_size_save
-             y_set_size = dfft%y_set_size_save
-             x_set_size = dfft%x_set_size_save
-             scatter_set_size = dfft%scatter_set_size_save
-             apply_set_size = dfft%apply_set_size_save
+             IF( do_calc ) THEN
+                z_set_size = dfft%z_set_size_save
+                y_set_size = dfft%y_set_size_save
+                x_set_size = dfft%x_set_size_save
+             END IF
              IF( do_com  ) dfft%sendsize = dfft%sendsize_save
              IF( do_calc ) dfft%rem = .false.
           END IF
