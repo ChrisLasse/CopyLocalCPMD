@@ -1256,15 +1256,15 @@ CONTAINS
   
        ELSE IF( step .eq. 3 ) THEN
   
-!          CALL SYSTEM_CLOCK( time(6) )
+          CALL SYSTEM_CLOCK( time(6) )
 
           !$omp flush( locks_com_inv )
           !$  DO WHILE( locks_com_inv( counter ) .and. .not. dfft%single_node )
           !$omp flush( locks_com_inv )
           !$  END DO
 
-!          CALL SYSTEM_CLOCK( time(7) )
-!          dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(7) - time(6) )
+          CALL SYSTEM_CLOCK( time(7) )
+          dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(7) - time(6) )
 
           CALL invfft_y_section( dfft, f_inout1(:,work_buffer), f_inout2, f_inout3, &
                                  dfft%map_acinv, dfft%map_acinv_rem, dfft%nr1w, divparam_1, divparam_2 )
@@ -1291,15 +1291,15 @@ CONTAINS
   
        ELSE IF( step .eq. 2 ) THEN
 
-!          CALL SYSTEM_CLOCK( time(8) )
+          CALL SYSTEM_CLOCK( time(8) )
   
           !$omp flush( locks_calc_2 )
           !$  DO WHILE( ANY(locks_calc_2( :, 1+(divparam_2-1)*dfft%y_group_size_save+current:divparam_1+(divparam_2-1)*dfft%y_group_size_save+current ) ) )
           !$omp flush( locks_calc_2 )
           !$  END DO
 
-!          CALL SYSTEM_CLOCK( time(9) )
-!          dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(9) - time(8) )
+          CALL SYSTEM_CLOCK( time(9) )
+          dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(9) - time(8) )
   
   
           CALL fwfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &

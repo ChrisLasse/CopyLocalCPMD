@@ -267,10 +267,10 @@ CONTAINS
      omit = 3
      ALLOCATE( final_time( mbuff*mbatch ) )
      ALLOCATE( save_time( mbatch ) )
-     ALLOCATE( set_z_time( mbatch ) )
+     ALLOCATE( set_z_time( mbatch*mbatch ) )
      ALLOCATE( set_z_save( mbatch ) )
-     ALLOCATE( set_yx_time( mbatch ) )
-     ALLOCATE( set_yx_save( mbatch, 2 ) )
+     ALLOCATE( set_yx_time( mbatch*mbatch ) )
+     ALLOCATE( set_yx_save( mbatch*mbatch, 2 ) )
      ALLOCATE( sets( mbuff*mbatch, 3 ) )
      ALLOCATE( set_time_mask( mbatch*mbatch, 2 ) )
      set_time_mask = .false.
@@ -305,46 +305,52 @@ CONTAINS
               write(6,'(A7,I2,A23,I6,A6,E15.8)') "batch:", dfft%batch_size_save, "; z set tunning:", dfft%z_set_size_save, "TIME:", set_z_time( which_z ) / z_repeats
               write(6,'(A7,I2,A23,I3,I3,A6,E15.8)') "batch:", dfft%batch_size_save, "; y and x set tunning:", dfft%y_set_size_save, dfft%x_set_size_save, "TIME:", set_yx_time( which_yx ) / set_repeats
            END IF
-           IF( dfft%x_set_size_save .eq. dfft%y_set_size_save ) THEN
-              IF( dfft%y_set_size_save .ge. (dfft%batch_size_save+1) / 2 ) THEN
-                 IF( dfft%y_set_size_save .eq. dfft%batch_size_save ) THEN
-                    IF( dfft%mype .eq. 0 ) THEN
-                       z_loc = MINLOC( set_z_time, 1, set_time_mask( : , 1 ) )
-                       dfft%z_set_size_save = set_z_save( z_loc )
-                       sets( bb_counter, 1 ) = set_z_save( z_loc )
-                       yx_loc = MINLOC( set_yx_time, 1, set_time_mask( : , 2 ) )
-                       dfft%y_set_size_save = set_yx_save( yx_loc, 1 )
-                       dfft%x_set_size_save = set_yx_save( yx_loc, 2 )
-                       sets( bb_counter, 2 ) = set_yx_save( yx_loc, 1 )
-                       sets( bb_counter, 3 ) = set_yx_save( yx_loc, 2 )
-                       IF( auto_write ) THEN
-                          write(6,'(A7,I2,A23,I6,A6,E15.8)') "batch:", dfft%batch_size_save, "; z set chosen:", dfft%z_set_size_save, "TIME:", set_z_time( z_loc ) / set_repeats
-                          write(6,'(A7,I2,A23,I3,I3,A6,E15.8)') "batch:", dfft%batch_size_save, "; y and x set chosen:", dfft%y_set_size_save, dfft%x_set_size_save, "TIME:", set_yx_time( yx_loc ) / set_repeats
+           IF( dfft%x_set_size_save .ge. (dfft%y_set_size_save+1) / 2 ) THEN
+              IF( dfft%x_set_size_save .eq. dfft%y_set_size_save ) THEN 
+                 IF( dfft%y_set_size_save .ge. (dfft%batch_size_save+1) / 2 ) THEN
+                    IF( dfft%y_set_size_save .eq. dfft%batch_size_save ) THEN
+                       IF( dfft%mype .eq. 0 ) THEN
+                          z_loc = MINLOC( set_z_time, 1, set_time_mask( : , 1 ) )
+                          dfft%z_set_size_save = set_z_save( z_loc )
+                          sets( bb_counter, 1 ) = set_z_save( z_loc )
+                          yx_loc = MINLOC( set_yx_time, 1, set_time_mask( : , 2 ) )
+                          dfft%y_set_size_save = set_yx_save( yx_loc, 1 )
+                          dfft%x_set_size_save = set_yx_save( yx_loc, 2 )
+                          sets( bb_counter, 2 ) = set_yx_save( yx_loc, 1 )
+                          sets( bb_counter, 3 ) = set_yx_save( yx_loc, 2 )
+                          IF( auto_write ) THEN
+                             write(6,'(A7,I2,A23,I6,A6,E15.8)') "batch:", dfft%batch_size_save, "; z set chosen:", dfft%z_set_size_save, "TIME:", set_z_time( z_loc ) / set_repeats
+                             write(6,'(A7,I2,A23,I3,I3,A6,E15.8)') "batch:", dfft%batch_size_save, "; y and x set chosen:", dfft%y_set_size_save, dfft%x_set_size_save, "TIME:", set_yx_time( yx_loc ) / set_repeats
+                          END IF
                        END IF
+                       CALL MP_BCAST( dfft%z_set_size_save, 0, dfft%comm )
+                       CALL MP_BCAST( dfft%y_set_size_save, 0, dfft%comm )
+                       CALL MP_BCAST( dfft%x_set_size_save, 0, dfft%comm )
+                       set_timing = .false.
+                    ELSE
+                       set_z_time( which_z ) = set_z_time( which_z ) / ( z_repeats / set_repeats )
+                       set_called = 0
+                       z_repeats = 0
+                       which_z = which_z + 1
+                       which_yx = which_yx + 1
+                       dfft%z_set_size_save = dfft%batch_size_save
+                       dfft%y_set_size_save = dfft%batch_size_save
+                       dfft%x_set_size_save = 1
                     END IF
-                    CALL MP_BCAST( dfft%z_set_size_save, 0, dfft%comm )
-                    CALL MP_BCAST( dfft%y_set_size_save, 0, dfft%comm )
-                    CALL MP_BCAST( dfft%x_set_size_save, 0, dfft%comm )
-                    set_timing = .false.
                  ELSE
                     set_z_time( which_z ) = set_z_time( which_z ) / ( z_repeats / set_repeats )
                     set_called = 0
                     z_repeats = 0
                     which_z = which_z + 1
                     which_yx = which_yx + 1
-                    dfft%z_set_size_save = dfft%batch_size_save
-                    dfft%y_set_size_save = dfft%batch_size_save
+                    dfft%z_set_size_save = dfft%z_set_size_save + 1
+                    dfft%y_set_size_save = dfft%y_set_size_save + 1
                     dfft%x_set_size_save = 1
                  END IF
               ELSE
-                 set_z_time( which_z ) = set_z_time( which_z ) / ( z_repeats / set_repeats )
                  set_called = 0
-                 z_repeats = 0
-                 which_z = which_z + 1
                  which_yx = which_yx + 1
-                 dfft%z_set_size_save = dfft%z_set_size_save + 1
-                 dfft%y_set_size_save = dfft%y_set_size_save + 1
-                 dfft%x_set_size_save = 1
+                 dfft%x_set_size_save = dfft%y_set_size_save
               END IF
            ELSE
               set_called = 0
@@ -358,66 +364,6 @@ CONTAINS
         IF( timed .eq. repeats ) next_batch = .true.
      END IF
   END IF
-
-
-!        save_time( dfft%z_set_size_save ) = save_time( dfft%z_set_size_save ) + time 
-!        set_time( dfft%z_set_size_save, 1 ) = set_time( dfft%z_set_size_save, 1 ) + REAL( dfft%auto_timings(1) / REAL( cr ) )
-!        set_time( dfft%y_set_size_save, 2 ) = set_time( dfft%y_set_size_save, 2 ) + REAL( dfft%auto_timings(2) / REAL( cr ) )
-!        set_time( dfft%scatter_set_size_save, 3 ) = set_time( dfft%scatter_set_size_save, 3 ) + REAL( dfft%auto_timings(3) / REAL( cr ) )
-!        set_time( dfft%apply_set_size_save, 4 ) = set_time( dfft%apply_set_size_save, 4 ) + REAL( dfft%auto_timings(4) / REAL( cr ) )
-!        dfft%auto_timings = 0
-!        set_time_mask( dfft%z_set_size_save ) = .true.
-!        IF( set_called .gt. set_repeats-1 ) THEN
-!           IF( dfft%mype .eq. 0 .and. auto_write ) THEN
-!              write(6,*) "vpsi z set tunning:", dfft%z_set_size_save, "TIME:", set_time( dfft%z_set_size_save, 1 ) / set_repeats
-!              write(6,*) "vpsi y set tunning:", dfft%y_set_size_save, "TIME:", set_time( dfft%y_set_size_save, 2 ) / set_repeats
-!              write(6,*) "vpsi scatter set tunning:", dfft%scatter_set_size_save, "TIME:", set_time( dfft%scatter_set_size_save, 3 ) / set_repeats
-!              write(6,*) "vpsi apply set tunning:", dfft%apply_set_size_save, "TIME:", set_time( dfft%apply_set_size_save, 4 ) / set_repeats
-!           END IF
-!           IF( dfft%z_set_size_save .ge. (dfft%batch_size_save+1) / 2 ) THEN
-!              IF( dfft%z_set_size_save .eq. dfft%batch_size_save ) THEN
-!                 IF( dfft%mype .eq. 0 ) THEN
-!                    sets( bb_counter, 1 ) = MINLOC( set_time(:,1), 1, set_time_mask )
-!                    sets( bb_counter, 2 ) = MINLOC( set_time(:,2), 1, set_time_mask )
-!                    sets( bb_counter, 3 ) = MINLOC( set_time(:,3), 1, set_time_mask )
-!                    sets( bb_counter, 4 ) = MINLOC( set_time(:,4), 1, set_time_mask )
-!                    dfft%z_set_size_save = MINLOC( set_time(:,1), 1, set_time_mask )
-!                    dfft%y_set_size_save = MINLOC( set_time(:,2), 1, set_time_mask )
-!                    dfft%scatter_set_size_save = MINLOC( set_time(:,3), 1, set_time_mask )
-!                    dfft%apply_set_size_save = MINLOC( set_time(:,4), 1, set_time_mask )
-!                    IF( auto_write ) THEN
-!                       write(6,*) "vpsi z set chosen:", dfft%z_set_size_save, "TIME:", set_time( dfft%z_set_size_save, 1 ) / set_repeats
-!                       write(6,*) "vpsi y set chosen:", dfft%y_set_size_save, "TIME:", set_time( dfft%y_set_size_save, 2 ) / set_repeats
-!                       write(6,*) "vpsi scatter set chosen:", dfft%scatter_set_size_save, "TIME:", set_time( dfft%scatter_set_size_save, 3 ) / set_repeats
-!                       write(6,*) "vpsi apply set chosen:", dfft%apply_set_size_save, "TIME:", set_time( dfft%apply_set_size_save, 4 ) / set_repeats
-!                    END IF
-!                 END IF
-!                 CALL MP_BCAST( dfft%z_set_size_save, 0, dfft%comm )
-!                 CALL MP_BCAST( dfft%y_set_size_save, 0, dfft%comm )
-!                 CALL MP_BCAST( dfft%scatter_set_size_save, 0, dfft%comm )
-!                 CALL MP_BCAST( dfft%apply_set_size_save, 0, dfft%comm )
-!                 set_timing = .false.
-!              ELSE
-!                 set_called = 0
-!                 dfft%z_set_size_save = dfft%batch_size_save
-!                 dfft%y_set_size_save = dfft%batch_size_save
-!                 dfft%scatter_set_size_save = dfft%batch_size_save
-!                 dfft%apply_set_size_save = dfft%batch_size_save
-!              END IF
-!           ELSE
-!              set_called = 0
-!              dfft%z_set_size_save = dfft%z_set_size_save + 1
-!              dfft%y_set_size_save = dfft%y_set_size_save + 1
-!              dfft%scatter_set_size_save = dfft%scatter_set_size_save + 1
-!              dfft%apply_set_size_save = dfft%apply_set_size_save + 1
-!           END IF
-!        END IF
-!     ELSE
-!        final_time( bb_counter ) = final_time( bb_counter ) + time
-!        timed = timed + 1
-!        IF( timed .eq. repeats ) next_batch = .true.
-!     END IF
-!  END IF
 
   IF( next_batch ) THEN
  
@@ -464,8 +410,11 @@ CONTAINS
      set_timing = .true.
      timed = 0
      waiting = 0
-     which_z = 0
-     which_yx = 0
+     which_z = 1
+     which_yx = 1
+     set_time_mask = .false.
+     set_z_save = 0
+     set_yx_save = 0
   
   END IF
 

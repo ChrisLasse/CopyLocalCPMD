@@ -75,12 +75,12 @@ CONTAINS
 
     CALL fft_type_init( dfft, which, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
 
-    dfft%batch_size_save = 3
+    dfft%batch_size_save = 1
     dfft%buffer_size_save = 1
-    dfft%z_set_size_save = 2
-    dfft%y_set_size_save = 2
+    dfft%z_set_size_save = 1
+    dfft%y_set_size_save = 1
     dfft%scatter_set_size_save = 1
-    dfft%x_set_size_save = 2
+    dfft%x_set_size_save = 1
     dfft%apply_set_size_save = 1
 
     IF( dfft%rsactive ) dfft%max_buffer_size = 2

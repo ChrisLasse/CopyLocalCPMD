@@ -838,8 +838,8 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, aux, iset, batch_size, z_group_
   INTEGER, INTENT(IN) :: iset, batch_size, z_group_size
   INTEGER, INTENT(IN) :: ns( * )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
-  COMPLEX(DP), INTENT(INOUT)  :: aux ( dfft%nr3 , * ) !ns(dfft%mype+1)*z_group_size )
+  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
+  COMPLEX(DP), INTENT(INOUT)  :: aux ( dfft%nr3 , ns(dfft%mype+1)*z_group_size )
 
   INTEGER :: j, l, k, i
   INTEGER :: offset, kfrom, ierr
@@ -953,7 +953,7 @@ SUBROUTINE invfft_y_section( dfft, comm_mem_recv, aux, aux2_r, map_acinv, map_ac
 
   INTEGER :: i, k, offset, iter, igroup
 
-  INTEGER(INT64) :: time(3)
+  INTEGER(INT64) :: time(5)
 
   Call First_Part_y_section( aux2_r )
 
@@ -967,7 +967,7 @@ SUBROUTINE invfft_y_section( dfft, comm_mem_recv, aux, aux2_r, map_acinv, map_ac
       COMPLEX(DP), INTENT(INOUT) :: aux2( dfft%nr2 , * ) !nr1s(dfft%mype2+1) * dfft%my_nr3p *  y_group_size )
 
 
-      !  CALL SYSTEM_CLOCK( time(1) )
+        CALL SYSTEM_CLOCK( time(1) )
       !------------------------------------------------------
       !--------After-Com-Copy Start--------------------------
       
@@ -1021,7 +1021,7 @@ SUBROUTINE invfft_y_section( dfft, comm_mem_recv, aux, aux2_r, map_acinv, map_ac
       
       !---------After-Com-Copy End---------------------------
       !------------------------------------------------------
-      !  CALL SYSTEM_CLOCK( time(2) )
+        CALL SYSTEM_CLOCK( time(2) )
       !------------------------------------------------------
       !------------y-FFT Start-------------------------------
       
@@ -1029,7 +1029,10 @@ SUBROUTINE invfft_y_section( dfft, comm_mem_recv, aux, aux2_r, map_acinv, map_ac
       
       !-------------y-FFT End--------------------------------
       !------------------------------------------------------
-      !  CALL SYSTEM_CLOCK( time(3) )
+        CALL SYSTEM_CLOCK( time(3) )
+
+        dfft%time_adding( 4 ) = dfft%time_adding( 4 ) + ( time(2) - time(1) )
+        dfft%time_adding( 5 ) = dfft%time_adding( 5 ) + ( time(3) - time(2) )
 
     END SUBROUTINE First_Part_y_section
 
@@ -1038,6 +1041,7 @@ SUBROUTINE invfft_y_section( dfft, comm_mem_recv, aux, aux2_r, map_acinv, map_ac
       IMPLICIT NONE
       COMPLEX(DP), INTENT(INOUT) :: aux2  ( dfft%my_nr1p * dfft%my_nr3p * dfft%nr2, * ) !y_group_size
 
+        CALL SYSTEM_CLOCK( time(4) )
       !------------------------------------------------------
       !-------------yx-scatter-------------------------------
       
@@ -1059,9 +1063,9 @@ SUBROUTINE invfft_y_section( dfft, comm_mem_recv, aux, aux2_r, map_acinv, map_ac
       
       !-------------yx-scatter-------------------------------
       !------------------------------------------------------
+        CALL SYSTEM_CLOCK( time(5) )
       
-      !  dfft%time_adding( 4 ) = dfft%time_adding( 4 ) + ( time(2) - time(1) )
-      !  dfft%time_adding( 5 ) = dfft%time_adding( 5 ) + ( time(3) - time(2) )
+        dfft%time_adding( 6 ) = dfft%time_adding( 6 ) + ( time(5) - time(4) )
 
     END SUBROUTINE Second_Part_y_section
 
@@ -1074,9 +1078,9 @@ SUBROUTINE invfft_x_section( dfft, aux, x_group_size )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr1, * ) !dfft%my_nr3p * dfft%nr2 * x_group_size )
 
-  INTEGER(INT64) :: time(6)
+  INTEGER(INT64) :: time(2)
 
-!  CALL SYSTEM_CLOCK( time(4) )
+  CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
@@ -1084,10 +1088,9 @@ SUBROUTINE invfft_x_section( dfft, aux, x_group_size )
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
-!  CALL SYSTEM_CLOCK( time(5) )
+  CALL SYSTEM_CLOCK( time(2) )
 
-!  dfft%time_adding( 6 ) = dfft%time_adding( 6 ) + ( time(4) - time(3) )
-!  dfft%time_adding( 7 ) = dfft%time_adding( 7 ) + ( time(5) - time(4) )
+  dfft%time_adding( 7 ) = dfft%time_adding( 7 ) + ( time(2) - time(1) )
 
 END SUBROUTINE invfft_x_section
 
@@ -1095,7 +1098,7 @@ SUBROUTINE Apply_V_4S( dfft, f, v, x_group_size )
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(INOUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size
+  COMPLEX(DP), INTENT(INOUT) :: f( : , : ) !dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size
   REAL(DP), INTENT(IN) :: v( * )
   INTEGER, INTENT(IN)  :: x_group_size
 
@@ -1136,9 +1139,9 @@ SUBROUTINE fwfft_x_section( dfft, aux, aux2, nr1s, x_group_size )
 
   INTEGER :: i, j, igroup, offset
 
-  INTEGER(INT64) :: time(5)
+  INTEGER(INT64) :: time(3)
 
-!  CALL SYSTEM_CLOCK( time(1) )
+  CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
@@ -1146,7 +1149,7 @@ SUBROUTINE fwfft_x_section( dfft, aux, aux2, nr1s, x_group_size )
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
-!  CALL SYSTEM_CLOCK( time(2) )
+  CALL SYSTEM_CLOCK( time(2) )
 !------------------------------------------------------
 !------Forward xy-scatter Start------------------------
 
@@ -1162,10 +1165,10 @@ SUBROUTINE fwfft_x_section( dfft, aux, aux2, nr1s, x_group_size )
 
 !-------Forward xy-scatter End-------------------------
 !------------------------------------------------------
-!  CALL SYSTEM_CLOCK( time(3) )
+  CALL SYSTEM_CLOCK( time(3) )
 
-!  dfft%time_adding( 9 ) = dfft%time_adding( 9 ) + ( time(2) - time(1) )
-!  dfft%time_adding( 10 ) = dfft%time_adding( 10 ) + ( time(3) - time(2) )
+  dfft%time_adding( 9 ) = dfft%time_adding( 9 ) + ( time(2) - time(1) )
+  dfft%time_adding( 10 ) = dfft%time_adding( 10 ) + ( time(3) - time(2) )
 
 END SUBROUTINE fwfft_x_section
 
@@ -1184,7 +1187,7 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
 
   INTEGER(INT64) :: time(3)
 
-!  CALL SYSTEM_CLOCK( time(1) )
+  CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !------------y-FFT Start-------------------------------
 
@@ -1192,7 +1195,7 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
 
 !-------------y-FFT End--------------------------------
 !------------------------------------------------------
-!  CALL SYSTEM_CLOCK( time(2) )
+  CALL SYSTEM_CLOCK( time(2) )
 !------------------------------------------------------
 !---------Pre-Com-Copy Start---------------------------
 
@@ -1278,10 +1281,10 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
 
 !----------Pre-Com-Copy End----------------------------
 !------------------------------------------------------
-!  CALL SYSTEM_CLOCK( time(3) )
+  CALL SYSTEM_CLOCK( time(3) )
 
-!  dfft%time_adding( 11 ) = dfft%time_adding( 11 ) + ( time(2) - time(1) )
-!  dfft%time_adding( 12 ) = dfft%time_adding( 12 ) + ( time(3) - time(2) )
+  dfft%time_adding( 11 ) = dfft%time_adding( 11 ) + ( time(2) - time(1) )
+  dfft%time_adding( 12 ) = dfft%time_adding( 12 ) + ( time(3) - time(2) )
 
 END SUBROUTINE fwfft_y_section
 
