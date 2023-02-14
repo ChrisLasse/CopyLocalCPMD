@@ -251,7 +251,7 @@ CONTAINS
   INTEGER, SAVE :: which_yx = 1
   INTEGER, SAVE :: z_repeats = 0
 
-  INTEGER :: yx_loc, z_loc
+  INTEGER :: yx_loc, z_loc, y_group_size
 
   INTEGER, SAVE :: set_called = 0
   INTEGER(INT64), SAVE :: cr
@@ -300,13 +300,18 @@ CONTAINS
         set_time_mask( which_z, 1 ) = .true.
         set_time_mask( which_yx, 2 ) = .true.
         dfft%auto_4Stimings = 0
+        IF( mod( dfft%batch_size_save, dfft%y_set_size_save ) .eq. 0 ) THEN 
+           y_group_size = dfft%batch_size_save / dfft%y_set_size_save
+        ELSE
+           y_group_size = dfft%batch_size_save / dfft%y_set_size_save + 1
+        END IF
         IF( set_called .gt. set_repeats-1 ) THEN
            IF( dfft%mype .eq. 0 .and. auto_write ) THEN
               write(6,'(A7,I2,A23,I6,A6,E15.8)') "batch:", dfft%batch_size_save, "; z set tunning:", dfft%z_set_size_save, "TIME:", set_z_time( which_z ) / z_repeats
               write(6,'(A7,I2,A23,I3,I3,A6,E15.8)') "batch:", dfft%batch_size_save, "; y and x set tunning:", dfft%y_set_size_save, dfft%x_set_size_save, "TIME:", set_yx_time( which_yx ) / set_repeats
            END IF
-           IF( dfft%x_set_size_save .ge. (dfft%y_set_size_save+1) / 2 ) THEN
-              IF( dfft%x_set_size_save .eq. dfft%y_set_size_save ) THEN 
+           IF( dfft%x_set_size_save .ge. (y_group_size+1) / 2 ) THEN
+              IF( dfft%x_set_size_save .eq. y_group_size ) THEN 
                  IF( dfft%y_set_size_save .ge. (dfft%batch_size_save+1) / 2 ) THEN
                     IF( dfft%y_set_size_save .eq. dfft%batch_size_save ) THEN
                        IF( dfft%mype .eq. 0 ) THEN
@@ -350,7 +355,7 @@ CONTAINS
               ELSE
                  set_called = 0
                  which_yx = which_yx + 1
-                 dfft%x_set_size_save = dfft%y_set_size_save
+                 dfft%x_set_size_save = y_group_size
               END IF
            ELSE
               set_called = 0
