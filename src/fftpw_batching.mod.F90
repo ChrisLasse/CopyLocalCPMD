@@ -838,8 +838,8 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, aux, iset, batch_size, z_group_
   INTEGER, INTENT(IN) :: iset, batch_size, z_group_size
   INTEGER, INTENT(IN) :: ns( * )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
-  COMPLEX(DP), INTENT(INOUT)  :: aux ( dfft%nr3 , ns(dfft%mype+1)*z_group_size )
+  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
+  COMPLEX(DP), INTENT(INOUT)  :: aux ( dfft%nr3 , * ) !ns(dfft%mype+1)*z_group_size )
 
   INTEGER :: j, l, k, i
   INTEGER :: offset, kfrom, ierr
