@@ -402,24 +402,25 @@ CONTAINS
         CALL MP_BCAST(  dfft%y_set_size_save, 0, dfft%comm )
         CALL MP_BCAST(  dfft%x_set_size_save, 0, dfft%comm )
         finished = .true.
+     ELSE
+        alloc = .true. 
+        dfft%z_set_size_save = 1
+        dfft%y_set_size_save = 1
+        dfft%x_set_size_save = 1
+        set_z_time = 0.d0
+        set_yx_time = 0.d0
+        save_time = 0.d0
+        set_called = 0
+        z_repeats = 0
+        set_timing = .true.
+        timed = 0
+        waiting = 0
+        which_z = 1
+        which_yx = 1
+        set_time_mask = .false.
+        set_z_save = 0
+        set_yx_save = 0
      END IF
-     alloc = .true. 
-     dfft%z_set_size_save = 1
-     dfft%y_set_size_save = 1
-     dfft%x_set_size_save = 1
-     set_z_time = 0.d0
-     set_yx_time = 0.d0
-     save_time = 0.d0
-     set_called = 0
-     z_repeats = 0
-     set_timing = .true.
-     timed = 0
-     waiting = 0
-     which_z = 1
-     which_yx = 1
-     set_time_mask = .false.
-     set_z_save = 0
-     set_yx_save = 0
   
   END IF
 
