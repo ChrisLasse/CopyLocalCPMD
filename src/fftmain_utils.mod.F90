@@ -959,13 +959,13 @@ CONTAINS
   
   END SUBROUTINE fwfft_pwbatch
 
-  SUBROUTINE invfft_4S( dfft, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+  SUBROUTINE invfft_4S( dfft, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, f_inout1, f_inout2, f_inout3 )
     IMPLICIT NONE
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-    INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer
+    INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer, first_dim
     INTEGER, INTENT(IN) :: divparam_1, divparam_2, divparam_3
-    COMPLEX(DP), INTENT(INOUT) :: f_inout1(:,:)
+    COMPLEX(DP), INTENT(INOUT) :: f_inout1(first_dim,*)
     COMPLEX(DP), INTENT(INOUT) :: f_inout2(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout3(:,:)
   
@@ -974,26 +974,26 @@ CONTAINS
     ELSE IF( step .eq. 2 ) THEN                                          
 !       CALL fftpw_batch( dfft, -1, step, batch_size, set_size_1, set_size_2, set_size_3, counter, work_buffer, f_in, f_inout1 )
     ELSE IF( step .eq. 3 ) THEN                                       
-       CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+       CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, f_inout1, f_inout2, f_inout3 )
     ELSE IF( step .eq. 4 ) THEN                                       
-       CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+       CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, f_inout1, f_inout2, f_inout3 )
     END IF
   
   END SUBROUTINE invfft_4S
   
-  SUBROUTINE fwfft_4S( dfft, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+  SUBROUTINE fwfft_4S( dfft, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, f_inout1, f_inout2, f_inout3 )
     IMPLICIT NONE
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-    INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer, divparam_1, divparam_2, divparam_3
-    COMPLEX(DP), INTENT(INOUT) :: f_inout1(:,:)
+    INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer, divparam_1, divparam_2, divparam_3, first_dim
+    COMPLEX(DP), INTENT(INOUT) :: f_inout1(first_dim,*)
     COMPLEX(DP), INTENT(INOUT) :: f_inout2(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout3(:,:)
   
     IF( step .eq. 1 ) THEN
-       CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+       CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, f_inout1, f_inout2, f_inout3 )
     ELSE IF( step .eq. 2 ) THEN
-       CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+       CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, f_inout1, f_inout2, f_inout3 )
     ELSE IF( step .eq. 3 ) THEN
 !       CALL fftpw_batch( dfft, 1, step, batch_size, 1, 1, 1, counter, work_buffer, f_in, f_inout1 )
     ELSE IF( step .eq. 4 ) THEN
@@ -1227,14 +1227,14 @@ CONTAINS
   
   END SUBROUTINE fftpw_batch
 
-  SUBROUTINE fftpw_4S( dfft, isign, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+  SUBROUTINE fftpw_4S( dfft, isign, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, f_inout1, f_inout2, f_inout3 )
   USE iso_fortran_env
     IMPLICIT NONE
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-    INTEGER, INTENT(IN) :: isign, step, batch_size, counter, work_buffer
+    INTEGER, INTENT(IN) :: isign, step, batch_size, counter, work_buffer, first_dim
     INTEGER, INTENT(IN) :: divparam_1, divparam_2, divparam_3
-    COMPLEX(DP), INTENT(INOUT) :: f_inout1(:,:)
+    COMPLEX(DP), INTENT(INOUT) :: f_inout1(first_dim,*)
     COMPLEX(DP), INTENT(INOUT) :: f_inout2(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout3(:,:)
   
@@ -1330,7 +1330,7 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(7) )
           dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(7) - time(6) )
 
-          CALL invfft_y_section( dfft, f_inout1(:,work_buffer), f_inout2, f_inout3, &
+          CALL invfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
                                  dfft%map_acinv, dfft%map_acinv_rem, dfft%nr1w, divparam_1, divparam_2 )
   
           IF( dfft%vpsi ) THEN
