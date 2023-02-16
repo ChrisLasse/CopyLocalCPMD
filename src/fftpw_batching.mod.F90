@@ -26,7 +26,6 @@ MODULE fftpw_batching
   PUBLIC :: Accumulate_Psi_overlapp
   PUBLIC :: invfft_y_section
   PUBLIC :: invfft_x_section
-  PUBLIC :: Apply_V_4S
   PUBLIC :: fwfft_x_section
   PUBLIC :: fwfft_y_section
 
@@ -940,7 +939,7 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, aux, hpsi, ngms, z_group_size, last, n
 
 END SUBROUTINE Accumulate_Psi_overlapp
 
-SUBROUTINE invfft_y_section( dfft, comm_mem_recv, aux, aux2_r, map_acinv, map_acinv_rem, nr1s, y_group_size, yset )
+SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, nr1s, y_group_size, yset )
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
@@ -1093,40 +1092,6 @@ SUBROUTINE invfft_x_section( dfft, aux, x_group_size )
   dfft%time_adding( 7 ) = dfft%time_adding( 7 ) + ( time(2) - time(1) )
 
 END SUBROUTINE invfft_x_section
-
-SUBROUTINE Apply_V_4S( dfft, f, v, x_group_size ) 
-  IMPLICIT NONE
-
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(INOUT) :: f( : , : ) !dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size
-  REAL(DP), INTENT(IN) :: v( * )
-  INTEGER, INTENT(IN)  :: x_group_size
-
-  INTEGER :: j, igroup
-
-  INTEGER(INT64) :: time(2)
-
-  CALL SYSTEM_CLOCK( time(1) )
-!------------------------------------------------------
-!-----------Apply V Start------------------------------
-
-  !$omp parallel private( j, igroup )
-  DO igroup = 1, x_group_size
-     !$omp do
-     DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
-        f( j, igroup )= - f( j, igroup ) * v( j )
-     END DO
-     !$omp end do
-  END DO
-  !$omp end parallel
-
-!------------Apply V End-------------------------------
-!------------------------------------------------------
-  CALL SYSTEM_CLOCK( time(2) )
-
-  dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
-
-END SUBROUTINE Apply_V_4S
 
 SUBROUTINE fwfft_x_section( dfft, aux, aux2, nr1s, x_group_size )
   IMPLICIT NONE

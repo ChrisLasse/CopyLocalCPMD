@@ -76,8 +76,7 @@ MODULE vpsi_utils
   USE fftnew_utils,                    ONLY: setfftn
   USE fftpw_base,                      ONLY: dfft,&
                                              wfn_real
-  USE fftpw_batching,                  ONLY: Apply_v,&
-                                             Apply_v_4S
+  USE fftpw_batching,                  ONLY: Apply_v
   USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
                                              Set_Req_Vals,&
                                              MapVals_CleanUp,&
@@ -1808,7 +1807,6 @@ CONTAINS
     INTEGER, INTENT(IN)    :: nbnd_source
     REAL(DP), INTENT(IN) :: v(dfft%nnr)
 
-    COMPLEX(DP), CONTIGUOUS, SAVE, POINTER  :: rs_wave(:,:)
     COMPLEX(DP), ALLOCATABLE, SAVE, TARGET :: batch_aux(:,:)
 
     LOGICAL, ALLOCATABLE, SAVE :: first_step(:)
@@ -1948,10 +1946,6 @@ CONTAINS
 
     dfft%first_loading = .true.
     dfft%rem = .false.
-
-    IF( .not. dfft%rsactive) THEN
-       rs_wave => batch_aux
-    END IF
  
     c = 0
     CALL MPI_BARRIER(dfft%comm, ierr)
@@ -2112,6 +2106,12 @@ CONTAINS
 
        COMPLEX(DP), INTENT(INOUT)  ::  psi_R(dfft%ngw, nbnd_source)
        COMPLEX(DP), INTENT(INOUT)  :: hpsi_R(dfft%ngw, nbnd_source)
+
+       COMPLEX(DP), CONTIGUOUS, POINTER  :: rs_wave(:,:)
+
+       IF( .not. dfft%rsactive) THEN
+          rs_wave => batch_aux
+       END IF
 
        !$omp parallel IF( nthreads .eq. 2 ) num_threads( nthreads ) &
        !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, &
@@ -2362,7 +2362,13 @@ CONTAINS
        COMPLEX(DP), INTENT(INOUT)  ::  psi_R(dfft%ngw, nbnd_source)
        COMPLEX(DP), INTENT(INOUT)  :: hpsi_R(dfft%ngw, nbnd_source)
 
+       COMPLEX(DP), CONTIGUOUS, SAVE, POINTER  :: rs_wave(:)
+
        INTEGER :: yset, xset, y_group_size, x_group_size
+       INTEGER :: start, first_dim1, first_dim2
+
+       first_dim1 = dfft%my_nr3p * dfft%nr2 * dfft%nr1
+       first_dim2 = dfft%nr2 * dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p
 
        !$omp parallel IF( nthreads .eq. 2 ) num_threads( nthreads ) &
        !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, &
@@ -2550,11 +2556,14 @@ CONTAINS
                       END IF
 
                       IF( dfft%rsactive ) THEN
-                         rs_wave => wfn_real( : , 1+(counter(1,2)-1)*dfft%batch_size_save+(yset-1)*dfft%y_group_size_save : &
-                                                  y_group_size+(counter(1,2)-1)*dfft%batch_size_save+(yset-1)*dfft%y_group_size_save )
+                         start = 1+(counter(1,2)-1)*dfft%batch_size_save+(yset-1)*dfft%y_group_size_save
+                         rs_wave => wfn_real( : , start ) !1+(counter(1,2)-1)*dfft%batch_size_save+(yset-1)*dfft%y_group_size_save : &
+!                                                  y_group_size+(counter(1,2)-1)*dfft%batch_size_save+(yset-1)*dfft%y_group_size_save )
                       ELSE
-                         CALL invfft_4S( dfft, 3, batch_size, y_group_size, yset, 0, counter( 1, 2 ), work_buffer, &
-                                         comm_recv, rs_wave( : , 1 : y_group_size ), dfft%aux_array( : , 1 : y_group_size ) )                        
+                         rs_wave => batch_aux(:,1)
+                         CALL invfft_4S( dfft, 3, batch_size, y_group_size, yset, 0, counter( 1, 2 ), work_buffer, first_dim1, &
+                                         rs_wave, & !: y_group_size ), &
+                                         comm_recv, dfft%aux_array( : , 1 : y_group_size ) )                        
                       END IF
 
                       IF( x_set_size .gt. y_group_size ) x_set_size = y_group_size
@@ -2572,23 +2581,29 @@ CONTAINS
                             x_group_size = y_group_size - (x_set_size-1) * x_group_size
                          END IF
 
-                         IF( .not. dfft%rsactive ) CALL invfft_4S( dfft, 4, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, &
-                                                                   rs_wave( : , 1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ), &
-                                                                   comm_recv ) !comm_recv just cause Interface needs 2 Arrays
-  
-                         CALL Apply_V_4S( dfft, rs_wave( : , 1            + (xset-1) * dfft%x_group_size_save : &
-                                                             x_group_size + (xset-1) * dfft%x_group_size_save ), &
-                                          v, x_group_size )
+                         IF( .not. dfft%rsactive ) THEN
+                            start = 1 + (xset-1) * dfft%x_group_size_save
+                            rs_wave => batch_aux( : , start )
+                            CALL invfft_4S( dfft, 4, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
+                                            rs_wave, & !1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ), &
+                                            comm_recv ) !comm_recv just cause Interface needs 2 Arrays
+                         ELSE
+                            start = 1 + (counter(1,2)-1) * dfft%batch_size_save + (yset-1) * dfft%y_group_size_save + (xset-1) * dfft%x_group_size_save
+                            rs_wave => wfn_real( : , start )
+                         END IF
 
-                         CALL fwfft_4S( dfft, 1, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, &
-                                        rs_wave( : , 1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ), &
+                         CALL Apply_V_4S( rs_wave, v, x_group_size )
+
+                         CALL fwfft_4S( dfft, 1, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
+                                        rs_wave, & !1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ), &
                                         dfft%aux_array( : , 1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ) )
 
                       ENDDO   
                       x_set_size = dfft%x_set_size_save
 
-                      CALL fwfft_4S( dfft, 2, batch_size, y_group_size, yset, y_set_size, counter( 1, 2 ), work_buffer, &
-                                     dfft%aux_array( : , 1 : y_group_size ), comm_send, comm_recv )
+                      CALL fwfft_4S( dfft, 2, batch_size, y_group_size, yset, y_set_size, counter( 1, 2 ), work_buffer, first_dim2, &
+                                     dfft%aux_array( : , 1 ), &!: y_group_size ), &
+                                     comm_send, comm_recv )
 
                    ENDDO   
 
@@ -2655,6 +2670,39 @@ CONTAINS
        !$omp end parallel
 
      END SUBROUTINE Four_Step_FFT_VPSI
+
+     SUBROUTINE Apply_V_4S( f, v, x_group_size ) 
+       IMPLICIT NONE
+     
+       COMPLEX(DP), INTENT(INOUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size
+       REAL(DP), INTENT(IN) :: v( * )
+       INTEGER, INTENT(IN)  :: x_group_size
+     
+       INTEGER :: j, igroup
+     
+       INTEGER(INT64) :: time(2)
+     
+       CALL SYSTEM_CLOCK( time(1) )
+     !------------------------------------------------------
+     !-----------Apply V Start------------------------------
+     
+       !$omp parallel private( j, igroup )
+       DO igroup = 1, x_group_size
+          !$omp do
+          DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
+             f( j, igroup )= - f( j, igroup ) * v( j )
+          END DO
+          !$omp end do nowait
+       END DO
+       !$omp end parallel
+     
+     !------------Apply V End-------------------------------
+     !------------------------------------------------------
+       CALL SYSTEM_CLOCK( time(2) )
+     
+       dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
+     
+     END SUBROUTINE Apply_V_4S
   
   END SUBROUTINE do_the_vpsi_thing
 
