@@ -1850,6 +1850,8 @@ CONTAINS
     INTEGER :: next, last_buffer, ibatch, work_buffer, z_set_size, y_set_size, scatter_set_size, apply_set_size, x_set_size
     LOGICAL :: finished_all, last_start, last_start_triggered
 
+    INTEGER, SAVE :: loop_size
+
     INTEGER(INT64) :: auto_time(2)
     INTEGER(INT64) :: time(20)
     INTEGER(INT64), SAVE :: cr
@@ -1942,11 +1944,14 @@ CONTAINS
        dfft%num_buff = buffer_size
        IF( dfft%rem_size .ne. 0 ) THEN
           dfft%max_nbnd = ( nbnd / batch_size ) + 1
+          loop_size = (((nbnd/batch_size)+1)*2)+dfft%num_buff
        ELSE
           dfft%max_nbnd = ( nbnd / batch_size )
+          loop_size = ((nbnd/batch_size)*2)+dfft%num_buff
        END IF
        IF( ALLOCATED( first_step ) )   DEALLOCATE( first_step )
        ALLOCATE( first_step( dfft%buffer_size_save ) ) 
+
   
     END IF
   
@@ -1974,7 +1979,6 @@ CONTAINS
     dfft%first_loading = .true.
     dfft%rem = .false.
  
-    c = 0
     CALL MPI_BARRIER(dfft%comm, ierr)
 
     CALL SYSTEM_CLOCK( time(1) )
@@ -2392,7 +2396,7 @@ CONTAINS
        COMPLEX(DP), CONTIGUOUS, SAVE, POINTER  :: rs_wave(:)
 
        INTEGER :: yset, xset, y_group_size, x_group_size
-       INTEGER :: start, first_dim1, first_dim2
+       INTEGER :: iloop, start, first_dim1, first_dim2
 
        first_dim1 = dfft%my_nr3p * dfft%nr2 * dfft%nr1
        first_dim2 = dfft%nr2 * dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p
@@ -2438,10 +2442,9 @@ CONTAINS
           do_calc = .true.
        ENDIF
       
-       DO WHILE( .not. finished_all )
+       DO iloop = 1, loop_size
+!       DO WHILE( .not. finished_all )
   
-          IF( dfft%mype .eq. 0 .and. do_calc ) c = c + 1
- 
           IF( work_buffer .eq. 0 ) THEN
              next = mod( next, buffer_size ) + 1
              IF( next .eq. 0 ) THEN
@@ -2459,7 +2462,14 @@ CONTAINS
           ELSE
              CONTINUE
           END IF
-   
+
+          IF( ( ( do_calc .and. finished( 1, 2 ) ) .or. ( do_com .and. finished( 2, 2 ) ) ) .and. .not. first_step(work_buffer) ) THEN
+             next = mod( next, buffer_size ) + 1
+             work_buffer = dfft%buffer_sequence( next )
+          END IF
+
+          IF( dfft%mype .eq. 0 .and. do_calc ) test = test + 1
+ 
           IF( dfft%rem_size .ne. 0 .and. ( ( ( ( .not. dfft%rsactive .and. first_step( work_buffer ) ) .or. ( dfft%rsactive .and. .not. first_step(work_buffer) ) ) .and. last_buffer .eq. 0 .and. &
             ( &
               ( counter( 1, 1 ) .eq. dfft%max_nbnd - 1 .or. counter( 2, 1 ) .eq. dfft%max_nbnd - 1 ) .or. &
@@ -2584,12 +2594,11 @@ CONTAINS
 
                       IF( dfft%rsactive ) THEN
                          start = 1+(counter(1,2)-1)*dfft%batch_size_save+(yset-1)*dfft%y_group_size_save
-                         rs_wave => wfn_real( : , start ) !1+(counter(1,2)-1)*dfft%batch_size_save+(yset-1)*dfft%y_group_size_save : &
-!                                                  y_group_size+(counter(1,2)-1)*dfft%batch_size_save+(yset-1)*dfft%y_group_size_save )
+                         rs_wave => wfn_real( : , start )
                       ELSE
                          rs_wave => batch_aux(:,1)
                          CALL invfft_4S( dfft, 3, batch_size, y_group_size, yset, 0, counter( 1, 2 ), work_buffer, first_dim1, &
-                                         rs_wave, & !: y_group_size ), &
+                                         rs_wave, &
                                          comm_recv, dfft%aux_array( : , 1 : y_group_size ) )                        
                       END IF
 
@@ -2612,8 +2621,8 @@ CONTAINS
                             start = 1 + (xset-1) * dfft%x_group_size_save
                             rs_wave => batch_aux( : , start )
                             CALL invfft_4S( dfft, 4, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
-                                            rs_wave, & !1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ), &
-                                            comm_recv ) !comm_recv just cause Interface needs 2 Arrays
+                                            rs_wave, &
+                                            comm_recv )
                          ELSE
                             start = 1 + (counter(1,2)-1) * dfft%batch_size_save + (yset-1) * dfft%y_group_size_save + (xset-1) * dfft%x_group_size_save
                             rs_wave => wfn_real( : , start )
@@ -2622,14 +2631,14 @@ CONTAINS
                          CALL Apply_V_4S( rs_wave, v, x_group_size )
 
                          CALL fwfft_4S( dfft, 1, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
-                                        rs_wave, & !1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ), &
+                                        rs_wave, &
                                         dfft%aux_array( : , 1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ) )
 
                       ENDDO   
                       x_set_size = dfft%x_set_size_save
 
                       CALL fwfft_4S( dfft, 2, batch_size, y_group_size, yset, y_set_size, counter( 1, 2 ), work_buffer, first_dim2, &
-                                     dfft%aux_array( : , 1 ), &!: y_group_size ), &
+                                     dfft%aux_array( : , 1 ), &
                                      comm_send, comm_recv )
 
                    ENDDO   
