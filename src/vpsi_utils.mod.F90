@@ -2395,11 +2395,12 @@ CONTAINS
 
        COMPLEX(DP), CONTIGUOUS, SAVE, POINTER  :: rs_wave(:)
 
-       INTEGER :: yset, xset, y_group_size, x_group_size
-       INTEGER :: iloop, start, first_dim1, first_dim2
+       INTEGER :: zset, yset, xset, z_group_size, y_group_size, x_group_size
+       INTEGER :: iloop, start, ending, first_dim1, first_dim2, first_dim3
 
        first_dim1 = dfft%my_nr3p * dfft%nr2 * dfft%nr1
        first_dim2 = dfft%nr2 * dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p
+       first_dim3 = dfft%nr3 * dfft%nsw(dfft%mype+1)
 
        !$omp parallel IF( nthreads .eq. 2 ) num_threads( nthreads ) &
        !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, &
@@ -2468,8 +2469,6 @@ CONTAINS
              work_buffer = dfft%buffer_sequence( next )
           END IF
 
-          IF( dfft%mype .eq. 0 .and. do_calc ) test = test + 1
- 
           IF( dfft%rem_size .ne. 0 .and. ( ( ( ( .not. dfft%rsactive .and. first_step( work_buffer ) ) .or. ( dfft%rsactive .and. .not. first_step(work_buffer) ) ) .and. last_buffer .eq. 0 .and. &
             ( &
               ( counter( 1, 1 ) .eq. dfft%max_nbnd - 1 .or. counter( 2, 1 ) .eq. dfft%max_nbnd - 1 ) .or. &
@@ -2507,10 +2506,29 @@ CONTAINS
                       z_set_size = dfft%z_set_size_save
                    END IF
    
-                   CALL SYSTEM_CLOCK( time(5) )
-                   CALL fwfft_pwbatch( dfft, 3, batch_size, z_set_size, counter( 1, 3 ), work_buffer, psi_R, hpsi_R, comm_recv(:,work_buffer) )
-                   CALL SYSTEM_CLOCK( time(6) )
-                   dfft%time_adding( 18 ) = dfft%time_adding( 18 ) + ( time(6) - time(5) )
+                   DO zset = 1, z_set_size
+                 
+                      !Too slow? lets wait and see!
+                      IF( zset .ne. z_set_size .or. zset .eq. 1 .or. z_group_size * z_set_size .eq. batch_size ) THEN
+                         IF( mod( batch_size, z_set_size ) .eq. 0 ) THEN
+                            z_group_size = batch_size / z_set_size
+                         ELSE
+                            z_group_size = batch_size / z_set_size + 1
+                         ENDIF
+                         dfft%z_group_size_save = z_group_size
+                      ELSE
+                         z_group_size = batch_size - (z_set_size-1) * z_group_size
+                      END IF
+
+                      CALL SYSTEM_CLOCK( time(5) )
+                      start = 1+(((zset-1)*dfft%z_group_size_save)+(counter(1,3)-1)*dfft%batch_size_save)*2
+                      ending = z_group_size*2+(((zset-1)*dfft%z_group_size_save)+(counter(1,3)-1)*dfft%batch_size_save)*2
+                      CALL fwfft_4S( dfft, 4, batch_size, z_group_size, zset, z_set_size, counter( 1, 3 ), work_buffer, first_dim3, &
+                                          dfft%aux_array, psi_R(:,start:ending), hpsi_R(:,start:ending), comm_recv )
+                      CALL SYSTEM_CLOCK( time(6) )
+                      dfft%time_adding( 18 ) = dfft%time_adding( 18 ) + ( time(6) - time(5) )
+
+                   ENDDO
    
                    IF( last_start_triggered ) THEN
                       batch_size = dfft%rem_size
@@ -2530,10 +2548,29 @@ CONTAINS
    
                    counter( 1, 1 ) = counter( 1, 1 ) + 1
  
-                   CALL SYSTEM_CLOCK( time(10) )
-                   CALL invfft_pwbatch( dfft, 1, batch_size, z_set_size, 0, 0, counter( 1, 1 ), work_buffer, psi_R, comm_send, comm_recv(:,work_buffer) )
-                   CALL SYSTEM_CLOCK( time(11) )
-                   dfft%time_adding( 19 ) = dfft%time_adding( 19 ) + ( time(11) - time(10) )
+                   DO zset = 1, z_set_size
+                 
+                      !Too slow? lets wait and see!
+                      IF( zset .ne. z_set_size .or. zset .eq. 1 .or. z_group_size * z_set_size .eq. batch_size ) THEN
+                         IF( mod( batch_size, z_set_size ) .eq. 0 ) THEN
+                            z_group_size = batch_size / z_set_size
+                         ELSE
+                            z_group_size = batch_size / z_set_size + 1
+                         ENDIF
+                         dfft%z_group_size_save = z_group_size
+                      ELSE
+                         z_group_size = batch_size - (z_set_size-1) * z_group_size
+                      END IF
+
+                      CALL SYSTEM_CLOCK( time(10) )
+                      start = 1+(((zset-1)*dfft%z_group_size_save)+(counter(1,1)-1)*dfft%batch_size_save)*2
+                      ending = z_group_size*2+(((zset-1)*dfft%z_group_size_save)+(counter(1,1)-1)*dfft%batch_size_save)*2
+                      CALL invfft_4S( dfft, 1, batch_size, z_group_size, zset, z_set_size, counter( 1, 1 ), work_buffer, first_dim3,  &
+                                      dfft%aux_array, psi_R( : , start : ending ), comm_send, comm_recv )
+                      CALL SYSTEM_CLOCK( time(11) )
+                      dfft%time_adding( 19 ) = dfft%time_adding( 19 ) + ( time(11) - time(10) )
+
+                   ENDDO
  
                    IF( counter( 1, 1 ) .eq. dfft%max_nbnd ) finished( 1, 1 ) = .true.
    
@@ -2598,8 +2635,7 @@ CONTAINS
                       ELSE
                          rs_wave => batch_aux(:,1)
                          CALL invfft_4S( dfft, 3, batch_size, y_group_size, yset, 0, counter( 1, 2 ), work_buffer, first_dim1, &
-                                         rs_wave, &
-                                         comm_recv, dfft%aux_array( : , 1 : y_group_size ) )                        
+                                         rs_wave, comm_recv, dfft%aux_array( : , 1 : y_group_size ) )                        
                       END IF
 
                       IF( x_set_size .gt. y_group_size ) x_set_size = y_group_size
@@ -2620,9 +2656,7 @@ CONTAINS
                          IF( .not. dfft%rsactive ) THEN
                             start = 1 + (xset-1) * dfft%x_group_size_save
                             rs_wave => batch_aux( : , start )
-                            CALL invfft_4S( dfft, 4, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
-                                            rs_wave, &
-                                            comm_recv )
+                            CALL invfft_4S( dfft, 4, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, first_dim1, rs_wave, comm_recv )
                          ELSE
                             start = 1 + (counter(1,2)-1) * dfft%batch_size_save + (yset-1) * dfft%y_group_size_save + (xset-1) * dfft%x_group_size_save
                             rs_wave => wfn_real( : , start )
@@ -2631,15 +2665,13 @@ CONTAINS
                          CALL Apply_V_4S( rs_wave, v, x_group_size )
 
                          CALL fwfft_4S( dfft, 1, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
-                                        rs_wave, &
-                                        dfft%aux_array( : , 1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ) )
+                                        rs_wave, dfft%aux_array( : , 1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ) )
 
                       ENDDO   
                       x_set_size = dfft%x_set_size_save
 
                       CALL fwfft_4S( dfft, 2, batch_size, y_group_size, yset, y_set_size, counter( 1, 2 ), work_buffer, first_dim2, &
-                                     dfft%aux_array( : , 1 ), &
-                                     comm_send, comm_recv )
+                                     dfft%aux_array( : , 1 ), comm_send, comm_recv )
 
                    ENDDO   
 

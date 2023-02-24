@@ -24,10 +24,12 @@ MODULE fftpw_batching
   PUBLIC :: fwfft_pre_com
   PUBLIC :: fwfft_after_com
   PUBLIC :: Accumulate_Psi_overlapp
+  PUBLIC :: invfft_z_section
   PUBLIC :: invfft_y_section
   PUBLIC :: invfft_x_section
   PUBLIC :: fwfft_x_section
   PUBLIC :: fwfft_y_section
+  PUBLIC :: fwfft_z_section
 
 CONTAINS
 
@@ -939,6 +941,93 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, aux, hpsi, ngms, z_group_size, last, n
 
 END SUBROUTINE Accumulate_Psi_overlapp
 
+SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batch_size, z_group_size, ns )
+  IMPLICIT NONE
+
+  INTEGER, INTENT(IN) :: iset, batch_size, z_group_size
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN) :: ns( * )
+  COMPLEX(DP), INTENT(INOUT) :: comm_mem_send( * ), comm_mem_recv( * )
+  COMPLEX(DP), INTENT(INOUT)  :: aux ( dfft%nr3 , * ) !ns(dfft%mype+1)*z_group_size )
+
+  INTEGER :: l, m, j, k, i
+  INTEGER :: offset, kdest, ierr
+
+  INTEGER(INT64) :: time(3)
+
+  CALL SYSTEM_CLOCK( time(1) )
+!------------------------------------------------------
+!------------z-FFT Start-------------------------------
+
+  CALL fft_1D( aux, ns(dfft%mype+1)*z_group_size, dfft%nr3, 2 )
+
+!-------------z-FFT End--------------------------------
+!------------------------------------------------------
+  CALL SYSTEM_CLOCK( time(2) )
+!------------------------------------------------------
+!---------Pre-Com-Copy Start---------------------------
+
+  IF( .not. dfft%single_node ) THEN
+
+     !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 1 ), ierr )
+
+     !$omp parallel private( l, m, j, offset, k, kdest, i )
+     DO l = 1, dfft%nodes_numb
+        IF( dfft%non_blocking .and. l .eq. dfft%my_node+1 ) CYCLE 
+        DO m = 1, dfft%node_task_size
+           j = (l-1)*dfft%node_task_size + m
+           offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (iset-1)*dfft%z_group_size_save ) * dfft%big_chunks
+           !$omp do
+           DO k = 1, ns(dfft%mype+1) * z_group_size
+              kdest = offset + dfft%nr3px * mod( (k-1), ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks
+              !omp simd
+              DO i = 1, dfft%nr3p( j )
+                 comm_mem_send( kdest + i ) = aux( i + dfft%nr3p_offset( j ), k )
+              ENDDO
+           ENDDO
+           !$omp end do nowait
+        ENDDO
+     ENDDO
+     !$omp end parallel
+
+     !CALL mpi_win_unlock_all( dfft%mpi_window( 1 ), ierr )
+
+  END IF
+
+  IF( dfft%single_node .or. dfft%non_blocking ) THEN
+
+     !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
+
+     !$omp parallel private( m, j, offset, k, kdest, i )
+     DO m = 1, dfft%node_task_size
+        j = dfft%my_node*dfft%node_task_size + m
+        offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (iset-1)*dfft%z_group_size_save ) * dfft%big_chunks
+        !$omp do
+        DO k = 1, ns(dfft%mype+1) * z_group_size 
+           kdest = offset + dfft%nr3px * mod( k-1, ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks
+           !omp simd
+           DO i = 1, dfft%nr3p( j )
+              comm_mem_recv( kdest + i ) = aux( i + dfft%nr3p_offset( j ), k )
+           ENDDO
+        ENDDO
+        !$omp end do nowait
+     ENDDO
+     !$omp end parallel
+
+     !CALL mpi_win_unlock_all( dfft%mpi_window( 2 ), ierr )
+
+  END IF
+
+!----------Pre-Com-Copy End----------------------------
+!------------------------------------------------------
+  CALL SYSTEM_CLOCK( time(3) )
+
+  dfft%time_adding( 2 ) = dfft%time_adding( 2 ) + ( time(2) - time(1) )
+  dfft%time_adding( 3 ) = dfft%time_adding( 3 ) + ( time(3) - time(2) )
+  dfft%counter(2) = dfft%counter(2) + 1
+
+END SUBROUTINE invfft_z_section 
+
 SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, nr1s, y_group_size, yset )
   IMPLICIT NONE
 
@@ -1252,6 +1341,63 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
   dfft%time_adding( 12 ) = dfft%time_adding( 12 ) + ( time(3) - time(2) )
 
 END SUBROUTINE fwfft_y_section
+
+SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, iset, batch_size, z_group_size, ns )
+  IMPLICIT NONE
+
+  INTEGER, INTENT(IN) :: iset, batch_size, z_group_size
+  INTEGER, INTENT(IN) :: ns( * )
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
+  COMPLEX(DP), INTENT(INOUT)  :: aux ( dfft%nr3 , * ) !ns(dfft%mype+1)*z_group_size )
+
+  INTEGER :: j, l, k, i
+  INTEGER :: offset, kfrom, ierr
+
+  INTEGER(INT64) :: time(3)
+
+  CALL SYSTEM_CLOCK( time(1) )
+!------------------------------------------------------
+!--------After-Com-Copy Start--------------------------
+
+  !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
+ 
+  !$omp parallel private( kfrom, j, i, k, offset, l )
+  DO j = 1, dfft%nodes_numb
+     DO l = 1, dfft%node_task_size
+        offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (iset-1)*dfft%z_group_size_save ) * dfft%big_chunks
+        !$omp do
+        DO k = 1, ns(dfft%mype3+1) * z_group_size
+           kfrom = offset + dfft%nr3px * mod( k-1, ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks
+           !$omp simd
+           DO i = 1, dfft%nr3p( (j-1)*dfft%node_task_size + l )
+              aux( dfft%nr3p_offset( (j-1)*dfft%node_task_size + l ) + i, k ) = comm_mem_recv( kfrom + i )
+           ENDDO
+        ENDDO
+        !$omp end do
+     ENDDO
+  ENDDO
+  !$omp end parallel
+
+  !CALL mpi_win_unlock_all( dfft%mpi_window( 2 ), ierr )
+
+!---------After-Com-Copy End---------------------------
+!------------------------------------------------------
+  CALL SYSTEM_CLOCK( time(2) )
+!------------------------------------------------------
+!------------z-FFT Start-------------------------------
+
+  CALL fft_1D( aux, ns(dfft%mype+1)*z_group_size, dfft%nr3, -2 )
+
+!-------------z-FFT End--------------------------------
+!------------------------------------------------------
+  CALL SYSTEM_CLOCK( time(3) )
+
+  dfft%time_adding( 13 ) = dfft%time_adding( 13 ) + ( time(2) - time(1) )
+  dfft%time_adding( 14 ) = dfft%time_adding( 14 ) + ( time(3) - time(2) )
+  dfft%counter(6) = dfft%counter(6) + 1
+
+END SUBROUTINE fwfft_z_section
 
 !=----------------------------------------------------------------------=
 END MODULE fftpw_batching
