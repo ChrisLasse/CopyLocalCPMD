@@ -10,6 +10,7 @@ MODULE autotune_utils
                                              fft_tune_max_it
   USE fftprp_utils,                    ONLY: autotune_fftbatchsize
   USE fftpw_base,                      ONLY: dfft
+  USE fftpw_make_maps,                 ONLY: GIMME_GROUP_SIZES
   USE fftpw_param,                     ONLY: DP
   USE mp_interface,                    ONLY: mp_bcast
   USE system,                          ONLY: cnti, cntl
@@ -230,7 +231,7 @@ CONTAINS
 
   END SUBROUTINE autotune_pw_vpsi
 
-  SUBROUTINE autotune_pw_4Svpsi( time, finished )
+  SUBROUTINE autotune_pw_4Svpsi_old( time, finished )
 
   REAL(DP), INTENT(IN) :: time
   LOGICAL, INTENT(OUT) :: finished
@@ -420,6 +421,162 @@ CONTAINS
         set_time_mask = .false.
         set_z_save = 0
         set_yx_save = 0
+     END IF
+  
+  END IF
+
+  END SUBROUTINE autotune_pw_4Svpsi_old
+
+  SUBROUTINE autotune_pw_4Svpsi( time )
+
+  REAL(DP), INTENT(IN) :: time
+
+  INTEGER, SAVE  :: mbuff, mbatch, repeats, omit, set_repeats
+  REAL(DP), SAVE, ALLOCATABLE :: final_time(:), z_group_time(:), y_group_time(:), x_group_time(:)
+  LOGICAL, SAVE, ALLOCATABLE :: group_mask(:,:)
+  LOGICAL, SAVE :: first = .true.
+  LOGICAL, SAVE :: alloc = .true.
+  LOGICAL, SAVE :: group_timing = .true.
+  INTEGER, SAVE :: timed = 0
+  INTEGER, SAVE :: waiting = 0
+  LOGICAL :: next_batch
+  LOGICAL, SAVE :: auto_write = .true.
+  INTEGER, SAVE :: x_repeats = 0
+  INTEGER, SAVE :: y_z_repeats = 0
+  INTEGER, SAVE :: group_repeats = 0
+
+  INTEGER :: bb_counter, i
+
+  INTEGER, SAVE :: group_called = 0
+  INTEGER(INT64), SAVE :: cr
+
+  next_batch = .false.
+
+  IF( first ) THEN 
+     mbuff = dfft%max_buffer_size
+     mbatch = dfft%max_batch_size
+     repeats = 5
+     group_repeats = 3
+     omit = 3
+     ALLOCATE( final_time( mbuff*mbatch ) )
+     ALLOCATE( z_group_time( mbatch ) )
+     ALLOCATE( y_group_time( mbatch ) )
+     ALLOCATE( x_group_time( mbatch ) )
+     ALLOCATE( group_mask( mbatch, 3 ) )
+     final_time = 0.d0
+     z_group_time = 0.d0
+     y_group_time = 0.d0
+     x_group_time = 0.d0
+     first = .false.
+     CALL SYSTEM_CLOCK( count_rate = cr )
+  END IF
+
+  IF( alloc .and. waiting .le. omit-1 ) THEN
+     waiting = waiting + 1
+     dfft%auto_4Stimings = 0
+  ELSE
+     bb_counter = (dfft%buffer_size_save-1) * dfft%max_batch_size + dfft%batch_size_save
+     alloc = .false.
+     IF( group_timing .and. dfft%batch_size_save .eq. dfft%max_batch_size ) THEN
+        z_group_time( dfft%z_group_autosize ) = z_group_time( dfft%z_group_autosize ) + REAL( REAL( dfft%auto_4Stimings(1) / ( dfft%z_divider * dfft%z_group_autosize ) ) / REAL( cr ) )
+        y_group_time( dfft%y_group_autosize ) = y_group_time( dfft%y_group_autosize ) + REAL( REAL( dfft%auto_4Stimings(2) / ( dfft%y_divider * dfft%y_group_autosize ) ) / REAL( cr ) )
+        y_z_repeats = y_z_repeats + 1
+        IF( .not. dfft%x_optimal ) THEN
+           x_group_time( dfft%x_group_autosize ) = x_group_time( dfft%x_group_autosize ) + REAL( REAL( dfft%auto_4Stimings(3) / ( dfft%x_divider * dfft%x_group_autosize ) ) / REAL( cr ) )
+           x_repeats = x_repeats + 1
+        END IF
+        dfft%auto_4Stimings = 0
+        group_called = group_called + 1
+        IF( group_called .gt. group_repeats-1 ) THEN
+           group_called = 0
+           IF( dfft%y_group_autosize .eq. dfft%max_batch_size .and. dfft%x_group_autosize .ne. 1 ) THEN
+              x_group_time( dfft%x_group_autosize ) = x_group_time( dfft%x_group_autosize ) / x_repeats
+              IF( dfft%mype .eq. 0 ) write(6,'(A9,I3,A6,E15.8)') "x_group:", dfft%x_group_autosize, "TIME:", x_group_time( dfft%x_group_autosize )
+              dfft%x_group_autosize = dfft%x_group_autosize - 1
+              x_repeats = 0
+           ELSE
+              IF( .not. dfft%x_optimal ) THEN
+                 x_group_time( dfft%x_group_autosize ) = x_group_time( dfft%x_group_autosize ) / x_repeats
+                 IF( dfft%mype .eq. 0 ) write(6,'(A9,I3,A6,E15.8)') "x_group:", dfft%x_group_autosize, "TIME:", x_group_time( dfft%x_group_autosize )
+                 group_mask = .true.
+                 x_repeats = 0
+                 DO i = 1, dfft%max_batch_size
+                    dfft%optimal_groups( i , dfft%buffer_size_save , 1 ) = MINLOC( x_group_time, 1, group_mask(:,1) )
+                    group_mask( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) , 1 ) = .false.
+                 ENDDO
+                 dfft%x_optimal = .true.
+              END IF
+              y_group_time( dfft%y_group_autosize ) = y_group_time( dfft%y_group_autosize ) / y_z_repeats
+              IF( dfft%mype .eq. 0 ) write(6,'(A9,I3,A6,E15.8)') "y_group:", dfft%y_group_autosize, "TIME:", y_group_time( dfft%y_group_autosize )
+              z_group_time( dfft%z_group_autosize ) = z_group_time( dfft%z_group_autosize ) / y_z_repeats
+              IF( dfft%mype .eq. 0 ) write(6,'(A9,I3,A6,E15.8)') "z_group:", dfft%z_group_autosize, "TIME:", z_group_time( dfft%z_group_autosize )
+              y_z_repeats = 0
+              IF( dfft%y_group_autosize .gt. 1 ) THEN
+                 dfft%y_group_autosize = dfft%y_group_autosize - 1
+                 dfft%z_group_autosize = dfft%z_group_autosize - 1
+              ELSE
+                 DO i = 1, dfft%max_batch_size
+                    dfft%optimal_groups( i , dfft%buffer_size_save , 2 ) = MINLOC( y_group_time, 1, group_mask(:,2) )
+                    group_mask( dfft%optimal_groups( i, dfft%buffer_size_save, 2 ) , 2 ) = .false.
+                    dfft%optimal_groups( i , dfft%buffer_size_save , 3 ) = MINLOC( z_group_time, 1, group_mask(:,3) )
+                    group_mask( dfft%optimal_groups( i, dfft%buffer_size_save, 3 ) , 3 ) = .false.
+                 ENDDO
+                 dfft%y_z_optimal = .true.
+                 group_timing = .false.
+              END IF
+           END IF
+        END IF
+     ELSE
+        final_time( bb_counter ) = final_time( bb_counter ) + time
+        timed = timed + 1
+        IF( timed .eq. repeats ) next_batch = .true.
+     END IF
+  END IF
+
+  IF( next_batch ) THEN
+ 
+     final_time( bb_counter ) = final_time( bb_counter ) / ( repeats ) !+ set_repeats )
+     IF( dfft%mype .eq. 0 ) write(6,'(A21,I3,A7,I3,A6,E15.8)') "vpsi tunning buffer:", dfft%buffer_size_save, "batch:", dfft%batch_size_save, "TIME:", final_time( bb_counter )
+
+     IF( dfft%batch_size_save .eq. 1 ) THEN
+        IF( dfft%buffer_size_save .ne. mbuff ) THEN
+           dfft%batch_size_save = dfft%max_batch_size
+           dfft%buffer_size_save = dfft%buffer_size_save + 1
+           dfft%x_group_autosize = dfft%max_batch_size
+           dfft%y_group_autosize = dfft%max_batch_size
+           dfft%z_group_autosize = dfft%max_batch_size
+           dfft%x_optimal = .false.
+           dfft%y_z_optimal = .false.
+        ELSE
+           dfft%buffer_size_save = dfft%buffer_size_save + 1
+        END IF
+     ELSE
+        dfft%batch_size_save = dfft%batch_size_save - 1
+     END IF
+  
+     IF( dfft%buffer_size_save .eq. mbuff+1 ) THEN
+        IF( dfft%mype .eq. 0 ) THEN
+           dfft%buffer_size_save = ( ( MINLOC( final_time, 1 ) - 1 ) / mbatch ) + 1
+           dfft%batch_size_save  = mod( MINLOC( final_time, 1 ) - 1, mbatch ) + 1
+           write(6,*) " "
+           write(6,*) "VPSI TUNNING FINISHED"
+           write(6,*) " "
+           write(6,*) final_time
+           write(6,*) " "
+        END IF
+        CALL MP_BCAST( dfft%buffer_size_save, 0, dfft%comm )
+        CALL MP_BCAST(  dfft%batch_size_save, 0, dfft%comm )
+        dfft%autotune_finished = .true.
+     ELSE
+        alloc = .true. 
+        x_group_time = 0.d0
+        y_group_time = 0.d0
+        z_group_time = 0.d0
+        timed = 0
+        waiting = 0
+        group_timing = .true.
+        y_z_repeats = 0
+        x_repeats = 0
      END IF
   
   END IF

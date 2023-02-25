@@ -8,6 +8,12 @@
 
 MODULE fftmain_utils
 
+
+
+
+
+  USE cppt,                            ONLY: indz,&
+                                             nzh
   USE cp_cuda_types,                   ONLY: cp_cuda_env
   USE cp_cufft_types,                  ONLY: cp_cufft,&
                                              cp_cufft_device_get_ptrs,&
@@ -50,8 +56,12 @@ MODULE fftmain_utils
                                              pack_x2y_n,&
                                              unpack_y2x,&
                                              unpack_y2x_n
+  USE fftpw_converting,                ONLY: ConvertFFT_Coeffs
+  USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
+                                             Set_Req_Vals
   USE fftpw_param
-  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
+  USE fftpw_types,                     ONLY: PW_fft_type_descriptor,&
+                                             create_shared_memory_window_1d
   USE fftpw_batching
   USE kinds,                           ONLY: real_8,&
                                              int_8
@@ -63,7 +73,8 @@ MODULE fftmain_utils
                                              mltfft_hp
   USE parac,                           ONLY: parai
   USE system,                          ONLY: cntl,&
-                                             fpar
+                                             fpar,&
+                                             ncpw
   USE thread_view_types,               ONLY: thread_view_t
   USE timer,                           ONLY: tihalt,&
                                              tiset
@@ -1256,7 +1267,7 @@ CONTAINS
                                  dfft%map_acinv, dfft%map_acinv_rem, dfft%nr1w, divparam_1, divparam_2 )
   
           IF( dfft%vpsi ) THEN
-             !$  locks_calc_2( dfft%my_node_rank+1, 1+(divparam_2-1)*dfft%y_group_size_save+current:divparam_1+(divparam_2-1)*dfft%y_group_size_save+current ) = .false.
+             !$  locks_calc_2( dfft%my_node_rank+1,1+(divparam_2-1)*dfft%y_groups(1,1)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,1)+current ) = .false.
              !$omp flush( locks_calc_2 )
           ELSE
 !             !$  locks_calc_1( dfft%my_node_rank+1, 1+current+(dfft%batch_size_save*dfft%buffer_size_save):batch_size+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
@@ -1280,7 +1291,7 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(8) )
   
           !$omp flush( locks_calc_2 )
-          !$  DO WHILE( ANY(locks_calc_2( :, 1+(divparam_2-1)*dfft%y_group_size_save+current:divparam_1+(divparam_2-1)*dfft%y_group_size_save+current ) ) )
+          !$  DO WHILE( ANY(locks_calc_2( :,1+(divparam_2-1)*dfft%y_groups(1,1)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,1)+current ) ) )
           !$omp flush( locks_calc_2 )
           !$  END DO
 
@@ -1343,7 +1354,7 @@ CONTAINS
              !$     locks_calc_2( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:batch_size+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
              !$omp flush( locks_calc_2 )
              !$  ELSE 
-             !$     locks_calc_1( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:batch_size+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
+             !$     locks_calc_1( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:dfft%batch_size_save+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
              !$omp flush( locks_calc_1 )
              !$  END IF
           END IF
@@ -1356,13 +1367,6 @@ CONTAINS
   END SUBROUTINE fftpw_4S
 
   SUBROUTINE fftpw( isign, dfft, f, ng, nr1s, ir1, ns )
-    USE cppt,                                   ONLY: indz,&
-                                                      nzh
-    USE fftpw_converting,                       ONLY: ConvertFFT_Coeffs
-    USE fftpw_make_maps,                        ONLY: Prep_copy_Maps,&
-                                                      Set_Req_Vals
-    USE fftpw_types,                            ONLY: create_shared_memory_window_1d
-    USE system,                                 ONLY: ncpw
 
 !    USE mpi_f08
 

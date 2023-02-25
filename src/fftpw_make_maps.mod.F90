@@ -15,6 +15,7 @@ MODULE fftpw_make_maps
   PUBLIC :: Set_Req_Vals
   PUBLIC :: MapVals_CleanUp
   PUBLIC :: Prep_fft_com
+  PUBLIC :: GIMME_GROUP_SIZES
 
 CONTAINS
 
@@ -585,6 +586,231 @@ SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, inter_nod
   END IF
 
 END SUBROUTINE Prep_fft_com
+
+SUBROUTINE GIMME_GROUP_SIZES( dfft, last_time )
+  IMPLICIT NONE
+
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  LOGICAL, INTENT(OUT) :: last_time
+
+  INTEGER :: i
+
+  INTEGER :: x_last_size, y_last_size, z_last_size
+  CHARACTER(len=12) :: z_format, y_format, x_format, z_remformat, y_remformat, x_remformat
+
+  last_time = .false.
+
+  IF( ( .not. dfft%autotune_finished .and. dfft%tunning ) .or. .not. last_time ) THEN
+
+     IF( dfft%autotune_finished .or. .not. dfft%tunning ) last_time = .true.
+
+     IF( dfft%y_z_optimal ) THEN
+        DO i = 1, dfft%max_batch_size
+           IF( dfft%optimal_groups( i, dfft%buffer_size_save, 2 ) .le. dfft%batch_size_save ) THEN
+              dfft%y_group_size = dfft%optimal_groups( i, dfft%buffer_size_save, 2 )
+              EXIT
+           ENDIF
+        ENDDO
+        DO i = 1, dfft%max_batch_size
+           IF( dfft%optimal_groups( i, dfft%buffer_size_save, 3 ) .le. dfft%batch_size_save ) THEN
+              dfft%z_group_size = dfft%optimal_groups( i, dfft%buffer_size_save, 3 )
+              EXIT
+           ENDIF
+        ENDDO
+     ELSE
+        dfft%y_group_size = dfft%y_group_autosize
+        dfft%z_group_size = dfft%z_group_autosize
+     END IF
+
+     IF( mod( dfft%batch_size_save, dfft%y_group_size ) .eq. 0 ) THEN
+         dfft%y_loop_size(1) = dfft%batch_size_save / dfft%y_group_size
+         dfft%y_groups(:,1) = dfft%y_group_size
+     ELSE
+         dfft%y_rem1 = .true.
+         dfft%y_loop_size(1) = dfft%batch_size_save / dfft%y_group_size + 1
+         y_last_size = dfft%batch_size_save - (dfft%y_loop_size(1)-1) * dfft%y_group_size
+         dfft%y_groups(:,1) = dfft%y_group_size
+         dfft%y_groups(dfft%y_loop_size(1),1) = y_last_size
+     ENDIF
+     IF( mod( dfft%batch_size_save, dfft%z_group_size ) .eq. 0 ) THEN
+         dfft%z_loop_size(1) = dfft%batch_size_save / dfft%z_group_size
+         dfft%z_groups(:,1) = dfft%z_group_size
+     ELSE
+         dfft%z_loop_size(1) = dfft%batch_size_save / dfft%z_group_size + 1
+         z_last_size = dfft%batch_size_save - (dfft%z_loop_size(1)-1) * dfft%z_group_size
+         dfft%z_groups(:,1) = dfft%z_group_size
+         dfft%z_groups(dfft%z_loop_size(1),1) = z_last_size
+     ENDIF
+
+     IF( dfft%rem_size .ne. 0 ) THEN
+
+        IF( dfft%y_z_optimal ) THEN
+           DO i = 1, dfft%max_batch_size
+              IF( dfft%optimal_groups( i, dfft%buffer_size_save, 2 ) .le. dfft%rem_size ) THEN
+                 dfft%y_group_remsize = dfft%optimal_groups( i, dfft%buffer_size_save, 2 )
+                 EXIT
+              ENDIF
+           ENDDO
+           DO i = 1, dfft%max_batch_size
+              IF( dfft%optimal_groups( i, dfft%buffer_size_save, 3 ) .le. dfft%rem_size ) THEN
+                 dfft%z_group_remsize = dfft%optimal_groups( i, dfft%buffer_size_save, 3 )
+                 EXIT
+              ENDIF
+           ENDDO
+        ELSE
+           dfft%y_group_remsize = MIN( dfft%rem_size, dfft%y_group_autosize )
+           dfft%z_group_remsize = MIN( dfft%rem_size, dfft%z_group_autosize )
+        END IF
+
+        IF( mod( dfft%rem_size, dfft%y_group_remsize ) .eq. 0 ) THEN
+            dfft%y_loop_size(2) = dfft%rem_size / dfft%y_group_remsize
+            dfft%y_groups(:,2) = dfft%y_group_remsize
+        ELSE
+            dfft%y_rem2 = .true.
+            dfft%y_loop_size(2) = dfft%rem_size / dfft%y_group_remsize + 1
+            y_last_size = dfft%rem_size - (dfft%y_loop_size(2)-1) * dfft%y_group_remsize
+            dfft%y_groups(:,2) = dfft%y_group_remsize
+            dfft%y_groups(dfft%y_loop_size(2),2) = y_last_size
+        ENDIF
+        IF( mod( dfft%rem_size, dfft%z_group_remsize ) .eq. 0 ) THEN
+            dfft%z_loop_size(2) = dfft%rem_size / dfft%z_group_remsize
+            dfft%z_groups(:,2) = dfft%z_group_remsize
+        ELSE
+            dfft%z_loop_size(2) = dfft%rem_size / dfft%z_group_remsize + 1
+            z_last_size = dfft%rem_size - (dfft%z_loop_size(2)-1) * dfft%z_group_remsize
+            dfft%z_groups(:,2) = dfft%z_group_remsize
+            dfft%z_groups(dfft%z_loop_size(2),2) = z_last_size
+        ENDIF
+
+     END IF
+
+!========== x_size -> 4 arrays possible ================
+
+     IF( dfft%x_optimal ) THEN
+        DO i = 1, dfft%max_batch_size
+           IF( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) .le. dfft%y_groups(1,1) ) THEN
+              dfft%x_group_size = dfft%optimal_groups( i, dfft%buffer_size_save, 1 )
+              EXIT
+           ENDIF
+        ENDDO
+     ELSE
+        dfft%x_group_size = dfft%x_group_autosize
+     END IF
+     IF( mod( dfft%y_groups(1,1), dfft%x_group_size ) .eq. 0 ) THEN
+         dfft%x_loop_size(1) = dfft%y_groups(1,1) / dfft%x_group_size
+         dfft%x_groups(:,1) = dfft%x_group_size
+     ELSE
+         dfft%x_loop_size(1) = dfft%y_groups(1,1) / dfft%x_group_size + 1
+         x_last_size = dfft%y_groups(1,1) - (dfft%x_loop_size(1)-1) * dfft%x_group_size
+         dfft%x_groups(:,1) = dfft%x_group_size
+         dfft%x_groups(dfft%x_loop_size(1),1) = x_last_size
+     ENDIF
+
+     IF( dfft%y_rem1 ) THEN
+
+        IF( dfft%x_optimal ) THEN
+           DO i = 1, dfft%max_batch_size
+              IF( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) .le. dfft%y_groups(dfft%y_loop_size(1),1) ) THEN
+                 dfft%x_group_size = dfft%optimal_groups( i, dfft%buffer_size_save, 1 )
+                 EXIT
+              ENDIF
+           ENDDO
+        ELSE
+           dfft%x_group_size = MIN( dfft%y_groups(dfft%y_loop_size(1),1), dfft%x_group_autosize )
+        END IF
+        IF( mod( dfft%y_groups(dfft%y_loop_size(1),1), dfft%x_group_size ) .eq. 0 ) THEN
+            dfft%x_loop_size(2) = dfft%y_groups(dfft%y_loop_size(1),1) / dfft%x_group_size
+            dfft%x_groups(:,2) = dfft%x_group_size
+        ELSE
+            dfft%x_loop_size(2) = dfft%y_groups(dfft%y_loop_size(1),1) / dfft%x_group_size + 1
+            x_last_size = dfft%y_groups(dfft%y_loop_size(1),1) - (dfft%x_loop_size(2)-1) * dfft%x_group_size
+            dfft%x_groups(:,2) = dfft%x_group_size
+            dfft%x_groups(dfft%x_loop_size(2),2) = x_last_size
+        ENDIF
+
+     END IF
+
+     IF( dfft%rem_size .ne. 0 ) THEN
+
+        IF( dfft%x_optimal ) THEN
+           DO i = 1, dfft%max_batch_size
+              IF( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) .le. dfft%y_groups(1,2) ) THEN
+                 dfft%x_group_remsize = dfft%optimal_groups( i, dfft%buffer_size_save, 1 )
+                 EXIT
+              ENDIF
+           ENDDO
+        ELSE
+           dfft%x_group_remsize = MIN( dfft%y_groups(1,2), dfft%x_group_autosize )
+        END IF
+        IF( mod( dfft%y_groups(1,2), dfft%x_group_remsize ) .eq. 0 ) THEN
+            dfft%x_loop_size(3) = dfft%y_groups(1,2) / dfft%x_group_remsize
+            dfft%x_groups(:,3) = dfft%x_group_remsize
+        ELSE
+            dfft%x_loop_size(3) = dfft%y_groups(1,2) / dfft%x_group_remsize + 1
+            x_last_size = dfft%y_groups(1,2) - (dfft%x_loop_size(3)-1) * dfft%x_group_remsize
+            dfft%x_groups(:,3) = dfft%x_group_remsize
+            dfft%x_groups(dfft%x_loop_size(3),3) = x_last_size
+        ENDIF
+
+        IF( dfft%y_rem2 ) THEN
+
+           IF( dfft%x_optimal ) THEN
+              DO i = 1, dfft%max_batch_size
+                 IF( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) .le. dfft%y_groups(dfft%y_loop_size(2),2) ) THEN
+                    dfft%x_group_remsize = dfft%optimal_groups( i, dfft%buffer_size_save, 1 )
+                    EXIT
+                 ENDIF
+              ENDDO
+           ELSE
+              dfft%x_group_remsize = MIN( dfft%y_groups(dfft%y_loop_size(2),2), dfft%x_group_autosize )
+           END IF
+           IF( mod( dfft%y_groups(dfft%y_loop_size(2),2), dfft%x_group_remsize ) .eq. 0 ) THEN
+               dfft%x_loop_size(4) = dfft%y_groups(dfft%y_loop_size(2),2) / dfft%x_group_remsize
+               dfft%x_groups(:,4) = dfft%x_group_remsize
+           ELSE
+               dfft%x_loop_size(4) = dfft%y_groups(dfft%y_loop_size(2),2) / dfft%x_group_remsize + 1
+               x_last_size = dfft%y_groups(dfft%y_loop_size(2),2) - (dfft%x_loop_size(4)-1) * dfft%x_group_remsize
+               dfft%x_groups(:,4) = dfft%x_group_remsize
+               dfft%x_groups(dfft%x_loop_size(4),4) = x_last_size
+           ENDIF
+
+        END IF
+
+     END IF
+
+  END IF
+
+
+  IF( dfft%mype .eq. 0 ) THEN
+     write(6,*) " "
+     write(6,*) "buffer, batch sizes", dfft%buffer_size_save, dfft%batch_size_save
+     write(6,*) "x,y,z autogroup sizes", dfft%x_group_autosize, dfft%y_group_autosize, dfft%z_group_autosize
+     write(6,*) " "
+     write(z_format,'(A5,I2,A5)') "(A10,", dfft%z_loop_size(1), "(I3))"
+     write(6,z_format) "z_groups:", ( dfft%z_groups(i,1), i = 1, dfft%z_loop_size(1) )
+     write(z_remformat,'(A5,I2,A5)') "(A14,", dfft%z_loop_size(2), "(I3))"
+     IF( dfft%rem_size .ne. 0 ) write(6,z_remformat) "z_rem_groups:", ( dfft%z_groups(i,2), i = 1, dfft%z_loop_size(2) )
+     write(6,*) " "
+     write(y_format,'(A5,I2,A5)') "(A10,", dfft%y_loop_size(1), "(I3))"
+     write(6,y_format) "y_groups:", ( dfft%y_groups(i,1), i = 1, dfft%y_loop_size(1) )
+     write(y_remformat,'(A5,I2,A5)') "(A14,", dfft%y_loop_size(2), "(I3))"
+     IF( dfft%rem_size .ne. 0 ) write(6,y_remformat) "y_rem_groups:", ( dfft%y_groups(i,2), i = 1, dfft%y_loop_size(2) )
+     write(6,*) " "
+     write(x_format,'(A5,I2,A5)') "(A10,", dfft%x_loop_size(1), "(I3))"
+     write(6,x_format) "x_groups:", ( dfft%x_groups(i,1), i = 1, dfft%x_loop_size(1) )
+     write(x_remformat,'(A5,I2,A5)') "(A15,", dfft%x_loop_size(2), "(I3))"
+     IF( dfft%y_rem1 ) write(6,x_remformat) "x_yrem_groups:", ( dfft%x_groups(i,2), i = 1, dfft%x_loop_size(2) )
+     write(x_format,'(A5,I2,A5)') "(A14,", dfft%x_loop_size(3), "(I3))"
+     IF( dfft%rem_size .ne. 0 ) write(6,x_format) "x_rem_groups:", ( dfft%x_groups(i,3), i = 1, dfft%x_loop_size(3) )
+     write(x_remformat,'(A5,I2,A5)') "(A19,", dfft%x_loop_size(4), "(I3))"
+     IF( dfft%y_rem2 ) write(6,x_remformat) "x_rem_yrem_groups:", ( dfft%x_groups(i,4), i = 1, dfft%x_loop_size(4) )
+     write(6,*) " "
+  END IF
+
+  dfft%y_rem1 = .false.
+  dfft%y_rem2 = .false.
+
+END SUBROUTINE
 
 !=----------------------------------------------------------------------=
 END MODULE fftpw_make_maps
