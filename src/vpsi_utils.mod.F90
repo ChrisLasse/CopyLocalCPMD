@@ -80,7 +80,8 @@ MODULE vpsi_utils
   USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
                                              Set_Req_Vals,&
                                              MapVals_CleanUp,&
-                                             Prep_fft_com 
+                                             Prep_fft_com,&
+                                             GIMME_GROUP_SIZES
   USE fftpw_param,                     ONLY: DP
   USE fftpw_types,                     ONLY: create_shared_memory_window_2d,&
                                              create_shared_locks_2d,&
@@ -1852,7 +1853,7 @@ CONTAINS
 
     INTEGER, SAVE :: loop_size
 
-    INTEGER(INT64) :: auto_time(2)
+    INTEGER(INT64) :: auto_time(6)
     INTEGER(INT64) :: time(20)
     INTEGER(INT64), SAVE :: cr
     REAL(DP) :: timer(29)
@@ -2398,9 +2399,19 @@ CONTAINS
        INTEGER :: zset, yset, xset, z_group_size, y_group_size, x_group_size
        INTEGER :: iloop, start, ending, first_dim1, first_dim2, first_dim3
 
+       INTEGER :: xloop, yloop, zloop, x_which, y_which, z_which
+
+       LOGICAL, SAVE :: autodone = .false.
+
        first_dim1 = dfft%my_nr3p * dfft%nr2 * dfft%nr1
        first_dim2 = dfft%nr2 * dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p
        first_dim3 = dfft%nr3 * dfft%nsw(dfft%mype+1)
+
+       dfft%x_divider = 0
+       dfft%y_divider = 0
+       dfft%z_divider = 1
+
+       IF( .not. autodone ) CALL GIMME_GROUP_SIZES( dfft , autodone )
 
        !$omp parallel IF( nthreads .eq. 2 ) num_threads( nthreads ) &
        !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, &
@@ -2483,6 +2494,12 @@ CONTAINS
              END IF
              IF( do_com  ) dfft%sendsize = sendsize_rem
              IF( do_calc ) dfft%rem = .true.
+          END IF
+
+          IF( do_calc ) THEN
+             z_which = 1
+             y_which = 1
+             x_which = 1
           END IF
        
           IF( first_step( work_buffer ) ) THEN
@@ -2613,70 +2630,72 @@ CONTAINS
    
                    counter( 1, 2 ) = counter( 1, 2 ) + 1
 
-                   CALL SYSTEM_CLOCK( auto_time(1) )
+                   IF( batch_size .ne. dfft%batch_size_save ) y_which = 2
+                   
+                   DO yloop = 1, dfft%y_loop_size( y_which )
 
-                   DO yset = 1, y_set_size
-                 
-                      !Too slow? lets wait and see!
-                      IF( yset .ne. y_set_size .or. yset .eq. 1 .or. y_group_size * y_set_size .eq. batch_size ) THEN
-                         IF( mod( batch_size, y_set_size ) .eq. 0 ) THEN
-                            y_group_size = batch_size / y_set_size
-                         ELSE
-                            y_group_size = batch_size / y_set_size + 1
-                         ENDIF
-                         dfft%y_group_size_save = y_group_size
-                      ELSE
-                         y_group_size = batch_size - (y_set_size-1) * y_group_size
-                      END IF
+                      CALL SYSTEM_CLOCK( auto_time(1) )
 
                       IF( dfft%rsactive ) THEN
-                         start = 1+(counter(1,2)-1)*dfft%batch_size_save+(yset-1)*dfft%y_group_size_save
+                         start = 1+(counter(1,2)-1)*dfft%batch_size_save+(yloop-1)*dfft%y_groups(1,1)
                          rs_wave => wfn_real( : , start )
                       ELSE
                          rs_wave => batch_aux(:,1)
-                         CALL invfft_4S( dfft, 3, batch_size, y_group_size, yset, 0, counter( 1, 2 ), work_buffer, first_dim1, &
-                                         rs_wave, comm_recv, dfft%aux_array( : , 1 : y_group_size ) )                        
+                         CALL invfft_4S( dfft, 3, batch_size, dfft%y_groups(yloop,y_which), yloop, 0, counter( 1, 2 ), work_buffer, first_dim1, &
+                                         rs_wave, comm_recv, dfft%aux_array( : , 1 : dfft%y_groups(yloop,y_which) ) )                        
                       END IF
 
-                      IF( x_set_size .gt. y_group_size ) x_set_size = y_group_size
-                      DO xset = 1, x_set_size
-                    
-                         !Too slow? lets wait and see!
-                         IF( xset .ne. x_set_size .or. xset .eq. 1 .or. x_group_size * x_set_size .eq. y_group_size ) THEN
-                            IF( mod( y_group_size, x_set_size ) .eq. 0 ) THEN
-                               x_group_size = y_group_size / x_set_size
-                            ELSE
-                               x_group_size = y_group_size / x_set_size + 1
-                            ENDIF
-                            dfft%x_group_size_save = x_group_size
+!                      IF( x_set_size .gt. y_group_size ) x_set_size = y_group_size
+
+                      IF( batch_size .ne. dfft%batch_size_save ) THEN
+                         IF( yloop .eq. dfft%y_loop_size(2) .and. dfft%y_groups(1,2) .ne. dfft%y_groups(dfft%y_loop_size(2),2) ) THEN
+                            x_which = 4
                          ELSE
-                            x_group_size = y_group_size - (x_set_size-1) * x_group_size
+                            x_which = 3
                          END IF
+                      ELSE
+                         IF( yloop .eq. dfft%y_loop_size(1) .and. dfft%y_groups(1,1) .ne. dfft%y_groups(dfft%y_loop_size(1),1) ) x_which = 2
+                      END IF
+
+                      DO xloop = 1, dfft%x_loop_size(x_which)
+
+                         CALL SYSTEM_CLOCK( auto_time(2) )
 
                          IF( .not. dfft%rsactive ) THEN
-                            start = 1 + (xset-1) * dfft%x_group_size_save
+                            start = 1 + (xloop-1) * dfft%x_groups( 1, (((x_which+1)/2)*2)-1 )
                             rs_wave => batch_aux( : , start )
-                            CALL invfft_4S( dfft, 4, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, first_dim1, rs_wave, comm_recv )
+                            CALL invfft_4S( dfft, 4, batch_size, dfft%x_groups(xloop,x_which), 0, 0, counter( 1, 2 ), work_buffer, first_dim1, rs_wave )
                          ELSE
-                            start = 1 + (counter(1,2)-1) * dfft%batch_size_save + (yset-1) * dfft%y_group_size_save + (xset-1) * dfft%x_group_size_save
+                            start = 1 + (counter(1,2)-1) * dfft%batch_size_save + (yloop-1) * dfft%y_groups(1,1) + (xloop-1) * dfft%x_groups( 1, (((x_which+1)/2)*2)-1 )
                             rs_wave => wfn_real( : , start )
                          END IF
 
-                         CALL Apply_V_4S( rs_wave, v, x_group_size )
+                         CALL Apply_V_4S( rs_wave, v, dfft%x_groups(xloop,x_which) )
 
-                         CALL fwfft_4S( dfft, 1, batch_size, x_group_size, 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
-                                        rs_wave, dfft%aux_array( : , 1 + (xset-1) * dfft%x_group_size_save : x_group_size + (xset-1) * dfft%x_group_size_save ) )
+                         start = 1 + (xloop-1) * dfft%x_groups( 1, (((x_which+1)/2)*2)-1 )
+                         ending = dfft%x_groups(xloop,x_which) + (xloop-1) * dfft%x_groups( 1, (((x_which+1)/2)*2)-1 )
+                         CALL fwfft_4S( dfft, 1, batch_size, dfft%x_groups(xloop,x_which), 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
+                                        rs_wave, dfft%aux_array( : , start : ending ) )
+
+                         CALL SYSTEM_CLOCK( auto_time(3) )
+                         IF( dfft%x_groups(xloop,x_which) .eq. dfft%x_group_autosize ) THEN
+                            dfft%auto_4Stimings(3) = dfft%auto_4Stimings(3) + ( auto_time(3) - auto_time(2) )
+                            dfft%x_divider = dfft%x_divider + 1
+                         END IF
 
                       ENDDO   
-                      x_set_size = dfft%x_set_size_save
+!                      x_set_size = dfft%x_set_size_save
 
-                      CALL fwfft_4S( dfft, 2, batch_size, y_group_size, yset, y_set_size, counter( 1, 2 ), work_buffer, first_dim2, &
+                      CALL fwfft_4S( dfft, 2, batch_size, dfft%y_groups(yloop,y_which), yloop, dfft%y_loop_size(y_which), counter( 1, 2 ), work_buffer, first_dim2, &
                                      dfft%aux_array( : , 1 ), comm_send, comm_recv )
 
-                   ENDDO   
+                      CALL SYSTEM_CLOCK( auto_time(4) )
+                      IF( dfft%y_groups(yloop,y_which) .eq. dfft%y_group_autosize ) THEN
+                         dfft%auto_4Stimings(2) = dfft%auto_4Stimings(2) + ( auto_time(4) - auto_time(1) )
+                         dfft%y_divider = dfft%y_divider + 1
+                      END IF
 
-                   CALL SYSTEM_CLOCK( auto_time(2) )
-                   dfft%auto_4Stimings(2) = dfft%auto_4Stimings(2) + ( auto_time(2) - auto_time(1) )
+                   ENDDO   
 
                    IF( counter( 1, 2 ) .eq. dfft%max_nbnd ) finished( 1, 2 ) = .true.
    
@@ -2771,7 +2790,7 @@ CONTAINS
        dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
      
      END SUBROUTINE Apply_V_4S
-  
+
   END SUBROUTINE do_the_vpsi_thing
 
 END MODULE vpsi_utils

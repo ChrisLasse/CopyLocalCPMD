@@ -133,9 +133,9 @@ MODULE fftpw_types
     LOGICAL :: singl = .false.
     LOGICAL :: make_first = .true.
 
-    LOGICAL :: tunning = .true.
+    LOGICAL :: tunning = .false.
     LOGICAL :: overlapp = .false.
-    LOGICAL :: rsactive = .true.
+    LOGICAL :: rsactive = .false.
     LOGICAL :: timings = .false.
     LOGICAL :: timings2 = .false.
     LOGICAL :: VPSI_4S = .true.
@@ -155,8 +155,35 @@ MODULE fftpw_types
     INTEGER :: x_set_size_save
     INTEGER :: apply_group_size_save
     INTEGER :: apply_set_size_save
+
+
+    LOGICAL :: x_optimal = .false.
+    LOGICAL :: y_z_optimal = .false.
+    LOGICAL :: autotune_finished = .false.
+    INTEGER :: z_group_autosize
+    INTEGER :: y_group_autosize
+    INTEGER :: x_group_autosize
     INTEGER :: max_batch_size = 10
     INTEGER :: max_buffer_size = 3
+    INTEGER, ALLOCATABLE :: optimal_groups(:,:,:)
+
+    INTEGER :: x_divider
+    INTEGER :: y_divider
+    INTEGER :: z_divider
+    LOGICAL :: y_rem1
+    LOGICAL :: y_rem2
+    INTEGER :: z_group_size
+    INTEGER :: y_group_size
+    INTEGER :: x_group_size
+    INTEGER :: z_group_remsize
+    INTEGER :: y_group_remsize
+    INTEGER :: x_group_remsize
+    INTEGER, ALLOCATABLE :: z_loop_size(:)
+    INTEGER, ALLOCATABLE :: y_loop_size(:)
+    INTEGER, ALLOCATABLE :: x_loop_size(:)
+    INTEGER, ALLOCATABLE :: z_groups(:,:)
+    INTEGER, ALLOCATABLE :: y_groups(:,:)
+    INTEGER, ALLOCATABLE :: x_groups(:,:)
 
     COMPLEX(DP), ALLOCATABLE :: temp_psic(:,:)
     COMPLEX(DP), ALLOCATABLE :: temp_aux(:,:)

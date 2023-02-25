@@ -75,8 +75,12 @@ CONTAINS
 
     CALL fft_type_init( dfft, which, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
 
-    dfft%batch_size_save = 1
+    dfft%batch_size_save = dfft%max_batch_size
     dfft%buffer_size_save = 1
+    dfft%x_group_autosize = dfft%max_batch_size
+    dfft%y_group_autosize = dfft%max_batch_size
+    dfft%z_group_autosize = dfft%max_batch_size
+
     dfft%z_set_size_save = 1
     dfft%y_set_size_save = 1
     dfft%scatter_set_size_save = 1
@@ -84,6 +88,14 @@ CONTAINS
     dfft%apply_set_size_save = 1
 
     IF( dfft%rsactive ) dfft%max_buffer_size = 2
+
+    ALLOCATE( dfft%z_loop_size( 2 ) )
+    ALLOCATE( dfft%y_loop_size( 2 ) )
+    ALLOCATE( dfft%x_loop_size( 4 ) )
+    ALLOCATE( dfft%z_groups( dfft%max_batch_size, 2 ) )
+    ALLOCATE( dfft%y_groups( dfft%max_batch_size, 2 ) )
+    ALLOCATE( dfft%x_groups( dfft%max_batch_size, 4 ) )
+
        
     ALLOCATE( dfft%time_adding( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
@@ -95,7 +107,11 @@ CONTAINS
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
     dfft%auto_timings = 0
-    ALLOCATE( dfft%auto_4Stimings( 2 ), STAT=ierr )
+    ALLOCATE( dfft%optimal_groups( dfft%max_batch_size, dfft%max_buffer_size, 3 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    dfft%optimal_groups = 0
+    ALLOCATE( dfft%auto_4Stimings( 3 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
     dfft%auto_4Stimings = 0
