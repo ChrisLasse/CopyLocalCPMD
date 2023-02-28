@@ -780,11 +780,10 @@ SUBROUTINE GIMME_GROUP_SIZES( dfft, last_time )
 
   END IF
 
-
-  IF( dfft%mype .eq. 0 ) THEN
+  IF( dfft%mype .eq. 0 .and. ( .false. .or. last_time ) ) THEN
      write(6,*) " "
      write(6,*) "buffer, batch sizes", dfft%buffer_size_save, dfft%batch_size_save
-     write(6,*) "x,y,z autogroup sizes", dfft%x_group_autosize, dfft%y_group_autosize, dfft%z_group_autosize
+     IF( .not. last_time ) write(6,*) "x,y,z autogroup sizes", dfft%x_group_autosize, dfft%y_group_autosize, dfft%z_group_autosize
      write(6,*) " "
      write(z_format,'(A5,I2,A5)') "(A10,", dfft%z_loop_size(1), "(I3))"
      write(6,z_format) "z_groups:", ( dfft%z_groups(i,1), i = 1, dfft%z_loop_size(1) )

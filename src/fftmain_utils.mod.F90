@@ -985,7 +985,7 @@ CONTAINS
        CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, &
                       f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     ELSE IF( step .eq. 2 ) THEN                                          
-!       CALL fftpw_batch( dfft, -1, step, batch_size, set_size_1, set_size_2, set_size_3, counter, work_buffer, f_in, f_inout1 )
+       CALL fftpw_4S( dfft, -1, step, batch_size, 0, 0, 0, counter, work_buffer, 0, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 3 ) THEN                                       
        CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, &
                       f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
@@ -1013,7 +1013,7 @@ CONTAINS
        CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, &
                       f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     ELSE IF( step .eq. 3 ) THEN
-!       CALL fftpw_batch( dfft, 1, step, batch_size, 1, 1, 1, counter, work_buffer, f_in, f_inout1 )
+       CALL fftpw_4S( dfft, 1, step, batch_size, 0, 0, 0, counter, work_buffer, 0, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 4 ) THEN
        CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, &
                       f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
@@ -1287,33 +1287,32 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(3) )
           dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(3) - time(2) )
 
-          CALL invfft_pre_com( dfft, f_inout1, &!( 1 : dfft%nr3 * dfft%nsw(dfft%mype+1) * divparam_1 ), &
-                               f_inout3(:,work_buffer), f_inout4(:,work_buffer), divparam_2, batch_size, divparam_1, dfft%nsw )
+          CALL invfft_z_section( dfft, f_inout1, f_inout3(:,work_buffer), f_inout4(:,work_buffer), divparam_2, batch_size, divparam_1, divparam_3, dfft%nsw )
 
-          IF( divparam_2 .eq. divparam_3 ) THEN 
+          IF( divparam_2 .eq. dfft%z_loop_size(divparam_3) ) THEN 
              !$  locks_calc_inv( dfft%my_node_rank+1, counter ) = .false.
              !$omp flush( locks_calc_inv )
           END IF
   
        ELSE IF( step .eq. 2 ) THEN
   
-!          CALL SYSTEM_CLOCK( time(4) )
-!
-!          !$omp flush( locks_calc_inv )
-!          !$  DO WHILE( ANY( locks_calc_inv( :, counter ) ) )
-!          !$omp flush( locks_calc_inv )
-!          !$  END DO
-!
-!          CALL SYSTEM_CLOCK( time(5) )
-!          dfft%time_adding( 23 ) = dfft%time_adding( 23 ) + ( time(5) - time(4) )
-!  
-!          CALL fft_com( dfft, f_in(:,work_buffer), f_inout1(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
-!                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
-!          CALL SYSTEM_CLOCK( time(16) )
-!          dfft%time_adding( 28 ) = dfft%time_adding( 28 ) + ( time(16) - time(5) )
-!  
-!          !$  locks_com_inv( counter ) = .false.
-!          !$omp flush( locks_com_inv )
+          CALL SYSTEM_CLOCK( time(4) )
+
+          !$omp flush( locks_calc_inv )
+          !$  DO WHILE( ANY( locks_calc_inv( :, counter ) ) )
+          !$omp flush( locks_calc_inv )
+          !$  END DO
+
+          CALL SYSTEM_CLOCK( time(5) )
+          dfft%time_adding( 23 ) = dfft%time_adding( 23 ) + ( time(5) - time(4) )
+  
+          CALL fft_com( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
+                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
+          CALL SYSTEM_CLOCK( time(16) )
+          dfft%time_adding( 28 ) = dfft%time_adding( 28 ) + ( time(16) - time(5) )
+  
+          !$  locks_com_inv( counter ) = .false.
+          !$omp flush( locks_com_inv )
   
        ELSE IF( step .eq. 3 ) THEN
   
@@ -1328,14 +1327,14 @@ CONTAINS
           dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(7) - time(6) )
 
           CALL invfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
-                                 dfft%map_acinv, dfft%map_acinv_rem, dfft%nr1w, divparam_1, divparam_2 )
+                                 dfft%map_acinv, dfft%map_acinv_rem, dfft%nr1w, divparam_1, divparam_2, divparam_3 )
   
           IF( dfft%vpsi ) THEN
-             !$  locks_calc_2( dfft%my_node_rank+1,1+(divparam_2-1)*dfft%y_groups(1,1)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,1)+current ) = .false.
+             !$  locks_calc_2( dfft%my_node_rank+1, 1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current ) = .false.
              !$omp flush( locks_calc_2 )
           ELSE
-!             !$  locks_calc_1( dfft%my_node_rank+1, 1+current+(dfft%batch_size_save*dfft%buffer_size_save):batch_size+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
-!             !$omp flush( locks_calc_1 )
+             !$  locks_calc_1( dfft%my_node_rank+1, 1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current+(dfft%batch_size_save*dfft%buffer_size_save):divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
+             !$omp flush( locks_calc_1 )
           END IF
 
        ELSE IF( step .eq. 4 ) THEN
@@ -1355,7 +1354,7 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(8) )
   
           !$omp flush( locks_calc_2 )
-          !$  DO WHILE( ANY(locks_calc_2( :,1+(divparam_2-1)*dfft%y_groups(1,1)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,1)+current ) ) )
+          !$  DO WHILE( ANY(locks_calc_2(:,1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current ) ) )
           !$omp flush( locks_calc_2 )
           !$  END DO
 
@@ -1364,32 +1363,32 @@ CONTAINS
   
   
           CALL fwfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
-                                dfft%map_pcfw, dfft%nr1w, dfft%nsw, batch_size, divparam_1, divparam_2 )
+                                dfft%map_pcfw, dfft%nr1w, dfft%nsw, batch_size, divparam_1, divparam_2, divparam_3 )
  
-          IF( divparam_2 .eq. divparam_3 ) THEN !IF yset .eq. y_set_size -> last call
+          IF( divparam_2 .eq. dfft%y_loop_size(divparam_3) ) THEN !IF yset .eq. y_set_size -> last call
              !$  locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
              !$omp flush( locks_calc_fw )
           END IF
   
        ELSE IF( step .eq. 3 ) THEN
 
-!          CALL SYSTEM_CLOCK( time(10) )
-!  
-!          !$omp flush( locks_calc_fw )
-!          !$  DO WHILE( ANY( locks_calc_fw( :, counter ) ) )
-!          !$omp flush( locks_calc_fw )
-!          !$  END DO
-!
-!          CALL SYSTEM_CLOCK( time(11) )
-!          dfft%time_adding( 26 ) = dfft%time_adding( 26 ) + ( time(11) - time(10) )
-!     
-!          CALL fft_com( dfft, f_in(:,work_buffer), f_inout1(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
-!                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
-!          CALL SYSTEM_CLOCK( time(17) )
-!          dfft%time_adding( 29 ) = dfft%time_adding( 29 ) + ( time(17) - time(11) )
-!  
-!          !$  locks_com_fw( counter ) = .false.
-!          !$omp flush( locks_com_fw )
+          CALL SYSTEM_CLOCK( time(10) )
+  
+          !$omp flush( locks_calc_fw )
+          !$  DO WHILE( ANY( locks_calc_fw( :, counter ) ) )
+          !$omp flush( locks_calc_fw )
+          !$  END DO
+
+          CALL SYSTEM_CLOCK( time(11) )
+          dfft%time_adding( 26 ) = dfft%time_adding( 26 ) + ( time(11) - time(10) )
+     
+          CALL fft_com( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
+                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
+          CALL SYSTEM_CLOCK( time(17) )
+          dfft%time_adding( 29 ) = dfft%time_adding( 29 ) + ( time(17) - time(11) )
+  
+          !$  locks_com_fw( counter ) = .false.
+          !$omp flush( locks_com_fw )
   
        ELSE IF( step .eq. 4 ) THEN
   
@@ -1403,7 +1402,7 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(13) )
           dfft%time_adding( 27 ) = dfft%time_adding( 27 ) + ( time(13) - time(12) )
   
-          CALL fwfft_z_section( dfft, f_inout4(:,work_buffer), f_inout1, divparam_2, batch_size, divparam_1, dfft%nsw )
+          CALL fwfft_z_section( dfft, f_inout4(:,work_buffer), f_inout1, divparam_2, batch_size, divparam_1, divparam_3, dfft%nsw )
 
           CALL SYSTEM_CLOCK( time(14) )
 
@@ -1413,7 +1412,7 @@ CONTAINS
   
           dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(15) - time(14) )
  
-          IF( divparam_2 .eq. divparam_3 ) THEN 
+          IF( divparam_2 .eq. dfft%z_loop_size(divparam_3) ) THEN 
              !$  IF( dfft%rsactive ) THEN
              !$     locks_calc_2( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:batch_size+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
              !$omp flush( locks_calc_2 )

@@ -2018,7 +2018,7 @@ CONTAINS
           write(6,*)"INV Pre_com_copy ",      timer(3)
   
           write(6,*)"INV FFT before Com sum  ",timer(1)+timer(2)+timer(3)+timer(22)
-          write(6,*)"Control:", timer(19)
+          write(6,*)"Control:", timer(21)
           write(6,*)"==================================="
           write(6,*)"INV FFT after Com"
           write(6,*)"CALC LOCK 2", timer(24)
@@ -2029,7 +2029,6 @@ CONTAINS
           write(6,*)"Apply V ",               timer(8)
   
           write(6,*)"INV FFT after Com sum ",  timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(24)
-          write(6,*)"Control:", timer(20)
           write(6,*)"==================================="
           write(6,*)"FW FFT before Com"
           write(6,*)"CALC LOCK 3", timer(25)
@@ -2038,8 +2037,9 @@ CONTAINS
           write(6,*)"FW y_fft ",             timer(11)
           write(6,*)"FW Pre_com_copy ",      timer(12)
   
-          write(6,*)"FW FFT before Com sum  ",timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
-          write(6,*)"Control:", timer(21)
+          write(6,*)"FW FFT before Com sum ",  timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
+          write(6,*)"INV/APPLY/FW x-y-sections sum ", timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(24)+timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
+          write(6,*)"Control:", timer(20)
           write(6,*)"==================================="
           write(6,*)"FW FFT after Com"
           write(6,*)"CALC LOCK 4", timer(27)
@@ -2048,7 +2048,7 @@ CONTAINS
           write(6,*)"Accumulate_Psi ",       timer(15)
   
           write(6,*)"FW FFT after Com sum",  timer(13)+timer(14)+timer(15)+timer(27)
-          write(6,*)"Control:", timer(18)
+          write(6,*)"Control:", timer(19)
           write(6,*)"==================================="
           write(6,*)"COM LOCK 1", timer(23)
           write(6,*)"FIRST COMM TIMES:", timer(28)
@@ -2079,7 +2079,7 @@ CONTAINS
        write(6,*)"INV Pre_com_copy      ",            dfft%my_node_rank, timer(3)
      
        write(6,*)"INV FFT before Com sum  ",timer(1)+timer(2)+timer(3)+timer(22)
-       write(6,*)"Control:", timer(19)
+       write(6,*)"Control:", timer(21)
        write(6,*)"==================================="
        write(6,*)"INV FFT after Com"
        write(6,*)"CALC LOCK 2           ",  dfft%my_node_rank,          timer(24)
@@ -2090,7 +2090,6 @@ CONTAINS
        write(6,*)"Apply V               ",  dfft%my_node_rank,             timer(8)
      
        write(6,*)"INV FFT after Com sum ",  timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(24)
-       write(6,*)"Control:", timer(20)
        write(6,*)"==================================="
        write(6,*)"FW FFT before Com"
        write(6,*)"CALC LOCK 3           ",  dfft%my_node_rank,   timer(25)
@@ -2099,8 +2098,9 @@ CONTAINS
        write(6,*)"FW y_fft              ",  dfft%my_node_rank,           timer(11)
        write(6,*)"FW Pre_com_copy       ",  dfft%my_node_rank,    timer(12)
      
-       write(6,*)"FW FFT before Com sum  ",timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
-       write(6,*)"Control:", timer(21)
+       write(6,*)"FW FFT before Com sum ",  timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
+       write(6,*)"INV/APPLY/FW x-y-sections sum ", timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(24)+timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
+       write(6,*)"Control:", timer(20)
        write(6,*)"==================================="
        write(6,*)"FW FFT after Com"
        write(6,*)"CALC LOCK 4           ",  dfft%my_node_rank,   timer(27)
@@ -2109,7 +2109,7 @@ CONTAINS
        write(6,*)"Accumulate_Psi        ",  dfft%my_node_rank,     timer(15)
      
        write(6,*)"FW FFT after Com sum",  timer(13)+timer(14)+timer(15)+timer(27)
-       write(6,*)"Control:", timer(18)
+       write(6,*)"Control:", timer(19)
        write(6,*)"==================================="
        write(6,*)"COM LOCK 1            ", dfft%my_node_rank, timer(23)
        write(6,*)"FIRST COMM TIMES:     ", dfft%my_node_rank, timer(28)
@@ -2396,10 +2396,12 @@ CONTAINS
 
        COMPLEX(DP), CONTIGUOUS, SAVE, POINTER  :: rs_wave(:)
 
-       INTEGER :: zset, yset, xset, z_group_size, y_group_size, x_group_size
+       INTEGER :: z_group_size, y_group_size, x_group_size
        INTEGER :: iloop, start, ending, first_dim1, first_dim2, first_dim3
 
        INTEGER :: xloop, yloop, zloop, x_which, y_which, z_which
+
+       INTEGER(INT64) :: cntrl_time(10)
 
        LOGICAL, SAVE :: autodone = .false.
 
@@ -2409,23 +2411,18 @@ CONTAINS
 
        dfft%x_divider = 0
        dfft%y_divider = 0
-       dfft%z_divider = 1
+       dfft%z_divider = 0
 
        IF( .not. autodone ) CALL GIMME_GROUP_SIZES( dfft , autodone )
 
        !$omp parallel IF( nthreads .eq. 2 ) num_threads( nthreads ) &
        !$omp private( my_thread_num, ibatch, batch_size, do_calc, do_com, next, counter, last_buffer, finished_all, first_step, &
-       !$             work_buffer, finished, z_set_size, y_set_size, scatter_set_size, apply_set_size ) &
+       !$             work_buffer, finished ) &
        !$omp proc_bind( close )
        
        do_calc = .false.
        do_com  = .false.
        batch_size = dfft%batch_size_save
-       z_set_size = dfft%z_set_size_save
-       y_set_size = dfft%y_set_size_save
-       scatter_set_size = dfft%scatter_set_size_save
-       apply_set_size = dfft%apply_set_size_save
-       x_set_size = dfft%x_set_size_save
        next = -1
        counter = 0
        finished = .false.
@@ -2487,11 +2484,6 @@ CONTAINS
             ) ) .or. last_buffer .eq. work_buffer ) ) THEN
              last_buffer = work_buffer
              batch_size = dfft%rem_size
-             IF( do_calc ) THEN
-                IF( z_set_size .gt. (batch_size+1)/2 ) z_set_size = batch_size
-                IF( y_set_size .gt. (batch_size+1)/2 ) y_set_size = batch_size
-                IF( x_set_size .gt. (batch_size+1)/2 ) x_set_size = batch_size
-             END IF
              IF( do_com  ) dfft%sendsize = sendsize_rem
              IF( do_calc ) dfft%rem = .true.
           END IF
@@ -2520,36 +2512,34 @@ CONTAINS
                       last_start = .false.
                       last_start_triggered = .true.
                       batch_size = dfft%batch_size_save
-                      z_set_size = dfft%z_set_size_save
                    END IF
-   
-                   DO zset = 1, z_set_size
-                 
-                      !Too slow? lets wait and see!
-                      IF( zset .ne. z_set_size .or. zset .eq. 1 .or. z_group_size * z_set_size .eq. batch_size ) THEN
-                         IF( mod( batch_size, z_set_size ) .eq. 0 ) THEN
-                            z_group_size = batch_size / z_set_size
-                         ELSE
-                            z_group_size = batch_size / z_set_size + 1
-                         ENDIF
-                         dfft%z_group_size_save = z_group_size
-                      ELSE
-                         z_group_size = batch_size - (z_set_size-1) * z_group_size
+
+                   CALL SYSTEM_CLOCK( cntrl_time(1) )
+
+                   IF( batch_size .ne. dfft%batch_size_save ) z_which = 2
+ 
+                   DO zloop = 1, dfft%z_loop_size( z_which )
+
+                      CALL SYSTEM_CLOCK( auto_time(5) )
+
+                      start = 1+(((zloop-1)*dfft%z_groups(1,z_which))+(counter(1,3)-1)*dfft%batch_size_save)*2
+                      ending = dfft%z_groups(zloop,z_which)*2+(((zloop-1)*dfft%z_groups(1,z_which))+(counter(1,3)-1)*dfft%batch_size_save)*2
+                      CALL fwfft_4S( dfft, 4, batch_size, dfft%z_groups(zloop,z_which), zloop, z_which, counter( 1, 3 ), work_buffer, first_dim3, &
+                                          dfft%aux_array, psi_R(:,start:ending), hpsi_R(:,start:ending), comm_recv )
+
+                      CALL SYSTEM_CLOCK( auto_time(6) )
+                      IF( dfft%z_groups(zloop,z_which) .eq. dfft%z_group_autosize ) THEN
+                         dfft%auto_4Stimings(1) = dfft%auto_4Stimings(1) + ( auto_time(6) - auto_time(5) )
+                         dfft%z_divider = dfft%z_divider + 1
                       END IF
 
-                      CALL SYSTEM_CLOCK( time(5) )
-                      start = 1+(((zset-1)*dfft%z_group_size_save)+(counter(1,3)-1)*dfft%batch_size_save)*2
-                      ending = z_group_size*2+(((zset-1)*dfft%z_group_size_save)+(counter(1,3)-1)*dfft%batch_size_save)*2
-                      CALL fwfft_4S( dfft, 4, batch_size, z_group_size, zset, z_set_size, counter( 1, 3 ), work_buffer, first_dim3, &
-                                          dfft%aux_array, psi_R(:,start:ending), hpsi_R(:,start:ending), comm_recv )
-                      CALL SYSTEM_CLOCK( time(6) )
-                      dfft%time_adding( 18 ) = dfft%time_adding( 18 ) + ( time(6) - time(5) )
-
                    ENDDO
+
+                   CALL SYSTEM_CLOCK( cntrl_time(2) )
+                   dfft%time_adding( 19 ) = dfft%time_adding( 19 ) + ( cntrl_time(2) - cntrl_time(1) )
    
                    IF( last_start_triggered ) THEN
                       batch_size = dfft%rem_size
-                      IF( z_set_size .gt. (batch_size+1)/2 ) z_set_size = batch_size
                    END IF
                       
    
@@ -2564,30 +2554,30 @@ CONTAINS
                 ELSE
    
                    counter( 1, 1 ) = counter( 1, 1 ) + 1
+
+                   CALL SYSTEM_CLOCK( cntrl_time(5) )
+
+                   IF( batch_size .ne. dfft%batch_size_save ) z_which = 2
  
-                   DO zset = 1, z_set_size
+                   DO zloop = 1, dfft%z_loop_size( z_which )
+
+                      CALL SYSTEM_CLOCK( auto_time(5) )
                  
-                      !Too slow? lets wait and see!
-                      IF( zset .ne. z_set_size .or. zset .eq. 1 .or. z_group_size * z_set_size .eq. batch_size ) THEN
-                         IF( mod( batch_size, z_set_size ) .eq. 0 ) THEN
-                            z_group_size = batch_size / z_set_size
-                         ELSE
-                            z_group_size = batch_size / z_set_size + 1
-                         ENDIF
-                         dfft%z_group_size_save = z_group_size
-                      ELSE
-                         z_group_size = batch_size - (z_set_size-1) * z_group_size
+                      start = 1+(((zloop-1)*dfft%z_groups(1,z_which))+(counter(1,1)-1)*dfft%batch_size_save)*2
+                      ending = dfft%z_groups(zloop,z_which)*2+(((zloop-1)*dfft%z_groups(1,z_which))+(counter(1,1)-1)*dfft%batch_size_save)*2
+                      CALL invfft_4S( dfft, 1, batch_size, dfft%z_groups(zloop,z_which), zloop, z_which, counter( 1, 1 ), work_buffer, first_dim3,  &
+                                      dfft%aux_array, psi_R( : , start : ending ), comm_send, comm_recv )
+
+                      CALL SYSTEM_CLOCK( auto_time(6) )
+                      IF( dfft%z_groups(zloop,z_which) .eq. dfft%z_group_autosize ) THEN
+                         dfft%auto_4Stimings(1) = dfft%auto_4Stimings(1) + ( auto_time(6) - auto_time(5) )
+                         dfft%z_divider = dfft%z_divider + 1
                       END IF
 
-                      CALL SYSTEM_CLOCK( time(10) )
-                      start = 1+(((zset-1)*dfft%z_group_size_save)+(counter(1,1)-1)*dfft%batch_size_save)*2
-                      ending = z_group_size*2+(((zset-1)*dfft%z_group_size_save)+(counter(1,1)-1)*dfft%batch_size_save)*2
-                      CALL invfft_4S( dfft, 1, batch_size, z_group_size, zset, z_set_size, counter( 1, 1 ), work_buffer, first_dim3,  &
-                                      dfft%aux_array, psi_R( : , start : ending ), comm_send, comm_recv )
-                      CALL SYSTEM_CLOCK( time(11) )
-                      dfft%time_adding( 19 ) = dfft%time_adding( 19 ) + ( time(11) - time(10) )
-
                    ENDDO
+
+                   CALL SYSTEM_CLOCK( cntrl_time(6) )
+                   dfft%time_adding( 21 ) = dfft%time_adding( 21 ) + ( cntrl_time(6) - cntrl_time(5) )
  
                    IF( counter( 1, 1 ) .eq. dfft%max_nbnd ) finished( 1, 1 ) = .true.
    
@@ -2604,7 +2594,7 @@ CONTAINS
                    counter( 2, 1 ) = counter( 2, 1 ) + 1
    
                    CALL SYSTEM_CLOCK( time(12) )
-                   CALL invfft_pwbatch( dfft, 2, batch_size, 0, 0, 0, counter( 2, 1 ), work_buffer, comm_send, comm_recv )
+                   CALL invfft_4S( dfft, 2, batch_size, 0, 0, 0, counter( 2, 1 ), work_buffer, 0, f_inout2=comm_send, f_inout3=comm_recv )
                    CALL SYSTEM_CLOCK( time(13) )
                    dfft%time_adding( 16 ) = dfft%time_adding( 16 ) + ( time(13) - time(12) )
   
@@ -2630,6 +2620,8 @@ CONTAINS
    
                    counter( 1, 2 ) = counter( 1, 2 ) + 1
 
+                   CALL SYSTEM_CLOCK( cntrl_time(3) )
+
                    IF( batch_size .ne. dfft%batch_size_save ) y_which = 2
                    
                    DO yloop = 1, dfft%y_loop_size( y_which )
@@ -2637,15 +2629,13 @@ CONTAINS
                       CALL SYSTEM_CLOCK( auto_time(1) )
 
                       IF( dfft%rsactive ) THEN
-                         start = 1+(counter(1,2)-1)*dfft%batch_size_save+(yloop-1)*dfft%y_groups(1,1)
+                         start = 1+(counter(1,2)-1)*dfft%batch_size_save+(yloop-1)*dfft%y_groups(1,y_which)
                          rs_wave => wfn_real( : , start )
                       ELSE
                          rs_wave => batch_aux(:,1)
-                         CALL invfft_4S( dfft, 3, batch_size, dfft%y_groups(yloop,y_which), yloop, 0, counter( 1, 2 ), work_buffer, first_dim1, &
+                         CALL invfft_4S( dfft, 3, batch_size, dfft%y_groups(yloop,y_which), yloop, y_which, counter( 1, 2 ), work_buffer, first_dim1, &
                                          rs_wave, comm_recv, dfft%aux_array( : , 1 : dfft%y_groups(yloop,y_which) ) )                        
                       END IF
-
-!                      IF( x_set_size .gt. y_group_size ) x_set_size = y_group_size
 
                       IF( batch_size .ne. dfft%batch_size_save ) THEN
                          IF( yloop .eq. dfft%y_loop_size(2) .and. dfft%y_groups(1,2) .ne. dfft%y_groups(dfft%y_loop_size(2),2) ) THEN
@@ -2662,18 +2652,18 @@ CONTAINS
                          CALL SYSTEM_CLOCK( auto_time(2) )
 
                          IF( .not. dfft%rsactive ) THEN
-                            start = 1 + (xloop-1) * dfft%x_groups( 1, (((x_which+1)/2)*2)-1 )
+                            start = 1 + (xloop-1) * dfft%x_groups( 1, x_which )
                             rs_wave => batch_aux( : , start )
                             CALL invfft_4S( dfft, 4, batch_size, dfft%x_groups(xloop,x_which), 0, 0, counter( 1, 2 ), work_buffer, first_dim1, rs_wave )
                          ELSE
-                            start = 1 + (counter(1,2)-1) * dfft%batch_size_save + (yloop-1) * dfft%y_groups(1,1) + (xloop-1) * dfft%x_groups( 1, (((x_which+1)/2)*2)-1 )
+                            start = 1 + (counter(1,2)-1) * dfft%batch_size_save + (yloop-1) * dfft%y_groups(1,y_which) + (xloop-1) * dfft%x_groups( 1, x_which )
                             rs_wave => wfn_real( : , start )
                          END IF
 
                          CALL Apply_V_4S( rs_wave, v, dfft%x_groups(xloop,x_which) )
 
-                         start = 1 + (xloop-1) * dfft%x_groups( 1, (((x_which+1)/2)*2)-1 )
-                         ending = dfft%x_groups(xloop,x_which) + (xloop-1) * dfft%x_groups( 1, (((x_which+1)/2)*2)-1 )
+                         start = 1 + (xloop-1) * dfft%x_groups( 1, x_which )
+                         ending = dfft%x_groups(xloop,x_which) + (xloop-1) * dfft%x_groups( 1, x_which )
                          CALL fwfft_4S( dfft, 1, batch_size, dfft%x_groups(xloop,x_which), 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
                                         rs_wave, dfft%aux_array( : , start : ending ) )
 
@@ -2684,9 +2674,8 @@ CONTAINS
                          END IF
 
                       ENDDO   
-!                      x_set_size = dfft%x_set_size_save
 
-                      CALL fwfft_4S( dfft, 2, batch_size, dfft%y_groups(yloop,y_which), yloop, dfft%y_loop_size(y_which), counter( 1, 2 ), work_buffer, first_dim2, &
+                      CALL fwfft_4S( dfft, 2, batch_size, dfft%y_groups(yloop,y_which), yloop, y_which, counter( 1, 2 ), work_buffer, first_dim2, &
                                      dfft%aux_array( : , 1 ), comm_send, comm_recv )
 
                       CALL SYSTEM_CLOCK( auto_time(4) )
@@ -2696,6 +2685,9 @@ CONTAINS
                       END IF
 
                    ENDDO   
+
+                   CALL SYSTEM_CLOCK( cntrl_time(4) )
+                   dfft%time_adding( 20 ) = dfft%time_adding( 20 ) + ( cntrl_time(4) - cntrl_time(3) )
 
                    IF( counter( 1, 2 ) .eq. dfft%max_nbnd ) finished( 1, 2 ) = .true.
    
@@ -2712,7 +2704,7 @@ CONTAINS
                    counter( 2, 2 ) = counter( 2, 2 ) + 1
    
                    CALL SYSTEM_CLOCK( time(18) )
-                   CALL fwfft_pwbatch( dfft, 2, batch_size, 1, counter( 2, 2 ), work_buffer, comm_send, comm_recv )
+                   CALL fwfft_4S( dfft, 3, batch_size, 0, 0, 0, counter( 2, 2 ), work_buffer, 0, f_inout2=comm_send, f_inout3=comm_recv )
                    CALL SYSTEM_CLOCK( time(19) )
                    dfft%time_adding( 17 ) = dfft%time_adding( 17 ) + ( time(19) - time(18) )
    
@@ -2735,11 +2727,6 @@ CONTAINS
    
           IF( batch_size .ne. dfft%batch_size_save ) THEN
              batch_size = dfft%batch_size_save
-             IF( do_calc ) THEN
-                z_set_size = dfft%z_set_size_save
-                y_set_size = dfft%y_set_size_save
-                x_set_size = dfft%x_set_size_save
-             END IF
              IF( do_com  ) dfft%sendsize = dfft%sendsize_save
              IF( do_calc ) dfft%rem = .false.
           END IF

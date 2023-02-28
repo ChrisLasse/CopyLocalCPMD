@@ -445,7 +445,7 @@ CONTAINS
   INTEGER, SAVE :: y_z_repeats = 0
   INTEGER, SAVE :: group_repeats = 0
 
-  INTEGER :: bb_counter, i
+  INTEGER :: bb_counter, i, j
 
   INTEGER, SAVE :: group_called = 0
   INTEGER(INT64), SAVE :: cr
@@ -491,35 +491,47 @@ CONTAINS
            group_called = 0
            IF( dfft%y_group_autosize .eq. dfft%max_batch_size .and. dfft%x_group_autosize .ne. 1 ) THEN
               x_group_time( dfft%x_group_autosize ) = x_group_time( dfft%x_group_autosize ) / x_repeats
-              IF( dfft%mype .eq. 0 ) write(6,'(A9,I3,A6,E15.8)') "x_group:", dfft%x_group_autosize, "TIME:", x_group_time( dfft%x_group_autosize )
+              IF( dfft%mype .eq. 0 ) write(6,'(A7,I3,A17,I3,A6,E15.8)') "batch:", dfft%batch_size_save ,"tunning x_group:", dfft%x_group_autosize, "TIME:", x_group_time( dfft%x_group_autosize )
               dfft%x_group_autosize = dfft%x_group_autosize - 1
               x_repeats = 0
            ELSE
               IF( .not. dfft%x_optimal ) THEN
                  x_group_time( dfft%x_group_autosize ) = x_group_time( dfft%x_group_autosize ) / x_repeats
-                 IF( dfft%mype .eq. 0 ) write(6,'(A9,I3,A6,E15.8)') "x_group:", dfft%x_group_autosize, "TIME:", x_group_time( dfft%x_group_autosize )
+                 IF( dfft%mype .eq. 0 ) write(6,'(A7,I3,A17,I3,A6,E15.8)') "batch:", dfft%batch_size_save ,"tunning x_group:", dfft%x_group_autosize, "TIME:", x_group_time( dfft%x_group_autosize )
                  group_mask = .true.
                  x_repeats = 0
+                 IF( dfft%mype .eq. 0 ) THEN
+                    DO i = 1, dfft%max_batch_size
+                       dfft%optimal_groups( i , dfft%buffer_size_save , 1 ) = MINLOC( x_group_time, 1, group_mask(:,1) )
+                       group_mask( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) , 1 ) = .false.
+                    ENDDO
+                 END IF
                  DO i = 1, dfft%max_batch_size
-                    dfft%optimal_groups( i , dfft%buffer_size_save , 1 ) = MINLOC( x_group_time, 1, group_mask(:,1) )
-                    group_mask( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) , 1 ) = .false.
+                    CALL MP_BCAST( dfft%optimal_groups(i,dfft%buffer_size_save,1), 0, dfft%comm )
                  ENDDO
                  dfft%x_optimal = .true.
               END IF
               y_group_time( dfft%y_group_autosize ) = y_group_time( dfft%y_group_autosize ) / y_z_repeats
-              IF( dfft%mype .eq. 0 ) write(6,'(A9,I3,A6,E15.8)') "y_group:", dfft%y_group_autosize, "TIME:", y_group_time( dfft%y_group_autosize )
+              IF( dfft%mype .eq. 0 ) write(6,'(A7,I3,A17,I3,A6,E15.8)') "batch:", dfft%batch_size_save ,"tunning y_group:", dfft%y_group_autosize, "TIME:", y_group_time( dfft%y_group_autosize )
               z_group_time( dfft%z_group_autosize ) = z_group_time( dfft%z_group_autosize ) / y_z_repeats
-              IF( dfft%mype .eq. 0 ) write(6,'(A9,I3,A6,E15.8)') "z_group:", dfft%z_group_autosize, "TIME:", z_group_time( dfft%z_group_autosize )
+              IF( dfft%mype .eq. 0 ) write(6,'(A7,I3,A17,I3,A6,E15.8)') "batch:", dfft%batch_size_save ,"tunning z_group:", dfft%z_group_autosize, "TIME:", z_group_time( dfft%z_group_autosize )
               y_z_repeats = 0
               IF( dfft%y_group_autosize .gt. 1 ) THEN
                  dfft%y_group_autosize = dfft%y_group_autosize - 1
                  dfft%z_group_autosize = dfft%z_group_autosize - 1
               ELSE
+                 IF( dfft%mype .eq. 0 ) THEN
+                    DO i = 1, dfft%max_batch_size
+                       dfft%optimal_groups( i , dfft%buffer_size_save , 2 ) = MINLOC( y_group_time, 1, group_mask(:,2) )
+                       group_mask( dfft%optimal_groups( i, dfft%buffer_size_save, 2 ) , 2 ) = .false.
+                       dfft%optimal_groups( i , dfft%buffer_size_save , 3 ) = MINLOC( z_group_time, 1, group_mask(:,3) )
+                       group_mask( dfft%optimal_groups( i, dfft%buffer_size_save, 3 ) , 3 ) = .false.
+                    ENDDO
+                 END IF
                  DO i = 1, dfft%max_batch_size
-                    dfft%optimal_groups( i , dfft%buffer_size_save , 2 ) = MINLOC( y_group_time, 1, group_mask(:,2) )
-                    group_mask( dfft%optimal_groups( i, dfft%buffer_size_save, 2 ) , 2 ) = .false.
-                    dfft%optimal_groups( i , dfft%buffer_size_save , 3 ) = MINLOC( z_group_time, 1, group_mask(:,3) )
-                    group_mask( dfft%optimal_groups( i, dfft%buffer_size_save, 3 ) , 3 ) = .false.
+                    DO j = 2, 3
+                       CALL MP_BCAST( dfft%optimal_groups(i,dfft%buffer_size_save,j), 0, dfft%comm )
+                    ENDDO
                  ENDDO
                  dfft%y_z_optimal = .true.
                  group_timing = .false.
@@ -561,7 +573,9 @@ CONTAINS
            write(6,*) " "
            write(6,*) "VPSI TUNNING FINISHED"
            write(6,*) " "
-           write(6,*) final_time
+           write(6,*) final_time(1:10)
+           write(6,*) final_time(11:20)
+           IF( mbuff .eq. 3 ) write(6,*) final_time(21:30)
            write(6,*) " "
         END IF
         CALL MP_BCAST( dfft%buffer_size_save, 0, dfft%comm )
