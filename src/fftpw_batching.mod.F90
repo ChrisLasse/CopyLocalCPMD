@@ -941,10 +941,10 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, aux, hpsi, ngms, z_group_size, last, n
 
 END SUBROUTINE Accumulate_Psi_overlapp
 
-SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batch_size, z_group_size, ns )
+SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batch_size, z_group_size, z_which, ns )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN) :: iset, batch_size, z_group_size
+  INTEGER, INTENT(IN) :: iset, batch_size, z_group_size, z_which
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: ns( * )
   COMPLEX(DP), INTENT(INOUT) :: comm_mem_send( * ), comm_mem_recv( * )
@@ -976,7 +976,7 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batc
         IF( dfft%non_blocking .and. l .eq. dfft%my_node+1 ) CYCLE 
         DO m = 1, dfft%node_task_size
            j = (l-1)*dfft%node_task_size + m
-           offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (iset-1)*dfft%z_group_size_save ) * dfft%big_chunks
+           offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (iset-1)*dfft%z_groups(1,z_which) ) * dfft%big_chunks
            !$omp do
            DO k = 1, ns(dfft%mype+1) * z_group_size
               kdest = offset + dfft%nr3px * mod( (k-1), ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks
@@ -1001,7 +1001,7 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batc
      !$omp parallel private( m, j, offset, k, kdest, i )
      DO m = 1, dfft%node_task_size
         j = dfft%my_node*dfft%node_task_size + m
-        offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (iset-1)*dfft%z_group_size_save ) * dfft%big_chunks
+        offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (iset-1)*dfft%z_groups(1,z_which) ) * dfft%big_chunks
         !$omp do
         DO k = 1, ns(dfft%mype+1) * z_group_size 
            kdest = offset + dfft%nr3px * mod( k-1, ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks
@@ -1028,11 +1028,11 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batc
 
 END SUBROUTINE invfft_z_section 
 
-SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, nr1s, y_group_size, yset )
+SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, nr1s, y_group_size, yset, y_which )
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  INTEGER, INTENT(IN) :: y_group_size, yset
+  INTEGER, INTENT(IN) :: y_group_size, yset, y_which
   COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
   INTEGER, INTENT(IN) :: nr1s( * )
   COMPLEX(DP), INTENT(INOUT) :: aux ( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !y_group_size
@@ -1066,7 +1066,7 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
            !$omp parallel do private( i, iter, k, offset )
            DO i = 1, dfft%my_nr1p * dfft%my_nr3p * y_group_size
               iter = mod( i-1, dfft%my_nr1p ) + 1
-              offset = ( mod( i-1, dfft%my_nr1p * dfft%my_nr3p ) + ( ( (i-1) / ( dfft%my_nr1p * dfft%my_nr3p ) ) + (yset-1)*dfft%y_groups(1,1) ) * dfft%my_nr3p * dfft%my_nr1p ) * dfft%nr2
+              offset = ( mod( i-1, dfft%my_nr1p * dfft%my_nr3p ) + ( ( (i-1) / ( dfft%my_nr1p * dfft%my_nr3p ) ) + (yset-1)*dfft%y_groups(1,y_which) ) * dfft%my_nr3p * dfft%my_nr1p ) * dfft%nr2
               !omp simd
               DO k = 1, dfft%zero_acinv_start( iter ) - 1
                  aux2( k, i ) = comm_mem_recv( map_acinv_rem( offset + k ) )
@@ -1087,7 +1087,7 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
            !$omp parallel do private( i, iter, k, offset )
            DO i = 1, dfft%my_nr1p * dfft%my_nr3p * y_group_size
               iter = mod( i-1, dfft%my_nr1p ) + 1
-              offset = ( mod( i-1, dfft%my_nr1p * dfft%my_nr3p ) + ( ( (i-1) / ( dfft%my_nr1p * dfft%my_nr3p ) ) + (yset-1)*dfft%y_groups(1,1) ) * dfft%my_nr3p * dfft%my_nr1p ) * dfft%nr2
+              offset = ( mod( i-1, dfft%my_nr1p * dfft%my_nr3p ) + ( ( (i-1) / ( dfft%my_nr1p * dfft%my_nr3p ) ) + (yset-1)*dfft%y_groups(1,y_which) ) * dfft%my_nr3p * dfft%my_nr1p ) * dfft%nr2
               !omp simd
               DO k = 1, dfft%zero_acinv_start( iter ) - 1
                  aux2( k, i ) = comm_mem_recv( map_acinv( offset + k ) )
@@ -1226,11 +1226,11 @@ SUBROUTINE fwfft_x_section( dfft, aux, aux2, nr1s, x_group_size )
 
 END SUBROUTINE fwfft_x_section
 
-SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, nr1s, ns, batch_size, y_group_size, yset )
+SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, nr1s, ns, batch_size, y_group_size, yset, y_which )
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  INTEGER, INTENT(IN) :: y_group_size, yset, batch_size
+  INTEGER, INTENT(IN) :: y_group_size, yset, batch_size, y_which
   COMPLEX(DP), INTENT(INOUT)  :: comm_mem_send( * )
   COMPLEX(DP), INTENT(INOUT)  :: comm_mem_recv( * )
   INTEGER, INTENT(IN) :: nr1s( * ), ns( * )
@@ -1262,7 +1262,7 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
         IF( dfft%non_blocking .and. l .eq. dfft%my_node+1 ) CYCLE
         DO m = 1, dfft%node_task_size
            i = (l-1)*dfft%node_task_size + m
-           offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (yset-1)*dfft%y_groups(1,1) ) * dfft%big_chunks
+           offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (yset-1)*dfft%y_groups(1,y_which) ) * dfft%big_chunks
            !$omp do
            DO j = 1, ns( i ) * y_group_size
               jter = mod( j-1, ns( i ) ) 
@@ -1290,7 +1290,7 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
      !$omp parallel private( i, j, k, offset, m, offset2, jter, igroup )
      DO m = 1, dfft%node_task_size
         i = dfft%my_node*dfft%node_task_size + m
-        offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (yset-1)*dfft%y_groups(1,1) ) * dfft%big_chunks
+        offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (yset-1)*dfft%y_groups(1,y_which) ) * dfft%big_chunks
         !$omp do
         DO j = 1, ns( i ) * y_group_size
            jter = mod( j-1, ns( i ) ) 
@@ -1313,7 +1313,7 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
      !$omp parallel private( i, j, k, offset, m, offset2, jter, igroup )
      DO m = 1, dfft%node_task_size
         i = dfft%my_node*dfft%node_task_size + m
-        offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (yset-1)*dfft%y_groups(1,1) ) * dfft%big_chunks
+        offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (yset-1)*dfft%y_groups(1,y_which) ) * dfft%big_chunks
         !$omp do
         DO j = 1, ns( i ) * y_group_size
            jter = mod( j-1, ns( i ) ) 
@@ -1342,10 +1342,10 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
 
 END SUBROUTINE fwfft_y_section
 
-SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, iset, batch_size, z_group_size, ns )
+SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, iset, batch_size, z_group_size, z_which, ns )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN) :: iset, batch_size, z_group_size
+  INTEGER, INTENT(IN) :: iset, batch_size, z_group_size, z_which
   INTEGER, INTENT(IN) :: ns( * )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
@@ -1365,7 +1365,7 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, iset, batch_size, z_group_
   !$omp parallel private( kfrom, j, i, k, offset, l )
   DO j = 1, dfft%nodes_numb
      DO l = 1, dfft%node_task_size
-        offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (iset-1)*dfft%z_group_size_save ) * dfft%big_chunks
+        offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (iset-1)*dfft%z_groups(1,z_which) ) * dfft%big_chunks
         !$omp do
         DO k = 1, ns(dfft%mype3+1) * z_group_size
            kfrom = offset + dfft%nr3px * mod( k-1, ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks

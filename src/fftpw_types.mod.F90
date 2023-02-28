@@ -133,9 +133,9 @@ MODULE fftpw_types
     LOGICAL :: singl = .false.
     LOGICAL :: make_first = .true.
 
-    LOGICAL :: tunning = .false.
+    LOGICAL :: tunning = .true.
     LOGICAL :: overlapp = .false.
-    LOGICAL :: rsactive = .false.
+    LOGICAL :: rsactive = .true.
     LOGICAL :: timings = .false.
     LOGICAL :: timings2 = .false.
     LOGICAL :: VPSI_4S = .true.
