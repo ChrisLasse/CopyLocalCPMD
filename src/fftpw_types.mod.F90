@@ -163,7 +163,7 @@ MODULE fftpw_types
     INTEGER :: z_group_autosize
     INTEGER :: y_group_autosize
     INTEGER :: x_group_autosize
-    INTEGER :: max_batch_size = 10
+    INTEGER :: max_batch_size = 20
     INTEGER :: max_buffer_size = 3
     INTEGER, ALLOCATABLE :: optimal_groups(:,:,:)
 

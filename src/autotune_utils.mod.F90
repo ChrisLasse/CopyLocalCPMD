@@ -573,9 +573,9 @@ CONTAINS
            write(6,*) " "
            write(6,*) "VPSI TUNNING FINISHED"
            write(6,*) " "
-           write(6,*) final_time(1:10)
-           write(6,*) final_time(11:20)
-           IF( mbuff .eq. 3 ) write(6,*) final_time(21:30)
+           write(6,*) final_time(1:mbatch)
+           write(6,*) final_time(mbatch+1:2*mbatch)
+           IF( mbuff .eq. 3 ) write(6,*) final_time(2*mbatch+1:3*mbatch)
            write(6,*) " "
         END IF
         CALL MP_BCAST( dfft%buffer_size_save, 0, dfft%comm )
