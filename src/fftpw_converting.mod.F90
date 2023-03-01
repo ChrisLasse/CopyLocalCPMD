@@ -75,7 +75,7 @@ CONTAINS
 
     CALL fft_type_init( dfft, which, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
 
-    IF( dfft%nstate .lt. dfft%max_batch_size ) dfft%max_batch_size = dfft%nstate
+    IF( dfft%nstate/2 .lt. dfft%max_batch_size ) dfft%max_batch_size = dfft%nstate/2
 
     dfft%batch_size_save = dfft%max_batch_size
     dfft%buffer_size_save = 1

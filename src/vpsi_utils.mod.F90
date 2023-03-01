@@ -2036,6 +2036,10 @@ CONTAINS
                                   timer(25)+timer(27)
           write(6,*)"Adding up COMM:", timer(23)+timer(26)+timer(28)+timer(29)
           write(6,*)"Control:", REAL( REAL( dfft%time_adding( 98 ) ) / REAL( cr ), KIND = REAL64 )
+          write(6,*)"VPSI ADDITION Control:", dfft%my_node_rank, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+                                  timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
+                                  timer(13)+timer(14)+timer(15)+timer(22)+timer(24)+&
+                                  timer(25)+timer(27)+timer(23)+timer(26)+timer(28)+timer(29)
           WRITE(6,*)" "
 
     END IF
@@ -2097,6 +2101,10 @@ CONTAINS
                                timer(25)+timer(27)
        write(6,*)"Adding up COMM:       ", dfft%my_node_rank, timer(23)+timer(26)+timer(28)+timer(29)
        write(6,*)"Control:", REAL( REAL( dfft%time_adding( 98 ) ) / REAL( cr ), KIND = REAL64 )
+       write(6,*)"VPSI ADDITION Control:", dfft%my_node_rank, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+                               timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
+                               timer(13)+timer(14)+timer(15)+timer(22)+timer(24)+&
+                               timer(25)+timer(27)+timer(23)+timer(26)+timer(28)+timer(29)
        WRITE(6,*)" "
 
     END IF
