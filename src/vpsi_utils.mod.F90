@@ -1952,7 +1952,6 @@ CONTAINS
        END IF
        IF( ALLOCATED( first_step ) )   DEALLOCATE( first_step )
        ALLOCATE( first_step( dfft%buffer_size_save ) ) 
-
   
     END IF
   

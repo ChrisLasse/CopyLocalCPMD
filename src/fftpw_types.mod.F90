@@ -135,8 +135,8 @@ MODULE fftpw_types
 
     LOGICAL :: tunning = .true.
     LOGICAL :: overlapp = .false.
-    LOGICAL :: rsactive = .true.
-    LOGICAL :: timings = .false.
+    LOGICAL :: rsactive != .false. deprecated
+    LOGICAL :: timings = .true.
     LOGICAL :: timings2 = .false.
     LOGICAL :: VPSI_4S = .true.
 

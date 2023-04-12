@@ -16,7 +16,8 @@ MODULE fftpw_converting
   USE mp_interface,                  ONLY: mp_sum
   USE parac,                         ONLY: parai
   USE rswfmod,                       ONLY: rsactive
-  USE system,                        ONLY: spar,&
+  USE system,                        ONLY: cntl,&
+                                           spar,&
                                            ncpw 
   USE zeroing_utils,                 ONLY: zeroing
 
@@ -51,7 +52,7 @@ CONTAINS
     dfft%nnr = dfft%nr1 * dfft%nr2 * dfft%nr3
 
     dfft%nstate = crge%n
-!    dfft%rsactive = rsactive
+    IF( cntl%krwfn ) dfft%rsactive = .true.
 !    dfft%rsactive = .true.
 
     dfft%nproc = parai%nproc
