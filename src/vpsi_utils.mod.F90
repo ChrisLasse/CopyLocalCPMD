@@ -168,6 +168,7 @@ MODULE vpsi_utils
   PUBLIC :: vpsi_batchfft
   PUBLIC :: vpsimt
   PUBLIC :: do_the_vpsi_thing
+  PUBLIC :: vpsi_pw_batchfft
   !public :: movepsid
 
 CONTAINS
@@ -2786,5 +2787,546 @@ CONTAINS
      END SUBROUTINE Apply_V_4S
 
   END SUBROUTINE do_the_vpsi_thing
+
+  ! ==================================================================
+  SUBROUTINE vpsi_pw_batchfft(c0,c2,f,vpot,psi,nstate,ikind,ispin,redist_c2)
+    ! ==================================================================
+    ! == K-POINT AND NOT K-POINT VERSION OF VPSI.                     ==
+    ! ==--------------------------------------------------------------==
+    ! == VPOT:   IN INPUT POTENTIAL                                   ==
+    ! == ISPIN:  Need with LSD option for diagonalization scheme      ==
+    ! ==         dimension of VPOT(NNR1,ISPIN)                        ==
+    ! ==--------------------------------------------------------------==
+    ! EHR[
+    ! EHR]
+    ! Modified: Tobias Kloeffel, Erlangen
+    ! Date May 2019
+    ! special version of vpsi to use the batch fft driver
+    ! TODO
+    ! move communication phase into vpsi:
+    ! benefits: reduces memory footprint as only two batches are needed
+    ! in memory; expands the time for the communication phase as also
+    ! the decobination phase of the wf's can take place during
+    ! communication phse
+    ! cons: code complexity will increase, e.g. calling alltoall from here?
+    ! Full performance only with saved arrays or scratch_library
+
+    COMPLEX(real_8) __CONTIGUOUS             :: c0(:,:), c2(:,:)
+    REAL(real_8) __CONTIGUOUS                :: f(:)
+    REAL(real_8), TARGET __CONTIGUOUS        :: vpot(:,:)
+    COMPLEX(real_8), TARGET __CONTIGUOUS     :: psi(:)
+    INTEGER                                  :: nstate, ikind, ispin
+    LOGICAL                                  :: redist_c2
+    LOGICAL                                  :: lg_vpotx3a, lg_vpotx3b
+    CHARACTER(*), PARAMETER                  :: procedureN = 'vpsi_batchfft'
+    COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
+
+    COMPLEX(real_8)                          :: fm, fp, psii, psin
+    COMPLEX(real_8), POINTER __CONTIGUOUS &
+                           , ASYNCHRONOUS    :: wfn_r1(:)
+    INTEGER :: i, iclpot = 0, id, ierr, ig, &
+      ir, is1, is2, isub, isub2, isub3, isub4, iwf, ixx, ixxs, iyy, izz, jj, &
+      leadx, njump, nnrx, nostat, nrxyz1s, nrxyz2, start_loop2, &
+      ist,states_fft,  bsize, ibatch, istate, ir1, first_state, end_loop2, &
+      i_start1, i_start2, i_start3, me_grp, n_grp, start_loop1, end_loop1,&
+      offset_state, nthreads, nested_threads, methread, count, swap, int_mod
+    INTEGER(int_8)                           :: il_wfng(2), il_wfnr(2), il_wfnr1(1), il_xf(2)
+    REAL(real_8)                             :: chksum, csmult, fi, fip1,&
+                                                xskin, temp_time
+    REAL(real_8), ALLOCATABLE                :: vpotx3a(:,:,:), vpotx3b(:,:,:)
+    REAL(real_8), POINTER __CONTIGUOUS       :: VPOTX(:),vpotdg(:,:,:),extf_p(:,:)
+    INTEGER, ALLOCATABLE                     :: lspin(:,:)
+ 
+    INTEGER                                  :: rem, i1, j1
+    INTEGER(INT64) :: time(2)
+    ! ==--------------------------------------------------------------==
+
+    IF(cntl%fft_tune_batchsize) THEN
+       CALL tiset(procedureN//'_tuning',isub4)
+    ELSE
+       CALL tiset(procedureN,isub)
+    END IF
+
+    IF (group%nogrp.GT.1)CALL stopgm(procedureN,&
+         'OLD TASK GROUPS NOT SUPPORTED ANYMORE ',&
+         __LINE__,__FILE__)
+    IF (tdgcomm%tdg) &
+         CALL stopgm(procedureN,'DOUBLE GRID NOT SUPPORTED', &
+               __LINE__,__FILE__)
+    CALL setfftn(0)
+
+    IF (lspin2%tlse.AND.lspin2%tlsets.AND.(lspin2%tross.OR.lspin2%tcas22.OR.lspin2%tpenal&
+         .OR.lspin2%troot)) THEN
+       CALL stopgm(procedureN,&
+            'NO SLATER TS WITH ROSS, CAS22, PENALTY, ROOTHAAN',&
+            __LINE__,__FILE__)
+    ENDIF
+
+    IF(td_prop%td_extpot) CALL reshape_inplace(extf, (/fpar%kr1*fpar%kr2s,fpar%kr3s/), &
+         extf_p)
+    CALL reshape_inplace(vpot, (/fpar%kr1*fpar%kr2s,fpar%kr3s,ispin/), vpotdg)
+    !
+    !vpotx(1:SIZE(vpotdg)) => vpotdg
+    CALL reshape_inplace(vpot, (/fpar%nnr1*ispin/), vpotx)
+
+    ALLOCATE(lspin(2,fft_batchsize),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate lspin', &
+         __LINE__,__FILE__)
+
+    !$ ALLOCATE(locks_fw(fft_numbatches+1,2),STAT=ierr)
+    !$ IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate locks_fw', &
+    !$      __LINE__,__FILE__)
+    !$ ALLOCATE(locks_inv(fft_numbatches+1,2),STAT=ierr)
+    !$ IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate locks_inv', &
+    !$      __LINE__,__FILE__)
+
+    !if overlapping comm/comp active:
+    ! if rsactive we operate on two batches
+    ! else we operate on 3 batches
+    !else just one batch
+    int_mod=3
+    il_wfng(1)=fpar%kr1s*msrays
+    il_wfng(2)=fft_batchsize
+
+    il_wfnr1(1)=fpar%kr1*fpar%kr2s*fpar%kr3s*fft_batchsize
+
+    il_wfnr(1)=fpar%kr1*fpar%kr2s*fpar%kr3s*fft_batchsize
+    IF(il_wfnr(1).EQ.0)il_wfnr(1)=fpar%kr2s*fpar%kr3s*fft_batchsize
+    il_wfnr(1)=il_wfnr(1)+MOD(il_wfnr(1),4)
+    il_wfnr(2)=1
+
+    il_xf(1)=fpar%nnr1*fft_batchsize
+    IF(il_xf(1).EQ.0) il_xf(1)=maxfft*fft_batchsize
+    il_xf(1)=il_xf(1)+MOD(il_xf(1),4)
+    il_xf(2)=3
+    start_loop1=1
+    end_loop1=fft_numbatches+2
+    start_loop2=2
+    end_loop2=fft_numbatches+3
+
+    IF(rsactive)THEN
+       il_wfnr(2)=fft_numbatches
+       IF(fft_residual.GT.0) il_wfnr(2)=fft_numbatches+1
+       il_xf(2)=2
+       int_mod=2
+       start_loop1=0
+       end_loop1=fft_numbatches+1
+       start_loop2=1
+       end_loop2=fft_numbatches+2
+    END IF
+
+    IF(cntl%overlapp_comm_comp.AND.fft_numbatches.GT.1)THEN
+       nthreads=MIN(2,parai%ncpus)
+       nested_threads=(MAX(parai%ncpus-1,1))
+#if !defined(_INTEL_MKL)
+       CALL stopgm(procedureN, 'Overlapping communication and computation: Behavior of BLAS &
+            routine inside parallel region not checked',&
+            __LINE__,__FILE__)
+#endif
+    ELSE
+       nthreads=1
+       nested_threads=parai%ncpus
+       int_mod=1
+       il_xf(2)=1
+       start_loop1=0
+       start_loop2=0
+       end_loop1=fft_numbatches+1
+       end_loop2=fft_numbatches+1
+    END IF
+ 
+#ifdef _USE_SCRATCHLIBRARY
+    CALL request_scratch(il_xf,xf,procedureN//'_xf',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate xf', &
+         __LINE__,__FILE__)
+    CALL request_scratch(il_xf,yf,procedureN//'_yf',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate yf', &
+         __LINE__,__FILE__)
+    CALL request_scratch(il_wfng,wfn_g,'wfn_g',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_g', &
+         __LINE__,__FILE__)
+#endif
+    IF(.NOT.rsactive)THEN
+#ifdef _USE_SCRATCHLIBRARY
+       CALL request_scratch(il_wfnr,wfn_r,'wfn_r',ierr)
+#else
+       ALLOCATE(wfn_r(il_wfnr(1),il_wfnr(2)),STAT=ierr)
+#endif
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
+            __LINE__,__FILE__)
+#if !defined _USE_SCRATCHLIBRARY
+       ALLOCATE(wfn_g(il_wfng(1),il_wfng(2)),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_g', &
+            __LINE__,__FILE__)
+#endif
+    END IF
+    ! 
+
+    leadx = fpar%nnr1
+    nnrx  = llr1
+
+    njump=2
+    IF (tkpts%tkpnt) njump=1
+    IF (lspin2%tlse) THEN
+       nostat = clsd%ialpha-1
+    ELSE
+       nostat = nstate
+    ENDIF
+    me_grp=parai%cp_inter_me
+    n_grp=parai%cp_nogrp
+    i_start1=0
+    i_start2=part_1d_get_el_in_blk(1,nostat,me_grp,n_grp)-1
+    i_start3=part_1d_get_el_in_blk(1,nostat,me_grp,n_grp)-1
+
+
+    IF (cntl%cdft)THEN
+       IF (.NOT.cdftlog%tcall)THEN
+          csmult=cdftcom%cdft_v(1)
+       ELSE
+          csmult=cdftcom%cdft_v(1)+cdftcom%cdft_v(2)
+       ENDIF
+       !$omp parallel do private(IR)
+       DO ir=1,fpar%nnr1
+          vpotdg(ir,1,1)=vpotdg(ir,1,1)+csmult*wdiff(ir)
+       ENDDO
+       IF (.NOT.cdftlog%tcall)THEN
+          IF (cdftlog%tspinc) THEN
+             csmult=-cdftcom%cdft_v(1)
+          ELSE
+             csmult=cdftcom%cdft_v(1)
+          ENDIF
+       ELSE
+          csmult=cdftcom%cdft_v(1)-cdftcom%cdft_v(2)
+       ENDIF
+       IF (cntl%tlsd.AND.ispin.EQ.2) THEN
+          !$omp parallel do private(IR)
+          DO ir=1,fpar%nnr1
+             vpotdg(ir,2,1)=vpotdg(ir,2,1)+csmult*wdiff(ir)
+          ENDDO
+       ENDIF
+    ENDIF
+    CALL reshape_inplace(vpot, (/fpar%kr1*fpar%kr2s,fpar%kr3s,ispin/), vpotdg)
+
+    methread=0
+
+
+    IF(.NOT.rsactive) wfn_r1=>wfn_r(:,1)
+    IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
+    CALL SYSTEM_CLOCK( time(1) )
+    !$ locks_inv = .TRUE.
+    !$ locks_fw = .TRUE.
+    !$OMP parallel IF(nthreads.eq.2) num_threads(nthreads) &
+    !$omp private(methread,ibatch,bsize,count,ist,is1,is2,ir,offset_state,swap) &
+    !$omp proc_bind(close)
+    !$ methread = omp_get_thread_num()
+    !$ IF(methread.EQ.1)THEN
+    !$    CALL omp_set_max_active_levels(2)
+    !$    CALL omp_set_num_threads(nested_threads)
+#ifdef _INTEL_MKL
+    !$    CALL mkl_set_dynamic(0)
+    !$    ierr = mkl_set_num_threads_local(nested_threads)
+#endif
+    !$ END IF
+    !$OMP barrier
+    
+    !Loop over batches
+    DO ibatch=1,fft_numbatches+3
+       IF(.NOT.rsactive)THEN
+          IF(methread.EQ.1.OR.nthreads.EQ.1)THEN
+             !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
+             IF(ibatch.LE.fft_numbatches+1)THEN
+                IF(ibatch.LE.fft_numbatches)THEN
+                   bsize=fft_batchsize
+                ELSE
+                   bsize=fft_residual
+                END IF
+                IF(bsize.NE.0)THEN
+                   ! Loop over the electronic states of this batch
+                   CALL set_psi_batch_g(c0,wfn_g,int(il_wfng(1)),i_start1,bsize,nstate,me_grp,n_grp)
+                   ! ==--------------------------------------------------------------==
+                   ! ==  Fourier transform the wave functions to real space.         ==
+                   ! ==  In the array PSI was used also the fact that the wave       ==
+                   ! ==  functions at Gamma are real, to form a complex array (PSI)  ==
+                   ! ==  with the wave functions corresponding to two different      ==
+                   ! ==  states (i and i+1) as the real and imaginary part. This     ==
+                   ! ==  allows to call the FFT routine 1/2 of the times and save    ==
+                   ! ==  time.                                                       ==
+                   ! ==  Here we operate on a batch of states, containing njump*bsize==
+                   ! ==  states. To achive better overlapping of the communication   ==
+                   ! ==  and communication phase, we operate on two batches at once  ==
+                   ! ==  ist revers to the current batch (rsactive) or is identical  ==
+                   ! ==  to swap                                                     ==
+                   ! ==--------------------------------------------------------------==
+                   swap=mod(ibatch,int_mod)+1
+                   CALL invfftn_batch(wfn_g,bsize,swap,1,ibatch)
+                   i_start1=i_start1+bsize*njump
+                END IF
+             END IF
+          END IF
+          IF(methread.EQ.0.OR.nthreads.EQ.1)THEN
+             !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
+             !communication phase
+             IF(ibatch.LE.fft_numbatches+1)THEN
+                IF(ibatch.LE.fft_numbatches)THEN
+                   bsize=fft_batchsize
+                ELSE
+                   bsize=fft_residual
+                END IF
+                IF(bsize.NE.0)THEN
+                   swap=mod(ibatch,int_mod)+1
+                   CALL invfftn_batch(wfn_r,bsize,swap,2,ibatch)
+                END IF
+             END IF
+          END IF
+          IF (methread.EQ.1.OR.nthreads.EQ.1)THEN
+             !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
+             !data related to ibatch-1!
+!             IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
+             IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
+                IF (ibatch-start_loop1.LE.fft_numbatches)THEN
+                   bsize=fft_batchsize
+                ELSE
+                   bsize=fft_residual
+                END IF
+                IF(bsize.NE.0)THEN
+                   swap=mod(ibatch-start_loop1,int_mod)+1
+                   CALL invfftn_batch(wfn_r1,bsize,swap,3,ibatch-start_loop1)
+                END IF
+             END IF
+          END IF
+          ! At this point locks_inv(:,ibatch-1) are .FALSE.
+       END IF
+       ! ==------------------------------------------------------------==
+       ! == Apply the potential (V), which acts in real space.         ==
+
+       IF(methread.EQ.1.OR.nthreads.EQ.1)THEN
+!          IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
+          IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
+             IF(ibatch-start_loop1.LE.fft_numbatches)THEN
+                bsize=fft_batchsize
+             ELSE
+                bsize=fft_residual
+             END IF
+             IF(bsize.NE.0)THEN
+                swap=mod(ibatch-start_loop1,int_mod)+1
+                lspin=1
+                offset_state=i_start2
+                DO count=1,bsize
+                   is1=offset_state+1
+                   offset_state=offset_state+1
+                   IF (njump.EQ.2) THEN
+                      is2=offset_state+1
+                      offset_state=offset_state+1
+                   ELSE
+                      is2=0
+                   END IF
+                   IF (cntl%tlsd.AND.ispin.EQ.2) THEN
+                      IF (is1.GT.spin_mod%nsup) lspin(1,count)=2
+                      IF (is2.GT.spin_mod%nsup) lspin(2,count)=2
+                   END IF
+                   !njump states per single fft
+                END DO
+!                IF(rsactive)THEN
+!                   CALL mult_vpot_psi_rsactive(wfn_r(:,ibatch-1),wfn_r1,vpotdg,&
+!                        fpar%kr1*fpar%kr2s,bsize,fpar%kr3s,lspin,clsd%nlsd)
+!                ELSE
+                IF(rsactive) wfn_r1=>wfn_r(:,ibatch-start_loop1)
+                   CALL mult_vpot_psi(wfn_r1,vpotdg,&
+                        fpar%kr1*fpar%kr2s,bsize,fpar%kr3s,lspin,clsd%nlsd)
+!                END IF
+                IF (td_prop%td_extpot.AND.cntl%tlsd.AND.ispin.EQ.2) THEN
+                   offset_state=i_start2
+                   DO count=1,bsize
+                      is1=offset_state+1
+                      offset_state=offset_state+1
+                      is2=0
+                      IF(njump.EQ.2) THEN
+                         is2=offset_state+1
+                         offset_state=offset_state+1
+                      END IF
+                      IF (is1.EQ.spin_mod%nsup) EXIT
+                   END DO
+                   !count is now set to: count .eq. spin_mod%nsup or count .eq. bsize+1
+                   IF (count .LE. bsize) THEN
+                      CALL mult_extf_psi(wfn_r1,extf,fpar%kr1*fpar%kr2s,bsize,&
+                           fpar%kr3s,count)
+                   END IF
+                END IF
+             ! ==------------------------------------------------------------==
+             ! == Back transform to reciprocal space the product V.PSI       ==
+             ! ==------------------------------------------------------------==
+                CALL fwfftn_batch(wfn_r1,bsize,swap,1,ibatch-start_loop1)
+                i_start2=i_start2+bsize*njump
+             END IF
+          END IF
+       END IF
+       IF(methread.EQ.0.OR.nthreads.EQ.1)THEN
+!          IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
+          IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
+             IF(ibatch-start_loop1.LE.fft_numbatches)THEN
+                bsize=fft_batchsize
+             ELSE
+                bsize=fft_residual
+             END IF
+             IF(bsize.NE.0)THEN
+                swap=mod(ibatch-start_loop1,int_mod)+1
+                CALL fwfftn_batch(wfn_r,bsize,swap,2,ibatch-start_loop1)
+             END IF
+          END IF
+       END IF
+       IF(methread.EQ.1.OR.nthreads.EQ.1)THEN
+          !data related to ibatch-2
+!          IF(ibatch.GE.3.AND.ibatch.LE.fft_numbatches+3)THEN
+          IF(ibatch.GT.start_loop2.AND.ibatch.LE.end_loop2)THEN
+!             IF(ibatch-2.LE.fft_numbatches)THEN
+             IF(ibatch-start_loop2.LE.fft_numbatches)THEN
+                bsize=fft_batchsize
+             ELSE
+                bsize=fft_residual
+             END IF
+             IF(bsize.NE.0)THEN
+                IF(rsactive) wfn_r1=>wfn_r(:,ibatch-start_loop2)
+                swap=mod(ibatch-start_loop2,int_mod)+1
+                CALL fwfftn_batch(wfn_g,bsize,swap,3,ibatch-start_loop2)
+                IF (tkpts%tkpnt) THEN
+                   CALL calc_c2_kpnt(c2,c0,wfn_g,f,bsize,i_start3,ikind)
+                ELSE
+                   CALL calc_c2(c2,c0,wfn_g,f,bsize,i_start3,njump,nostat)
+                ENDIF
+                i_start3=i_start3+bsize*njump
+             END IF
+          END IF
+       END IF
+    END DO
+
+    !$ IF (methread.EQ.1) THEN
+    !$    CALL omp_set_max_active_levels(1)
+    !$    CALL omp_set_num_threads(parai%ncpus)
+#ifdef _INTEL_MKL
+    !$    CALL mkl_set_dynamic(1)
+    !$    ierr = mkl_set_num_threads_local(parai%ncpus)
+#endif
+    !$    CALL dfftw_plan_with_nthreads(parai%ncpus)
+    !$ END IF
+    !$OMP barrier
+
+    !$omp end parallel
+
+    CALL SYSTEM_CLOCK( time(2) )
+    dfft%time_adding( 99 ) = time(2) - time(1)
+
+    IF(cntl%fft_tune_batchsize) fft_time_total(fft_tune_num_it)=fft_time_total(fft_tune_num_it)+m_walltime()-temp_time
+
+    DO i=1,2
+       ! kk-mb === print local potential (start) ===
+       IF (locpot2%tlpot) THEN
+          iclpot=iclpot+1
+          nrxyz1s=spar%nr1s*spar%nr2s*spar%nr3s
+          nrxyz2=0
+          IF (iclpot .EQ. 1) THEN
+             ALLOCATE(vpotx3a(spar%nr1s,spar%nr2s,spar%nr3s),STAT=ierr)
+             IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+                  __LINE__,__FILE__)
+             CALL zeroing(vpotx3a)!,nrxyz1s)
+             lg_vpotx3a=.TRUE.
+             lg_vpotx3b=.FALSE.
+          ELSE
+             IF (lg_vpotx3a) THEN
+                ALLOCATE(vpotx3b(spar%nr1s,spar%nr2s,spar%nr3s),STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+                     __LINE__,__FILE__)
+                CALL zeroing(vpotx3b)!,nrxyz1s)
+                DEALLOCATE(vpotx3a,STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+                     __LINE__,__FILE__)
+                lg_vpotx3a=.FALSE.
+                lg_vpotx3b=.TRUE.
+             ELSE IF (lg_vpotx3b) THEN
+                ALLOCATE(vpotx3a(spar%nr1s,spar%nr2s,spar%nr3s),STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+                     __LINE__,__FILE__)
+                CALL zeroing(vpotx3a)!,nrxyz1s)
+                DEALLOCATE(vpotx3b,STAT=ierr)
+                IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+                     __LINE__,__FILE__)
+                lg_vpotx3a=.TRUE.
+                lg_vpotx3b=.FALSE.
+             ENDIF
+          ENDIF
+          DO ir=1,nnrx
+             IF (vpotx(ir) .NE. 0) THEN
+                nrxyz2=nrxyz2+1
+                ixx=MOD(nrxyz2-1,parm%nr1)+1
+                jj=(nrxyz2-1)/parm%nr1+1
+                iyy=MOD(jj-1,spar%nr2s)+1
+                izz=(nrxyz2-1)/(parm%nr1*spar%nr2s)+1
+                ixxs=ixx+parap%nrxpl(1,parai%mepos)-1
+                IF (lg_vpotx3a) THEN
+                   vpotx3a(ixxs,iyy,izz)=vpotx(ir)
+                ELSE IF (lg_vpotx3b) THEN
+                   vpotx3b(ixxs,iyy,izz)=vpotx(ir)
+                ENDIF
+             ENDIF
+          ENDDO
+       ENDIF
+       ! kk-mb === print local potential (end)  ===
+    END DO
+    !
+    ! redistribute C2 over the groups if needed
+    !
+    IF (redist_c2) THEN
+       CALL tiset(procedureN//'_grps_b',isub3)
+       CALL cp_grp_redist_array(C2,nkpt%ngwk,nstate)
+       CALL tihalt(procedureN//'_grps_b',isub3)
+    ENDIF
+
+    !free wfn_g,and wfn_r
+#ifdef _USE_SCRATCHLIBRARY
+    CALL free_scratch(il_xf,yf,procedureN//'_yf',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate yf', &
+         __LINE__,__FILE__)
+    CALL free_scratch(il_xf,xf,procedureN//'_xf',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate xf', &
+         __LINE__,__FILE__)
+    CALL free_scratch(il_wfnr,wfn_r,'wfn_r',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
+         __LINE__,__FILE__)
+    CALL free_scratch(il_wfng,wfn_g,'wfn_g',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_g', &
+         __LINE__,__FILE__)
+#else
+    IF(.NOT.rsactive)THEN
+       DEALLOCATE(wfn_g,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_g', &
+            __LINE__,__FILE__)
+       DEALLOCATE(wfn_r,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
+            __LINE__,__FILE__)
+    END IF
+#endif
+    !$ DEALLOCATE(locks_fw,STAT=ierr)
+    !$ IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate locks_fw', &
+    !$      __LINE__,__FILE__)
+    !$ DEALLOCATE(locks_inv,STAT=ierr)
+    !$ IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate locks_inv', &
+    !$      __LINE__,__FILE__)
+    DEALLOCATE(lspin,STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate lspin', &
+         __LINE__,__FILE__)
+
+    IF (tkpts%tkpnt) CALL c_clean(c2,nstate,ikind)
+    ! SPECIAL TERMS FOR LSE METHODS
+    IF (lspin2%tlse) CALL vpsi_lse(c0,c2,f,vpot,psi,nstate,.TRUE.)
+    ! META FUNCTIONALS NEED SPECIAL TERM
+    IF (cntl%ttau) CALL vtaupsi(c0,c2,f,psi,nstate,ispin)
+    !
+    IF(cntl%fft_tune_batchsize) THEN
+       CALL tihalt(procedureN//'_tuning',isub4)
+    ELSE
+       CALL tihalt(procedureN,isub)
+    END IF
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END SUBROUTINE vpsi_pw_batchfft
+  ! ==================================================================
 
 END MODULE vpsi_utils

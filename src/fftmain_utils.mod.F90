@@ -655,7 +655,7 @@ CONTAINS
        CALL fftnew_cuda(isign,f,sparse, comm, thread_view=thread_view, &
             & copy_data_to_device=copy_data_to_device, copy_data_to_host=copy_data_to_host )
     ELSE
-       IF( .false. ) THEN
+       IF( .true. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
           CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
@@ -697,7 +697,7 @@ CONTAINS
        CALL fftnew_cuda(isign,f,sparse, comm, thread_view=thread_view, &
             & copy_data_to_device=copy_data_to_device, copy_data_to_host=copy_data_to_host )
     ELSE
-       IF( .false. ) THEN
+       IF( .true. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
           CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
