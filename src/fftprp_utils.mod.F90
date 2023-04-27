@@ -292,8 +292,8 @@ CONTAINS
        nzh(ig)=ny1 + (mg(ny2,ny3)-1)*fpar%kr1s
        indz(ig)=iny1 + (mg(iny2,iny3)-1)*fpar%kr1s
 
-!       nzh(ig)=dfft%nl(ig)
-!       indz(ig)=dfft%nlm(ig)
+       nzh(ig)=dfft%nl(ig)
+       indz(ig)=dfft%nlm(ig)
     ENDDO
     !$omp parallel do private(IG)
     DO ig=1,ncpw%ngw
@@ -448,7 +448,6 @@ CONTAINS
        ENDIF
     ENDIF
     ! ==--------------------------------------------------------------==
-    cntl%overlapp_comm_comp = .false.
     ! INITIALIZE BATCH FFT ALGORITHM
     IF(batch_fft)THEN
        nstate = crge%n
@@ -463,6 +462,8 @@ CONTAINS
        !if autotuning is requested, we use this batchsize to set fft_max_numbatches
        a2a_msgsize=a2a_msgsize*1024/(parai%nproc*16)
        fft_batchsize=FLOOR(REAL(a2a_msgsize,KIND=real_8)/REAL(lda,KIND=real_8))
+       IF( dfft%exact_batchsize ) fft_batchsize = dfft%given_batchsize
+!       fft_batchsize=5
        IF(fft_batchsize.LE.0) fft_batchsize=1
        fft_residual=MOD(fft_total,fft_batchsize)
        fft_numbatches=(fft_total-fft_residual)/fft_batchsize

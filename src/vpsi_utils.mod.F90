@@ -2753,40 +2753,40 @@ CONTAINS
 
      END SUBROUTINE Four_Step_FFT_VPSI
 
-     SUBROUTINE Apply_V_4S( f, v, x_group_size ) 
-       IMPLICIT NONE
-     
-       COMPLEX(DP), INTENT(INOUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size
-       REAL(DP), INTENT(IN) :: v( * )
-       INTEGER, INTENT(IN)  :: x_group_size
-     
-       INTEGER :: j, igroup
-     
-       INTEGER(INT64) :: time(2)
-     
-       CALL SYSTEM_CLOCK( time(1) )
-     !------------------------------------------------------
-     !-----------Apply V Start------------------------------
-     
-       !$omp parallel private( j, igroup )
-       DO igroup = 1, x_group_size
-          !$omp do
-          DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
-             f( j, igroup )= - f( j, igroup ) * v( j )
-          END DO
-          !$omp end do nowait
-       END DO
-       !$omp end parallel
-     
-     !------------Apply V End-------------------------------
-     !------------------------------------------------------
-       CALL SYSTEM_CLOCK( time(2) )
-     
-       dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
-     
-     END SUBROUTINE Apply_V_4S
-
   END SUBROUTINE do_the_vpsi_thing
+
+  SUBROUTINE Apply_V_4S( f, v, x_group_size ) 
+    IMPLICIT NONE
+  
+    COMPLEX(DP), INTENT(INOUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size
+    REAL(DP), INTENT(IN) :: v( * )
+    INTEGER, INTENT(IN)  :: x_group_size
+  
+    INTEGER :: j, igroup
+  
+    INTEGER(INT64) :: time(2)
+  
+    CALL SYSTEM_CLOCK( time(1) )
+  !------------------------------------------------------
+  !-----------Apply V Start------------------------------
+  
+    !$omp parallel private( j, igroup )
+    DO igroup = 1, x_group_size
+       !$omp do
+       DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
+          f( j, igroup )= - f( j, igroup ) * v( j )
+       END DO
+       !$omp end do nowait
+    END DO
+    !$omp end parallel
+  
+  !------------Apply V End-------------------------------
+  !------------------------------------------------------
+    CALL SYSTEM_CLOCK( time(2) )
+  
+    dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
+  
+  END SUBROUTINE Apply_V_4S
 
   ! ==================================================================
   SUBROUTINE vpsi_pw_batchfft(c0,c2,f,vpot,psi,nstate,ikind,ispin,redist_c2)
@@ -2839,6 +2839,18 @@ CONTAINS
  
     INTEGER                                  :: rem, i1, j1
     INTEGER(INT64) :: time(2)
+
+    LOGICAL, SAVE :: first = .true.
+    INTEGER, SAVE :: nbnd, nbnd_source
+    INTEGER :: batch_size
+    INTEGER :: buffer_size
+    INTEGER :: sendsize_rem
+    INTEGER :: counter(6)
+    COMPLEX(DP), ALLOCATABLE, SAVE, TARGET :: batch_aux(:,:)
+    COMPLEX(DP), CONTIGUOUS, SAVE, POINTER :: rs_wave(:)
+    INTEGER :: ngms, start
+    INTEGER, SAVE :: first_dim1, first_dim2, first_dim3
+
     ! ==--------------------------------------------------------------==
 
     IF(cntl%fft_tune_batchsize) THEN
@@ -2862,12 +2874,12 @@ CONTAINS
             __LINE__,__FILE__)
     ENDIF
 
-    IF(td_prop%td_extpot) CALL reshape_inplace(extf, (/fpar%kr1*fpar%kr2s,fpar%kr3s/), &
-         extf_p)
-    CALL reshape_inplace(vpot, (/fpar%kr1*fpar%kr2s,fpar%kr3s,ispin/), vpotdg)
-    !
-    !vpotx(1:SIZE(vpotdg)) => vpotdg
-    CALL reshape_inplace(vpot, (/fpar%nnr1*ispin/), vpotx)
+!    IF(td_prop%td_extpot) CALL reshape_inplace(extf, (/fpar%kr1*fpar%kr2s,fpar%kr3s/), &
+!         extf_p)
+!    CALL reshape_inplace(vpot, (/fpar%kr1*fpar%kr2s,fpar%kr3s,ispin/), vpotdg)
+!    !
+!    !vpotx(1:SIZE(vpotdg)) => vpotdg
+!    CALL reshape_inplace(vpot, (/fpar%nnr1*ispin/), vpotx)
 
     ALLOCATE(lspin(2,fft_batchsize),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate lspin', &
@@ -2934,31 +2946,31 @@ CONTAINS
        end_loop2=fft_numbatches+1
     END IF
  
-#ifdef _USE_SCRATCHLIBRARY
-    CALL request_scratch(il_xf,xf,procedureN//'_xf',ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate xf', &
-         __LINE__,__FILE__)
-    CALL request_scratch(il_xf,yf,procedureN//'_yf',ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate yf', &
-         __LINE__,__FILE__)
-    CALL request_scratch(il_wfng,wfn_g,'wfn_g',ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_g', &
-         __LINE__,__FILE__)
-#endif
-    IF(.NOT.rsactive)THEN
-#ifdef _USE_SCRATCHLIBRARY
-       CALL request_scratch(il_wfnr,wfn_r,'wfn_r',ierr)
-#else
-       ALLOCATE(wfn_r(il_wfnr(1),il_wfnr(2)),STAT=ierr)
-#endif
-       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
-            __LINE__,__FILE__)
-#if !defined _USE_SCRATCHLIBRARY
-       ALLOCATE(wfn_g(il_wfng(1),il_wfng(2)),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_g', &
-            __LINE__,__FILE__)
-#endif
-    END IF
+!#ifdef _USE_SCRATCHLIBRARY
+!    CALL request_scratch(il_xf,xf,procedureN//'_xf',ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate xf', &
+!         __LINE__,__FILE__)
+!    CALL request_scratch(il_xf,yf,procedureN//'_yf',ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate yf', &
+!         __LINE__,__FILE__)
+!    CALL request_scratch(il_wfng,wfn_g,'wfn_g',ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_g', &
+!         __LINE__,__FILE__)
+!#endif
+!    IF(.NOT.rsactive)THEN
+!#ifdef _USE_SCRATCHLIBRARY
+!       CALL request_scratch(il_wfnr,wfn_r,'wfn_r',ierr)
+!#else
+!       ALLOCATE(wfn_r(il_wfnr(1),il_wfnr(2)),STAT=ierr)
+!#endif
+!       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
+!            __LINE__,__FILE__)
+!#if !defined _USE_SCRATCHLIBRARY
+!       ALLOCATE(wfn_g(il_wfng(1),il_wfng(2)),STAT=ierr)
+!       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_g', &
+!            __LINE__,__FILE__)
+!#endif
+!    END IF
     ! 
 
     leadx = fpar%nnr1
@@ -2978,38 +2990,133 @@ CONTAINS
     i_start3=part_1d_get_el_in_blk(1,nostat,me_grp,n_grp)-1
 
 
-    IF (cntl%cdft)THEN
-       IF (.NOT.cdftlog%tcall)THEN
-          csmult=cdftcom%cdft_v(1)
-       ELSE
-          csmult=cdftcom%cdft_v(1)+cdftcom%cdft_v(2)
-       ENDIF
-       !$omp parallel do private(IR)
-       DO ir=1,fpar%nnr1
-          vpotdg(ir,1,1)=vpotdg(ir,1,1)+csmult*wdiff(ir)
-       ENDDO
-       IF (.NOT.cdftlog%tcall)THEN
-          IF (cdftlog%tspinc) THEN
-             csmult=-cdftcom%cdft_v(1)
-          ELSE
-             csmult=cdftcom%cdft_v(1)
-          ENDIF
-       ELSE
-          csmult=cdftcom%cdft_v(1)-cdftcom%cdft_v(2)
-       ENDIF
-       IF (cntl%tlsd.AND.ispin.EQ.2) THEN
-          !$omp parallel do private(IR)
-          DO ir=1,fpar%nnr1
-             vpotdg(ir,2,1)=vpotdg(ir,2,1)+csmult*wdiff(ir)
-          ENDDO
-       ENDIF
-    ENDIF
-    CALL reshape_inplace(vpot, (/fpar%kr1*fpar%kr2s,fpar%kr3s,ispin/), vpotdg)
+!    IF (cntl%cdft)THEN
+!       IF (.NOT.cdftlog%tcall)THEN
+!          csmult=cdftcom%cdft_v(1)
+!       ELSE
+!          csmult=cdftcom%cdft_v(1)+cdftcom%cdft_v(2)
+!       ENDIF
+!       !$omp parallel do private(IR)
+!       DO ir=1,fpar%nnr1
+!          vpotdg(ir,1,1)=vpotdg(ir,1,1)+csmult*wdiff(ir)
+!       ENDDO
+!       IF (.NOT.cdftlog%tcall)THEN
+!          IF (cdftlog%tspinc) THEN
+!             csmult=-cdftcom%cdft_v(1)
+!          ELSE
+!             csmult=cdftcom%cdft_v(1)
+!          ENDIF
+!       ELSE
+!          csmult=cdftcom%cdft_v(1)-cdftcom%cdft_v(2)
+!       ENDIF
+!       IF (cntl%tlsd.AND.ispin.EQ.2) THEN
+!          !$omp parallel do private(IR)
+!          DO ir=1,fpar%nnr1
+!             vpotdg(ir,2,1)=vpotdg(ir,2,1)+csmult*wdiff(ir)
+!          ENDDO
+!       ENDIF
+!    ENDIF
+!    CALL reshape_inplace(vpot, (/fpar%kr1*fpar%kr2s,fpar%kr3s,ispin/), vpotdg)
 
     methread=0
 
 
-    IF(.NOT.rsactive) wfn_r1=>wfn_r(:,1)
+
+    nbnd_source = nstate
+    ngms = dfft%ngw
+
+    IF( first ) THEN
+ 
+       first = .false.
+       dfft%use_maps = .true.
+       dfft%ngms = ngms
+
+       first_dim1 = dfft%my_nr3p * dfft%nr2 * dfft%nr1
+       first_dim2 = dfft%nr2 * dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p
+       first_dim3 = dfft%nr3 * dfft%nsw(dfft%mype+1)
+
+       nbnd = ( nbnd_source + 1 ) / 2
+       IF( mod( nbnd_source, 2 ) .ne. 0 ) dfft%uneven = .true.
+       IF( dfft%mype .eq. 0 .and. dfft%uneven ) THEN
+          write(6,*) "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+          write(6,*) "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+          write(6,*) "WARNING: UNEVEN NUMBER OF STATES, NOT TESTED!"
+          write(6,*) "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+          write(6,*) "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+       END IF
+ 
+    END IF
+
+    dfft%wave = .true.
+    dfft%vpsi = .true.
+    batch_size = fft_batchsize
+    dfft%batch_size_save = fft_batchsize
+    buffer_size = int_mod
+    dfft%buffer_size_save = int_mod
+
+    IF( dfft%remember_batch_vpsi .ne. batch_size .or. dfft%remember_buffer_vpsi .ne. buffer_size ) THEN
+
+       dfft%remember_batch_vpsi  = batch_size
+       dfft%remember_buffer_vpsi = buffer_size
+       CALL Clean_up_shared( dfft, 1 ) 
+
+       CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size, dfft%ir1w, dfft%nsw )
+
+       dfft%rem_size = fft_residual
+
+       CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
+  
+       dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
+       sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
+       dfft%sendsize_save = dfft%sendsize
+     
+       CALL create_shared_memory_window_2d( comm_send, 1, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
+       CALL create_shared_memory_window_2d( comm_recv, 2, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
+    
+       IF( dfft%non_blocking .and. dfft%my_node_rank .eq. 0 ) CALL Prep_fft_com( comm_send, comm_recv, dfft%sendsize, sendsize_rem, &
+                                                                                 dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, buffer_size, &
+                                                                                 dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem )
+ 
+       CALL create_shared_locks_2d( locks_calc_inv, 20, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_2d( locks_calc_fw,  21, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_1d( locks_com_inv,  50, dfft, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_1d( locks_com_fw,   51, dfft, ( nbnd_source / batch_size ) + 1 )
+       
+       CALL create_shared_locks_2d( locks_calc_1  , 22, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
+       CALL create_shared_locks_2d( locks_calc_2  , 23, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
+  
+       dfft%num_buff = buffer_size
+       IF( ALLOCATED( batch_aux ) )        DEALLOCATE( batch_aux )
+       ALLOCATE( batch_aux( dfft%my_nr3p * dfft%nr2 * dfft%nr1, batch_size ) )
+  
+    END IF
+
+    sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
+    counter = 0
+  
+    locks_calc_inv = .true.
+    locks_calc_fw  = .true.
+    locks_com_inv  = .true.
+    locks_com_fw   = .true.
+  
+    locks_calc_1   = .true.
+    locks_calc_2   = .true.
+    IF( .not. dfft%rsactive ) THEN
+       DO i = 1, batch_size*buffer_size
+          locks_calc_1( : , i ) = .false.
+       ENDDO
+    ELSE
+       DO i = 1, batch_size*buffer_size
+          locks_calc_2( : , i ) = .false.
+       ENDDO
+    END IF
+
+
+    CALL MPI_BARRIER(dfft%comm, ierr)
+
+
+!    IF(.NOT.rsactive) wfn_r1=>wfn_r(:,1)
+    IF(.NOT.rsactive) rs_wave=>batch_aux(:,1)
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
     CALL SYSTEM_CLOCK( time(1) )
     !$ locks_inv = .TRUE.
@@ -3041,42 +3148,51 @@ CONTAINS
                 END IF
                 IF(bsize.NE.0)THEN
                    ! Loop over the electronic states of this batch
-                   CALL set_psi_batch_g(c0,wfn_g,int(il_wfng(1)),i_start1,bsize,nstate,me_grp,n_grp)
-                   ! ==--------------------------------------------------------------==
-                   ! ==  Fourier transform the wave functions to real space.         ==
-                   ! ==  In the array PSI was used also the fact that the wave       ==
-                   ! ==  functions at Gamma are real, to form a complex array (PSI)  ==
-                   ! ==  with the wave functions corresponding to two different      ==
-                   ! ==  states (i and i+1) as the real and imaginary part. This     ==
-                   ! ==  allows to call the FFT routine 1/2 of the times and save    ==
-                   ! ==  time.                                                       ==
-                   ! ==  Here we operate on a batch of states, containing njump*bsize==
-                   ! ==  states. To achive better overlapping of the communication   ==
-                   ! ==  and communication phase, we operate on two batches at once  ==
-                   ! ==  ist revers to the current batch (rsactive) or is identical  ==
-                   ! ==  to swap                                                     ==
-                   ! ==--------------------------------------------------------------==
+!                   CALL set_psi_batch_g(c0,wfn_g,int(il_wfng(1)),i_start1,bsize,nstate,me_grp,n_grp)
+!                   ! ==--------------------------------------------------------------==
+!                   ! ==  Fourier transform the wave functions to real space.         ==
+!                   ! ==  In the array PSI was used also the fact that the wave       ==
+!                   ! ==  functions at Gamma are real, to form a complex array (PSI)  ==
+!                   ! ==  with the wave functions corresponding to two different      ==
+!                   ! ==  states (i and i+1) as the real and imaginary part. This     ==
+!                   ! ==  allows to call the FFT routine 1/2 of the times and save    ==
+!                   ! ==  time.                                                       ==
+!                   ! ==  Here we operate on a batch of states, containing njump*bsize==
+!                   ! ==  states. To achive better overlapping of the communication   ==
+!                   ! ==  and communication phase, we operate on two batches at once  ==
+!                   ! ==  ist revers to the current batch (rsactive) or is identical  ==
+!                   ! ==  to swap                                                     ==
+!                   ! ==--------------------------------------------------------------==
                    swap=mod(ibatch,int_mod)+1
-                   CALL invfftn_batch(wfn_g,bsize,swap,1,ibatch)
+!                   CALL invfftn_batch(wfn_g,bsize,swap,1,ibatch)
+
+                   counter(1) = counter(1) + 1
+                   CALL invfft_4S( dfft, 1, bsize, bsize, 1, 1, counter(1), swap, first_dim3, dfft%aux_array, &
+                                   c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), comm_send, comm_recv ) 
                    i_start1=i_start1+bsize*njump
                 END IF
              END IF
           END IF
-          IF(methread.EQ.0.OR.nthreads.EQ.1)THEN
+          IF(.not. dfft%single_node .and. ( methread.EQ.0.OR.nthreads.EQ.1 ) .and. dfft%my_node_rank .eq. 0 )THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              !communication phase
              IF(ibatch.LE.fft_numbatches+1)THEN
                 IF(ibatch.LE.fft_numbatches)THEN
                    bsize=fft_batchsize
+                   dfft%sendsize = dfft%sendsize_save
                 ELSE
                    bsize=fft_residual
+                   dfft%sendsize = sendsize_rem 
                 END IF
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch,int_mod)+1
-                   CALL invfftn_batch(wfn_r,bsize,swap,2,ibatch)
+!                   CALL invfftn_batch(wfn_r,bsize,swap,2,ibatch)
+                   counter(2) = counter(2) + 1
+                   CALL invfft_4S( dfft, 2, bsize, 0, 0, 0, counter(2), swap, 0, f_inout2=comm_send, f_inout3=comm_recv )
                 END IF
              END IF
           END IF
+          IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr)
           IF (methread.EQ.1.OR.nthreads.EQ.1)THEN
              !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
              !data related to ibatch-1!
@@ -3084,12 +3200,20 @@ CONTAINS
              IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
                 IF (ibatch-start_loop1.LE.fft_numbatches)THEN
                    bsize=fft_batchsize
+                   dfft%rem = .false.
                 ELSE
                    bsize=fft_residual
+                   dfft%rem = .true.
                 END IF
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop1,int_mod)+1
-                   CALL invfftn_batch(wfn_r1,bsize,swap,3,ibatch-start_loop1)
+!                   CALL invfftn_batch(wfn_r1,bsize,swap,3,ibatch-start_loop1)
+                   counter(3) = counter(3) + 1
+                   CALL invfft_4S( dfft, 3, bsize, bsize, 1, 1, counter(3), swap, first_dim1, &
+!                                   wfn_r1, comm_recv, dfft%aux_array( : , 1 : 1 ) )
+                                   rs_wave, comm_recv, dfft%aux_array( : , 1 : 1 ) )
+!                   CALL invfft_4S( dfft, 4, bsize, bsize, 0, 0, ibatch, swap, first_dim1, wfn_r1 )
+                   CALL invfft_4S( dfft, 4, bsize, bsize, 0, 0, counter(3), swap, first_dim1, rs_wave )
                 END IF
              END IF
           END IF
@@ -3108,71 +3232,88 @@ CONTAINS
              END IF
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop1,int_mod)+1
-                lspin=1
-                offset_state=i_start2
-                DO count=1,bsize
-                   is1=offset_state+1
-                   offset_state=offset_state+1
-                   IF (njump.EQ.2) THEN
-                      is2=offset_state+1
-                      offset_state=offset_state+1
-                   ELSE
-                      is2=0
-                   END IF
-                   IF (cntl%tlsd.AND.ispin.EQ.2) THEN
-                      IF (is1.GT.spin_mod%nsup) lspin(1,count)=2
-                      IF (is2.GT.spin_mod%nsup) lspin(2,count)=2
-                   END IF
-                   !njump states per single fft
-                END DO
-!                IF(rsactive)THEN
-!                   CALL mult_vpot_psi_rsactive(wfn_r(:,ibatch-1),wfn_r1,vpotdg,&
+                start = 1+(ibatch-1)*batch_size-start_loop1
+!                IF(rsactive) wfn_r1=>wfn_r(:,start)
+                IF(rsactive) rs_wave=>wfn_real(:,start)
+!                CALL Apply_V_4S( wfn_r1, vpot(:,1), bsize )
+                CALL Apply_V_4S( rs_wave, vpot(:,1), bsize )
+                
+!                lspin=1
+!                offset_state=i_start2
+!                DO count=1,bsize
+!                   is1=offset_state+1
+!                   offset_state=offset_state+1
+!                   IF (njump.EQ.2) THEN
+!                      is2=offset_state+1
+!                      offset_state=offset_state+1
+!                   ELSE
+!                      is2=0
+!                   END IF
+!                   IF (cntl%tlsd.AND.ispin.EQ.2) THEN
+!                      IF (is1.GT.spin_mod%nsup) lspin(1,count)=2
+!                      IF (is2.GT.spin_mod%nsup) lspin(2,count)=2
+!                   END IF
+!                   !njump states per single fft
+!                END DO
+!!                IF(rsactive)THEN
+!!                   CALL mult_vpot_psi_rsactive(wfn_r(:,ibatch-1),wfn_r1,vpotdg,&
+!!                        fpar%kr1*fpar%kr2s,bsize,fpar%kr3s,lspin,clsd%nlsd)
+!!                ELSE
+!                IF(rsactive) wfn_r1=>wfn_r(:,ibatch-start_loop1)
+!                   CALL mult_vpot_psi(wfn_r1,vpotdg,&
 !                        fpar%kr1*fpar%kr2s,bsize,fpar%kr3s,lspin,clsd%nlsd)
-!                ELSE
-                IF(rsactive) wfn_r1=>wfn_r(:,ibatch-start_loop1)
-                   CALL mult_vpot_psi(wfn_r1,vpotdg,&
-                        fpar%kr1*fpar%kr2s,bsize,fpar%kr3s,lspin,clsd%nlsd)
+!!                END IF
+!                IF (td_prop%td_extpot.AND.cntl%tlsd.AND.ispin.EQ.2) THEN
+!                   offset_state=i_start2
+!                   DO count=1,bsize
+!                      is1=offset_state+1
+!                      offset_state=offset_state+1
+!                      is2=0
+!                      IF(njump.EQ.2) THEN
+!                         is2=offset_state+1
+!                         offset_state=offset_state+1
+!                      END IF
+!                      IF (is1.EQ.spin_mod%nsup) EXIT
+!                   END DO
+!                   !count is now set to: count .eq. spin_mod%nsup or count .eq. bsize+1
+!                   IF (count .LE. bsize) THEN
+!                      CALL mult_extf_psi(wfn_r1,extf,fpar%kr1*fpar%kr2s,bsize,&
+!                           fpar%kr3s,count)
+!                   END IF
 !                END IF
-                IF (td_prop%td_extpot.AND.cntl%tlsd.AND.ispin.EQ.2) THEN
-                   offset_state=i_start2
-                   DO count=1,bsize
-                      is1=offset_state+1
-                      offset_state=offset_state+1
-                      is2=0
-                      IF(njump.EQ.2) THEN
-                         is2=offset_state+1
-                         offset_state=offset_state+1
-                      END IF
-                      IF (is1.EQ.spin_mod%nsup) EXIT
-                   END DO
-                   !count is now set to: count .eq. spin_mod%nsup or count .eq. bsize+1
-                   IF (count .LE. bsize) THEN
-                      CALL mult_extf_psi(wfn_r1,extf,fpar%kr1*fpar%kr2s,bsize,&
-                           fpar%kr3s,count)
-                   END IF
-                END IF
              ! ==------------------------------------------------------------==
              ! == Back transform to reciprocal space the product V.PSI       ==
              ! ==------------------------------------------------------------==
-                CALL fwfftn_batch(wfn_r1,bsize,swap,1,ibatch-start_loop1)
+!                CALL fwfftn_batch(wfn_r1,bsize,swap,1,ibatch-start_loop1)
+                 counter(4) = counter(4) + 1
+                 CALL fwfft_4S( dfft, 1, bsize, bsize, 0, 0, counter(4), swap, first_dim1, &
+!                                wfn_r1, dfft%aux_array( : , 1 : 1 ) )
+                                rs_wave, dfft%aux_array( : , 1 : 1 ) )
+                 CALL fwfft_4S( dfft, 2, bsize, bsize, 1, 1, counter(4), swap, first_dim2, &
+                                dfft%aux_array( : , 1 ), comm_send, comm_recv )
                 i_start2=i_start2+bsize*njump
              END IF
           END IF
        END IF
-       IF(methread.EQ.0.OR.nthreads.EQ.1)THEN
-!          IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
+       IF(.not. dfft%single_node .and. ( methread.EQ.0.OR.nthreads.EQ.1 ) .and. dfft%my_node_rank .eq. 0 )THEN
+!       IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
                 bsize=fft_batchsize
+                dfft%sendsize = dfft%sendsize_save
              ELSE
                 bsize=fft_residual
+                dfft%sendsize = sendsize_rem 
              END IF
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop1,int_mod)+1
-                CALL fwfftn_batch(wfn_r,bsize,swap,2,ibatch-start_loop1)
+   !             CALL fwfftn_batch(wfn_r,bsize,swap,2,ibatch-start_loop1)
+                counter(5) = counter(5) + 1
+                CALL fwfft_4S( dfft, 3, bsize, 0, 0, 0, counter(5), swap, 0, f_inout2=comm_send, f_inout3=comm_recv )
              END IF
           END IF
        END IF
+       IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr)
        IF(methread.EQ.1.OR.nthreads.EQ.1)THEN
           !data related to ibatch-2
 !          IF(ibatch.GE.3.AND.ibatch.LE.fft_numbatches+3)THEN
@@ -3184,14 +3325,18 @@ CONTAINS
                 bsize=fft_residual
              END IF
              IF(bsize.NE.0)THEN
-                IF(rsactive) wfn_r1=>wfn_r(:,ibatch-start_loop2)
+!                IF(rsactive) wfn_r1=>wfn_r(:,ibatch-start_loop2)
                 swap=mod(ibatch-start_loop2,int_mod)+1
-                CALL fwfftn_batch(wfn_g,bsize,swap,3,ibatch-start_loop2)
-                IF (tkpts%tkpnt) THEN
-                   CALL calc_c2_kpnt(c2,c0,wfn_g,f,bsize,i_start3,ikind)
-                ELSE
-                   CALL calc_c2(c2,c0,wfn_g,f,bsize,i_start3,njump,nostat)
-                ENDIF
+!                CALL fwfftn_batch(wfn_g,bsize,swap,3,ibatch-start_loop2)
+!                IF (tkpts%tkpnt) THEN
+!                   CALL calc_c2_kpnt(c2,c0,wfn_g,f,bsize,i_start3,ikind)
+!                ELSE
+!                   CALL calc_c2(c2,c0,wfn_g,f,bsize,i_start3,njump,nostat)
+!                ENDIF
+                counter(6) = counter(6) + 1
+                CALL fwfft_4S( dfft, 4, bsize, bsize, 1, 1, counter(6), swap, first_dim3, &
+                               dfft%aux_array, c0(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2 ), &
+                               c2(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2), comm_recv )
                 i_start3=i_start3+bsize*njump
              END IF
           END IF
@@ -3279,30 +3424,30 @@ CONTAINS
        CALL tihalt(procedureN//'_grps_b',isub3)
     ENDIF
 
-    !free wfn_g,and wfn_r
-#ifdef _USE_SCRATCHLIBRARY
-    CALL free_scratch(il_xf,yf,procedureN//'_yf',ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate yf', &
-         __LINE__,__FILE__)
-    CALL free_scratch(il_xf,xf,procedureN//'_xf',ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate xf', &
-         __LINE__,__FILE__)
-    CALL free_scratch(il_wfnr,wfn_r,'wfn_r',ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
-         __LINE__,__FILE__)
-    CALL free_scratch(il_wfng,wfn_g,'wfn_g',ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_g', &
-         __LINE__,__FILE__)
-#else
-    IF(.NOT.rsactive)THEN
-       DEALLOCATE(wfn_g,STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_g', &
-            __LINE__,__FILE__)
-       DEALLOCATE(wfn_r,STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
-            __LINE__,__FILE__)
-    END IF
-#endif
+!    !free wfn_g,and wfn_r
+!#ifdef _USE_SCRATCHLIBRARY
+!    CALL free_scratch(il_xf,yf,procedureN//'_yf',ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate yf', &
+!         __LINE__,__FILE__)
+!    CALL free_scratch(il_xf,xf,procedureN//'_xf',ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate xf', &
+!         __LINE__,__FILE__)
+!!    CALL free_scratch(il_wfnr,wfn_r,'wfn_r',ierr)
+!!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
+!!         __LINE__,__FILE__)
+!    CALL free_scratch(il_wfng,wfn_g,'wfn_g',ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_g', &
+!         __LINE__,__FILE__)
+!#else
+!    IF(.NOT.rsactive)THEN
+!       DEALLOCATE(wfn_g,STAT=ierr)
+!       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_g', &
+!            __LINE__,__FILE__)
+!       DEALLOCATE(wfn_r,STAT=ierr)
+!       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
+!            __LINE__,__FILE__)
+!    END IF
+!#endif
     !$ DEALLOCATE(locks_fw,STAT=ierr)
     !$ IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate locks_fw', &
     !$      __LINE__,__FILE__)
@@ -3324,6 +3469,10 @@ CONTAINS
     ELSE
        CALL tihalt(procedureN,isub)
     END IF
+
+    dfft%wave = .false.
+    dfft%vpsi = .false.
+
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE vpsi_pw_batchfft

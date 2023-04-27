@@ -655,7 +655,7 @@ CONTAINS
        CALL fftnew_cuda(isign,f,sparse, comm, thread_view=thread_view, &
             & copy_data_to_device=copy_data_to_device, copy_data_to_host=copy_data_to_host )
     ELSE
-       IF( .true. ) THEN
+       IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
           CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
@@ -697,7 +697,7 @@ CONTAINS
        CALL fftnew_cuda(isign,f,sparse, comm, thread_view=thread_view, &
             & copy_data_to_device=copy_data_to_device, copy_data_to_host=copy_data_to_host )
     ELSE
-       IF( .true. ) THEN
+       IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
           CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
@@ -1289,7 +1289,7 @@ CONTAINS
 
           CALL invfft_z_section( dfft, f_inout1, f_inout3(:,work_buffer), f_inout4(:,work_buffer), divparam_2, batch_size, divparam_1, divparam_3, dfft%nsw )
 
-          IF( divparam_2 .eq. dfft%z_loop_size(divparam_3) ) THEN 
+          IF( .true. ) THEN !divparam_2 .eq. dfft%z_loop_size(divparam_3) ) THEN 
              !$  locks_calc_inv( dfft%my_node_rank+1, counter ) = .false.
              !$omp flush( locks_calc_inv )
           END IF
@@ -1330,10 +1330,12 @@ CONTAINS
                                  dfft%map_acinv, dfft%map_acinv_rem, dfft%nr1w, divparam_1, divparam_2, divparam_3 )
   
           IF( dfft%vpsi ) THEN
-             !$  locks_calc_2( dfft%my_node_rank+1, 1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current ) = .false.
+!             !$  locks_calc_2( dfft%my_node_rank+1, 1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current ) = .false.
+             !$  locks_calc_2( dfft%my_node_rank+1, 1+(divparam_2-1)*batch_size+current:divparam_1+(divparam_2-1)*batch_size+current ) = .false.
              !$omp flush( locks_calc_2 )
           ELSE
-             !$  locks_calc_1( dfft%my_node_rank+1, 1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current+(dfft%batch_size_save*dfft%buffer_size_save):divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
+!             !$  locks_calc_1( dfft%my_node_rank+1, 1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current+(dfft%batch_size_save*dfft%buffer_size_save):divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
+             !$  locks_calc_1( dfft%my_node_rank+1, 1+(divparam_2-1)*batch_size+current+(dfft%batch_size_save*dfft%buffer_size_save):divparam_1+(divparam_2-1)*batch_size+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
              !$omp flush( locks_calc_1 )
           END IF
 
@@ -1354,7 +1356,8 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(8) )
   
           !$omp flush( locks_calc_2 )
-          !$  DO WHILE( ANY(locks_calc_2(:,1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current ) ) )
+!          !$  DO WHILE( ANY(locks_calc_2(:,1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current ) ) )
+          !$  DO WHILE( ANY(locks_calc_2(:,1+(divparam_2-1)*batch_size+current:divparam_1+(divparam_2-1)*batch_size+current ) ) )
           !$omp flush( locks_calc_2 )
           !$  END DO
 
@@ -1364,8 +1367,8 @@ CONTAINS
   
           CALL fwfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
                                 dfft%map_pcfw, dfft%nr1w, dfft%nsw, batch_size, divparam_1, divparam_2, divparam_3 )
- 
-          IF( divparam_2 .eq. dfft%y_loop_size(divparam_3) ) THEN !IF yset .eq. y_set_size -> last call
+
+          IF( .true. ) THEN !divparam_2 .eq. dfft%y_loop_size(divparam_3) ) THEN !IF yset .eq. y_set_size -> last call
              !$  locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
              !$omp flush( locks_calc_fw )
           END IF
@@ -1412,7 +1415,7 @@ CONTAINS
   
           dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(15) - time(14) )
  
-          IF( divparam_2 .eq. dfft%z_loop_size(divparam_3) ) THEN 
+          IF( .true. ) THEN !divparam_2 .eq. dfft%z_loop_size(divparam_3) ) THEN 
              !$  IF( dfft%rsactive ) THEN
              !$     locks_calc_2( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:batch_size+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
              !$omp flush( locks_calc_2 )
