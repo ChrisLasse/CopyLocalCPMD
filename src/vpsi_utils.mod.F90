@@ -2928,7 +2928,7 @@ CONTAINS
     END IF
 
     IF(cntl%overlapp_comm_comp.AND.fft_numbatches.GT.1)THEN
-       nthreads=MIN(2,parai%ncpus)
+       nthreads=MIN(2,dfft%nodes_numb)
        nested_threads=(MAX(parai%ncpus-1,1))
 #if !defined(_INTEL_MKL)
        CALL stopgm(procedureN, 'Overlapping communication and computation: Behavior of BLAS &
