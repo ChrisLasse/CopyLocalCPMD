@@ -79,7 +79,6 @@ MODULE rhoofr_utils
   USE fftnew_utils,                    ONLY: setfftn
   USE fftpw_base,                      ONLY: dfft,&
                                              wfn_real
-  USE fftpw_batching,                  ONLY: Build_CD
   USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
                                              Set_Req_Vals,&
                                              MapVals_CleanUp,&
@@ -1871,7 +1870,7 @@ CONTAINS
                 !Maybe a problem with buffer being freed too early... could be all and well tho
    
                 DO ibatch = 1, batch_size
-                   CALL Build_CD( dfft, hpsi(:, ((counter(1,2)-1)*dfft%batch_size_save)+ibatch ), rhoe, 2*(((counter(1,2)-1)*dfft%batch_size_save)+ibatch)-1 )
+                   CALL Build_CD( hpsi(:, ((counter(1,2)-1)*dfft%batch_size_save)+ibatch ), rhoe, 2*(((counter(1,2)-1)*dfft%batch_size_save)+ibatch)-1 )
                 ENDDO
    
                 IF( counter( 1, 2 ) .eq. dfft%max_nbnd ) finished(3) = .true.
@@ -2321,7 +2320,7 @@ CONTAINS
                 CALL invfft_4S( dfft, 4, bsize, bsize, 0, 0, counter(3), swap, first_dim1, &
                                 psi_work( : , start : ending ) ) !(1+((counter(3)-1)*dfft%batch_size_save)):(1+(counter(3)-1)*dfft%batch_size_save)+bsize-1 )  )
                 DO i = 1, bsize
-                   CALL Build_CD( dfft, psi_work(: , ((counter(3)-1)*dfft%batch_size_save)+i ), rhoe(:,1), 2*(((counter(3)-1)*dfft%batch_size_save)+i)-1 )
+                   CALL Build_CD( psi_work(: , ((counter(3)-1)*dfft%batch_size_save)+i ), rhoe(:,1), 2*(((counter(3)-1)*dfft%batch_size_save)+i)-1 )
                 ENDDO
                 ! Compute the charge density from the wave functions
                 ! in real space
@@ -2617,5 +2616,34 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE rhoofr_pw_batchfft
+
+  SUBROUTINE Build_CD( f, rhoe, num ) 
+    IMPLICIT NONE
+  
+    COMPLEX(DP), INTENT(IN) :: f( : )
+    REAL(real_8), INTENT(OUT) :: rhoe( : )
+    INTEGER, INTENT(IN)  :: num
+  
+    REAL(real_8) :: coef3, coef4
+  
+    INTEGER(INT64) :: time(2)
+  
+  !------------------------------------------------------
+  !-----------Build CD Start-----------------------------
+  
+    ! Compute the charge density from the wave functions
+    ! in real space
+    coef3=crge%f(num,1)/parm%omega
+  !  IF (is2.GT.nstate) THEN
+  !     coef4=0.0_real_8
+  !  ELSE
+       coef4=crge%f(num+1,1)/parm%omega
+  !  ENDIF
+    CALL build_density_sum(coef3,coef4,f,rhoe, dfft%my_nr3p * dfft%nr2 * dfft%nr1 )
+  
+  !------------Build CD End------------------------------
+  !------------------------------------------------------
+  
+  END SUBROUTINE Build_CD
 
 END MODULE rhoofr_utils
