@@ -111,6 +111,7 @@ MODULE fftpw_types
     TYPE(MPI_COMM) :: inter_node_comm
     INTEGER :: node_task_size = 0
     INTEGER :: nodes_numb = 1
+    INTEGER :: nthreads = 1
     INTEGER :: window_counter = 0
     LOGICAL :: shared = .false.
     LOGICAL :: single_node = .false.
@@ -157,6 +158,21 @@ MODULE fftpw_types
     INTEGER :: apply_group_size_save
     INTEGER :: apply_set_size_save
 
+    INTEGER, ALLOCATABLE :: thread_z_sticks(:,:)
+    INTEGER, ALLOCATABLE :: thread_z_start(:,:)
+    INTEGER, ALLOCATABLE :: thread_z_end(:,:)
+    INTEGER, ALLOCATABLE :: thread_y_sticks(:,:)
+    INTEGER, ALLOCATABLE :: thread_y_start(:,:)
+    INTEGER, ALLOCATABLE :: thread_y_end(:,:)
+    INTEGER, ALLOCATABLE :: thread_x_sticks(:,:)
+    INTEGER, ALLOCATABLE :: thread_x_start(:,:)
+    INTEGER, ALLOCATABLE :: thread_x_end(:,:)
+    INTEGER, ALLOCATABLE :: thread_ngms(:)
+    INTEGER, ALLOCATABLE :: thread_ngms_start(:)
+    INTEGER, ALLOCATABLE :: thread_ngms_end(:)
+    INTEGER, ALLOCATABLE :: thread_rspace(:)
+    INTEGER, ALLOCATABLE :: thread_rspace_start(:)
+    INTEGER, ALLOCATABLE :: thread_rspace_end(:)
 
     LOGICAL :: x_optimal = .false.
     LOGICAL :: y_z_optimal = .false.

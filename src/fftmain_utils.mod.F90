@@ -63,6 +63,7 @@ MODULE fftmain_utils
   USE fftpw_types,                     ONLY: PW_fft_type_descriptor,&
                                              create_shared_memory_window_1d
   USE fftpw_batching
+  USE fftpw_batchingManual
   USE kinds,                           ONLY: real_8,&
                                              int_8
   USE machine,                         ONLY: m_walltime
@@ -906,52 +907,55 @@ CONTAINS
   
   END SUBROUTINE fwfft_pwbatch
 
-  SUBROUTINE invfft_4S( dfft, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, f_inout1, f_inout2, f_inout3, f_inout4 )
+  SUBROUTINE invfft_4S( dfft, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, priv, f_inout1, f_inout2, f_inout3, f_inout4, ip, jp )
     IMPLICIT NONE
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
     INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer, first_dim
     INTEGER, INTENT(IN) :: divparam_1, divparam_2, divparam_3
+    INTEGER, INTENT(INOUT) :: priv(:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout1(first_dim,*)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout3(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout4(:,:)
+    INTEGER,     OPTIONAL, INTENT(INOUT) :: ip, jp
   
     IF( step .eq. 1 ) THEN
-       CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, &
-                      f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
+       CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, priv, &
+                      f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4, ip=ip, jp=jp )
     ELSE IF( step .eq. 2 ) THEN                                          
-       CALL fftpw_4S( dfft, -1, step, batch_size, 0, 0, 0, counter, work_buffer, 0, f_inout2=f_inout2, f_inout3=f_inout3 )
+       CALL fftpw_4S( dfft, -1, step, batch_size, 0, 0, 0, counter, work_buffer, 0, priv, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 3 ) THEN                                       
-       CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, &
+       CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, priv, &
                       f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     ELSE IF( step .eq. 4 ) THEN                                       
-       CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, &
+       CALL fftpw_4S( dfft, -1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, priv, &
                       f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     END IF
   
   END SUBROUTINE invfft_4S
   
-  SUBROUTINE fwfft_4S( dfft, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, f_inout1, f_inout2, f_inout3, f_inout4 )
+  SUBROUTINE fwfft_4S( dfft, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, priv, f_inout1, f_inout2, f_inout3, f_inout4 )
     IMPLICIT NONE
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
     INTEGER, INTENT(IN) :: step, batch_size, counter, work_buffer, divparam_1, divparam_2, divparam_3, first_dim
+    INTEGER, INTENT(INOUT) :: priv(:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout1(first_dim,*)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout3(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout4(:,:)
   
     IF( step .eq. 1 ) THEN
-       CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, &
+       CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, priv, &
                       f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     ELSE IF( step .eq. 2 ) THEN
-       CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, &
+       CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, priv, &
                       f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     ELSE IF( step .eq. 3 ) THEN
-       CALL fftpw_4S( dfft, 1, step, batch_size, 0, 0, 0, counter, work_buffer, 0, f_inout2=f_inout2, f_inout3=f_inout3 )
+       CALL fftpw_4S( dfft, 1, step, batch_size, 0, 0, 0, counter, work_buffer, 0, priv, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 4 ) THEN
-       CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, &
+       CALL fftpw_4S( dfft, 1, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, priv, &
                       f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     END IF
   
@@ -1182,17 +1186,19 @@ CONTAINS
   
   END SUBROUTINE fftpw_batch
 
-  SUBROUTINE fftpw_4S( dfft, isign, step, batch_size, divparam_1, divparam_2, divparam_3, counter, work_buffer, first_dim, f_inout1, f_inout2, f_inout3, f_inout4 )
+  SUBROUTINE fftpw_4S( dfft, isign, step, batch_size, divparam_1, remswitch, mythread, counter, work_buffer, first_dim, priv, f_inout1, f_inout2, f_inout3, f_inout4, ip, jp )
   USE iso_fortran_env
     IMPLICIT NONE
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
     INTEGER, INTENT(IN) :: isign, step, batch_size, counter, work_buffer, first_dim
-    INTEGER, INTENT(IN) :: divparam_1, divparam_2, divparam_3
+    INTEGER, INTENT(IN) :: divparam_1, remswitch, mythread
+    INTEGER, INTENT(INOUT) :: priv(:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout1(first_dim,*)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout3(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout4(:,:)
+    INTEGER,     OPTIONAL, INTENT(INOUT) :: ip, jp
   
     INTEGER :: ibatch, current, howmany
     LOGICAL :: last
@@ -1207,160 +1213,112 @@ CONTAINS
 
           CALL SYSTEM_CLOCK( time(1) )
   
-          !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
-          !$omp flush( locks_calc_1 )
-          !$  DO WHILE( ANY(locks_calc_1( :, 1+current:dfft%batch_size_save+current ) ) )
-          !$omp flush( locks_calc_1 )
-          !$  END DO
+          !$OMP Barrier 
 
           CALL SYSTEM_CLOCK( time(2) )
           dfft%time_adding( 22 ) = dfft%time_adding( 22 ) + ( time(2) - time(1) )
 
           CALL SYSTEM_CLOCK( time(2) )
-     
-          CALL Prepare_Psi_overlapp( dfft, f_inout2, f_inout1, dfft%ngms, divparam_1, dfft%nsw, last )
+
+          CALL Prepare_Psi_Man( dfft, f_inout2, f_inout1, dfft%ngms, remswitch, mythread, dfft%nsw, last, priv, ip, jp )
 
           CALL SYSTEM_CLOCK( time(3) )
           dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(3) - time(2) )
 
-          CALL invfft_z_section( dfft, f_inout1, f_inout3(:,work_buffer), f_inout4(:,work_buffer), divparam_2, batch_size, divparam_1, divparam_3, dfft%nsw )
+          !$OMP Barrier 
 
-          IF( .true. ) THEN !divparam_2 .eq. dfft%z_loop_size(divparam_3) ) THEN 
-             !$  locks_calc_inv( dfft%my_node_rank+1, counter ) = .false.
-             !$omp flush( locks_calc_inv )
-          END IF
+          CALL invfft_z_section_Man( dfft, f_inout1, f_inout3(:,work_buffer), f_inout4(:,work_buffer), 1, batch_size, remswitch, mythread, dfft%nsw )
   
        ELSE IF( step .eq. 2 ) THEN
   
           CALL SYSTEM_CLOCK( time(4) )
 
-          !$omp flush( locks_calc_inv )
-          !$  DO WHILE( ANY( locks_calc_inv( :, counter ) ) )
-          !$omp flush( locks_calc_inv )
-          !$  END DO
-
           CALL SYSTEM_CLOCK( time(5) )
           dfft%time_adding( 23 ) = dfft%time_adding( 23 ) + ( time(5) - time(4) )
   
-          CALL fft_com( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
-                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
+          CALL fft_com_Man( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
+                            dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
           CALL SYSTEM_CLOCK( time(16) )
           dfft%time_adding( 28 ) = dfft%time_adding( 28 ) + ( time(16) - time(5) )
-  
-          !$  locks_com_inv( counter ) = .false.
-          !$omp flush( locks_com_inv )
   
        ELSE IF( step .eq. 3 ) THEN
   
           CALL SYSTEM_CLOCK( time(6) )
 
-          !$omp flush( locks_com_inv )
-          !$  DO WHILE( locks_com_inv( counter ) .and. .not. dfft%single_node )
-          !$omp flush( locks_com_inv )
-          !$  END DO
+          !$OMP Barrier 
 
           CALL SYSTEM_CLOCK( time(7) )
           dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(7) - time(6) )
 
-          CALL invfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
-                                 dfft%map_acinv, dfft%map_acinv_rem, dfft%nr1w, divparam_1, divparam_2, divparam_3 )
-  
-          IF( dfft%vpsi ) THEN
-!             !$  locks_calc_2( dfft%my_node_rank+1, 1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current ) = .false.
-             !$  locks_calc_2( dfft%my_node_rank+1, 1+(divparam_2-1)*batch_size+current:divparam_1+(divparam_2-1)*batch_size+current ) = .false.
-             !$omp flush( locks_calc_2 )
-          ELSE
-!             !$  locks_calc_1( dfft%my_node_rank+1, 1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current+(dfft%batch_size_save*dfft%buffer_size_save):divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
-             !$  locks_calc_1( dfft%my_node_rank+1, 1+(divparam_2-1)*batch_size+current+(dfft%batch_size_save*dfft%buffer_size_save):divparam_1+(divparam_2-1)*batch_size+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
-             !$omp flush( locks_calc_1 )
-          END IF
+          CALL invfft_y_section_Man( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
+                                     dfft%map_acinv, dfft%map_acinv_rem, dfft%nr1w, divparam_1, 1, remswitch, mythread )
+
+          !$OMP Barrier 
 
        ELSE IF( step .eq. 4 ) THEN
 
-          CALL invfft_x_section( dfft, f_inout1, divparam_1 )
-  
+          !$OMP Barrier 
+
+          CALL invfft_x_section_Man( dfft, f_inout1, remswitch, mythread )
+
+          !$OMP Barrier 
+ 
        END IF
   
     ELSE !! fw fft
   
        IF( step .eq. 1 ) THEN
 
-          CALL fwfft_x_section( dfft, f_inout1, f_inout2, dfft%nr1w, divparam_1 )
-  
+          !$OMP Barrier 
+
+          CALL fwfft_x_section_Man( dfft, f_inout1, f_inout2, dfft%nr1w, remswitch, mythread )
+
        ELSE IF( step .eq. 2 ) THEN
 
           CALL SYSTEM_CLOCK( time(8) )
-  
-          !$omp flush( locks_calc_2 )
-!          !$  DO WHILE( ANY(locks_calc_2(:,1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current:divparam_1+(divparam_2-1)*dfft%y_groups(1,divparam_3)+current ) ) )
-          !$  DO WHILE( ANY(locks_calc_2(:,1+(divparam_2-1)*batch_size+current:divparam_1+(divparam_2-1)*batch_size+current ) ) )
-          !$omp flush( locks_calc_2 )
-          !$  END DO
 
+          !$OMP Barrier 
+  
           CALL SYSTEM_CLOCK( time(9) )
           dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(9) - time(8) )
   
-  
-          CALL fwfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
-                                dfft%map_pcfw, dfft%nr1w, dfft%nsw, batch_size, divparam_1, divparam_2, divparam_3 )
+          CALL fwfft_y_section_Man( dfft, f_inout4, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
+                                    dfft%map_pcfw, dfft%nr1w, dfft%nsw, batch_size, divparam_1, 1, remswitch, mythread )
 
-          IF( .true. ) THEN !divparam_2 .eq. dfft%y_loop_size(divparam_3) ) THEN !IF yset .eq. y_set_size -> last call
-             !$  locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
-             !$omp flush( locks_calc_fw )
-          END IF
-  
        ELSE IF( step .eq. 3 ) THEN
 
           CALL SYSTEM_CLOCK( time(10) )
   
-          !$omp flush( locks_calc_fw )
-          !$  DO WHILE( ANY( locks_calc_fw( :, counter ) ) )
-          !$omp flush( locks_calc_fw )
-          !$  END DO
-
           CALL SYSTEM_CLOCK( time(11) )
           dfft%time_adding( 26 ) = dfft%time_adding( 26 ) + ( time(11) - time(10) )
      
-          CALL fft_com( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
-                        dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
+          CALL fft_com_Man( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
+                            dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
           CALL SYSTEM_CLOCK( time(17) )
           dfft%time_adding( 29 ) = dfft%time_adding( 29 ) + ( time(17) - time(11) )
-  
-          !$  locks_com_fw( counter ) = .false.
-          !$omp flush( locks_com_fw )
   
        ELSE IF( step .eq. 4 ) THEN
   
           CALL SYSTEM_CLOCK( time(12) )
 
-          !$omp flush( locks_com_fw )
-          !$  DO WHILE( locks_com_fw( counter ) .and. .not. dfft%single_node )
-          !$omp flush( locks_com_fw )
-          !$  END DO
+          !$OMP Barrier 
 
           CALL SYSTEM_CLOCK( time(13) )
           dfft%time_adding( 27 ) = dfft%time_adding( 27 ) + ( time(13) - time(12) )
   
-          CALL fwfft_z_section( dfft, f_inout4(:,work_buffer), f_inout1, divparam_2, batch_size, divparam_1, divparam_3, dfft%nsw )
+          CALL fwfft_z_section_Man( dfft, f_inout4(:,work_buffer), f_inout1, 1, batch_size, remswitch, mythread, dfft%nsw )
 
           CALL SYSTEM_CLOCK( time(14) )
 
-          CALL Accumulate_Psi_overlapp( dfft, f_inout1, f_inout3, dfft%ngms, divparam_1, last, dfft%nsw, f_inout2 )
+          !$OMP Barrier 
+
+          CALL Accumulate_Psi_Man( dfft, f_inout1, f_inout3, dfft%ngms, divparam_1, last, dfft%nsw, f_inout2, mythread )
 
           CALL SYSTEM_CLOCK( time(15) )
+          !$OMP Barrier 
   
           dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(15) - time(14) )
  
-          IF( .true. ) THEN !divparam_2 .eq. dfft%z_loop_size(divparam_3) ) THEN 
-             !$  IF( dfft%rsactive ) THEN
-             !$     locks_calc_2( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:batch_size+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
-             !$omp flush( locks_calc_2 )
-             !$  ELSE 
-             !$     locks_calc_1( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:dfft%batch_size_save+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
-             !$omp flush( locks_calc_1 )
-             !$  END IF
-          END IF
-  
        END IF
   
     END IF
