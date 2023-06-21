@@ -1,5 +1,6 @@
 MODULE density_utils
   USE kinds,                           ONLY: real_8
+  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
 
   IMPLICIT NONE
 
@@ -9,6 +10,7 @@ MODULE density_utils
   PUBLIC :: build_density_imag
   PUBLIC :: build_density_sum
   PUBLIC :: build_density_sum_batch
+  PUBLIC :: build_density_sum_Man
 
 CONTAINS
 
@@ -64,6 +66,24 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     RETURN
   END SUBROUTINE build_density_sum
+  ! ==================================================================
+  SUBROUTINE build_density_sum_Man(dfft,alpha_real,alpha_imag,psi,rho,mythread)
+    ! ==--------------------------------------------------------------==
+    TYPE(PW_fft_type_descriptor), INTENT(IN) :: dfft
+    REAL(real_8)                             :: alpha_real, alpha_imag
+    COMPLEX(real_8)                          :: psi(:)
+    REAL(real_8)                             :: rho(:)
+    INTEGER, INTENT(IN)                      :: mythread
+
+    INTEGER                                  :: l
+
+    DO l = dfft%thread_rspace_start( mythread+1 ), dfft%thread_rspace_end( mythread+1 )
+       rho(l)=rho(l)+alpha_real*REAL(psi(l))**2&
+            +alpha_imag*AIMAG(psi(l))**2
+    ENDDO
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END SUBROUTINE build_density_sum_Man
   ! ==================================================================
   SUBROUTINE build_density_sum_batch(alpha_real,alpha_imag,psi,rho,n1,n2,n3,spins,nspin)
     ! ==--------------------------------------------------------------==

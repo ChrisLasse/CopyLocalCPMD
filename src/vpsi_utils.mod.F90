@@ -81,7 +81,8 @@ MODULE vpsi_utils
                                              Set_Req_Vals,&
                                              MapVals_CleanUp,&
                                              Prep_fft_com,&
-                                             GIMME_GROUP_SIZES
+                                             GIMME_GROUP_SIZES,&
+                                             Make_Manual_Maps
   USE fftpw_param,                     ONLY: DP
   USE fftpw_types,                     ONLY: create_shared_memory_window_2d,&
                                              create_shared_locks_2d,&
@@ -2532,8 +2533,8 @@ CONTAINS
 
                       start = 1+(((zloop-1)*dfft%z_groups(1,z_which))+(counter(1,3)-1)*dfft%batch_size_save)*2
                       ending = dfft%z_groups(zloop,z_which)*2+(((zloop-1)*dfft%z_groups(1,z_which))+(counter(1,3)-1)*dfft%batch_size_save)*2
-                      CALL fwfft_4S( dfft, 4, batch_size, dfft%z_groups(zloop,z_which), zloop, z_which, counter( 1, 3 ), work_buffer, first_dim3, &
-                                          dfft%aux_array, psi_R(:,start:ending), hpsi_R(:,start:ending), comm_recv )
+!                      CALL fwfft_4S( dfft, 4, batch_size, dfft%z_groups(zloop,z_which), zloop, z_which, counter( 1, 3 ), work_buffer, first_dim3, &
+!                                          dfft%aux_array, psi_R(:,start:ending), hpsi_R(:,start:ending), comm_recv )
 
                       CALL SYSTEM_CLOCK( auto_time(6) )
                       IF( dfft%z_groups(zloop,z_which) .eq. dfft%z_group_autosize ) THEN
@@ -2573,8 +2574,8 @@ CONTAINS
                  
                       start = 1+(((zloop-1)*dfft%z_groups(1,z_which))+(counter(1,1)-1)*dfft%batch_size_save)*2
                       ending = dfft%z_groups(zloop,z_which)*2+(((zloop-1)*dfft%z_groups(1,z_which))+(counter(1,1)-1)*dfft%batch_size_save)*2
-                      CALL invfft_4S( dfft, 1, batch_size, dfft%z_groups(zloop,z_which), zloop, z_which, counter( 1, 1 ), work_buffer, first_dim3,  &
-                                      dfft%aux_array, psi_R( : , start : ending ), comm_send, comm_recv )
+!                      CALL invfft_4S( dfft, 1, batch_size, dfft%z_groups(zloop,z_which), zloop, z_which, counter( 1, 1 ), work_buffer, first_dim3,  &
+!                                      dfft%aux_array, psi_R( : , start : ending ), comm_send, comm_recv )
 
                       CALL SYSTEM_CLOCK( auto_time(6) )
                       IF( dfft%z_groups(zloop,z_which) .eq. dfft%z_group_autosize ) THEN
@@ -2602,7 +2603,7 @@ CONTAINS
                    counter( 2, 1 ) = counter( 2, 1 ) + 1
    
                    CALL SYSTEM_CLOCK( time(12) )
-                   CALL invfft_4S( dfft, 2, batch_size, 0, 0, 0, counter( 2, 1 ), work_buffer, 0, f_inout2=comm_send, f_inout3=comm_recv )
+!                   CALL invfft_4S( dfft, 2, batch_size, 0, 0, 0, counter( 2, 1 ), work_buffer, 0, f_inout2=comm_send, f_inout3=comm_recv )
                    CALL SYSTEM_CLOCK( time(13) )
                    dfft%time_adding( 16 ) = dfft%time_adding( 16 ) + ( time(13) - time(12) )
   
@@ -2641,8 +2642,8 @@ CONTAINS
                          rs_wave => wfn_real( : , start )
                       ELSE
                          rs_wave => batch_aux(:,1)
-                         CALL invfft_4S( dfft, 3, batch_size, dfft%y_groups(yloop,y_which), yloop, y_which, counter( 1, 2 ), work_buffer, first_dim1, &
-                                         rs_wave, comm_recv, dfft%aux_array( : , 1 : dfft%y_groups(yloop,y_which) ) )                        
+!                         CALL invfft_4S( dfft, 3, batch_size, dfft%y_groups(yloop,y_which), yloop, y_which, counter( 1, 2 ), work_buffer, first_dim1, &
+!                                         rs_wave, comm_recv, dfft%aux_array( : , 1 : dfft%y_groups(yloop,y_which) ) )                        
                       END IF
 
                       IF( batch_size .ne. dfft%batch_size_save ) THEN
@@ -2662,18 +2663,18 @@ CONTAINS
                          IF( .not. dfft%rsactive ) THEN
                             start = 1 + (xloop-1) * dfft%x_groups( 1, x_which )
                             rs_wave => batch_aux( : , start )
-                            CALL invfft_4S( dfft, 4, batch_size, dfft%x_groups(xloop,x_which), 0, 0, counter( 1, 2 ), work_buffer, first_dim1, rs_wave )
+!                            CALL invfft_4S( dfft, 4, batch_size, dfft%x_groups(xloop,x_which), 0, 0, counter( 1, 2 ), work_buffer, first_dim1, rs_wave )
                          ELSE
                             start = 1 + (counter(1,2)-1) * dfft%batch_size_save + (yloop-1) * dfft%y_groups(1,y_which) + (xloop-1) * dfft%x_groups( 1, x_which )
                             rs_wave => wfn_real( : , start )
                          END IF
 
-                         CALL Apply_V_4S( rs_wave, v, dfft%x_groups(xloop,x_which) )
+                         CALL Apply_V_4S( rs_wave, v, dfft%x_groups(xloop,x_which), 0 )
 
                          start = 1 + (xloop-1) * dfft%x_groups( 1, x_which )
                          ending = dfft%x_groups(xloop,x_which) + (xloop-1) * dfft%x_groups( 1, x_which )
-                         CALL fwfft_4S( dfft, 1, batch_size, dfft%x_groups(xloop,x_which), 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
-                                        rs_wave, dfft%aux_array( : , start : ending ) )
+!                         CALL fwfft_4S( dfft, 1, batch_size, dfft%x_groups(xloop,x_which), 0, 0, counter( 1, 2 ), work_buffer, first_dim1, &
+!                                        rs_wave, dfft%aux_array( : , start : ending ) )
 
                          CALL SYSTEM_CLOCK( auto_time(3) )
                          IF( dfft%x_groups(xloop,x_which) .eq. dfft%x_group_autosize ) THEN
@@ -2683,8 +2684,8 @@ CONTAINS
 
                       ENDDO   
 
-                      CALL fwfft_4S( dfft, 2, batch_size, dfft%y_groups(yloop,y_which), yloop, y_which, counter( 1, 2 ), work_buffer, first_dim2, &
-                                     dfft%aux_array( : , 1 ), comm_send, comm_recv )
+!                      CALL fwfft_4S( dfft, 2, batch_size, dfft%y_groups(yloop,y_which), yloop, y_which, counter( 1, 2 ), work_buffer, first_dim2, &
+!                                     dfft%aux_array( : , 1 ), comm_send, comm_recv )
 
                       CALL SYSTEM_CLOCK( auto_time(4) )
                       IF( dfft%y_groups(yloop,y_which) .eq. dfft%y_group_autosize ) THEN
@@ -2712,7 +2713,7 @@ CONTAINS
                    counter( 2, 2 ) = counter( 2, 2 ) + 1
    
                    CALL SYSTEM_CLOCK( time(18) )
-                   CALL fwfft_4S( dfft, 3, batch_size, 0, 0, 0, counter( 2, 2 ), work_buffer, 0, f_inout2=comm_send, f_inout3=comm_recv )
+!                   CALL fwfft_4S( dfft, 3, batch_size, 0, 0, 0, counter( 2, 2 ), work_buffer, 0, f_inout2=comm_send, f_inout3=comm_recv )
                    CALL SYSTEM_CLOCK( time(19) )
                    dfft%time_adding( 17 ) = dfft%time_adding( 17 ) + ( time(19) - time(18) )
    
@@ -2755,12 +2756,12 @@ CONTAINS
 
   END SUBROUTINE do_the_vpsi_thing
 
-  SUBROUTINE Apply_V_4S( f, v, x_group_size ) 
+  SUBROUTINE Apply_V_4S( f, v, x_group_size, mythread )
     IMPLICIT NONE
   
     COMPLEX(DP), INTENT(INOUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size
     REAL(DP), INTENT(IN) :: v( * )
-    INTEGER, INTENT(IN)  :: x_group_size
+    INTEGER, INTENT(IN)  :: x_group_size, mythread
   
     INTEGER :: j, igroup
   
@@ -2770,15 +2771,11 @@ CONTAINS
   !------------------------------------------------------
   !-----------Apply V Start------------------------------
   
-    !$omp parallel private( j, igroup )
     DO igroup = 1, x_group_size
-       !$omp do
-       DO j = 1, dfft%my_nr3p * dfft%nr2 * dfft%nr1
+       DO j = dfft%thread_rspace_start( mythread+1 ), dfft%thread_rspace_end( mythread+1 )
           f( j, igroup )= - f( j, igroup ) * v( j )
        END DO
-       !$omp end do nowait
     END DO
-    !$omp end parallel
   
   !------------Apply V End-------------------------------
   !------------------------------------------------------
@@ -2846,10 +2843,14 @@ CONTAINS
     INTEGER :: buffer_size
     INTEGER :: sendsize_rem
     INTEGER :: counter(6)
+    INTEGER :: remswitch, mythread
     COMPLEX(DP), ALLOCATABLE, SAVE, TARGET :: batch_aux(:,:)
     COMPLEX(DP), CONTIGUOUS, SAVE, POINTER :: rs_wave(:)
     INTEGER :: ngms, start
     INTEGER, SAVE :: first_dim1, first_dim2, first_dim3
+
+    INTEGER :: priv(10)
+    INTEGER :: ip, jp
 
     ! ==--------------------------------------------------------------==
 
@@ -3018,9 +3019,8 @@ CONTAINS
 !    ENDIF
 !    CALL reshape_inplace(vpot, (/fpar%kr1*fpar%kr2s,fpar%kr3s,ispin/), vpotdg)
 
-    methread=0
 
-
+    dfft%nthreads = parai%ncpus
 
     nbnd_source = nstate
     ngms = dfft%ngw
@@ -3088,6 +3088,8 @@ CONTAINS
        dfft%num_buff = buffer_size
        IF( ALLOCATED( batch_aux ) )        DEALLOCATE( batch_aux )
        ALLOCATE( batch_aux( dfft%my_nr3p * dfft%nr2 * dfft%nr1, batch_size ) )
+
+       CALL Make_Manual_Maps( dfft, batch_size, dfft%rem_size ) 
   
     END IF
 
@@ -3114,37 +3116,34 @@ CONTAINS
 
     CALL MPI_BARRIER(dfft%comm, ierr)
 
+!    write(6,*) "WITHIN VPSI"
 
+    mythread=0
 !    IF(.NOT.rsactive) wfn_r1=>wfn_r(:,1)
     IF(.NOT.rsactive) rs_wave=>batch_aux(:,1)
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
     CALL SYSTEM_CLOCK( time(1) )
     !$ locks_inv = .TRUE.
     !$ locks_fw = .TRUE.
-    !$OMP parallel IF(nthreads.eq.2) num_threads(nthreads) &
-    !$omp private(methread,ibatch,bsize,count,ist,is1,is2,ir,offset_state,swap) &
+    !$OMP parallel num_threads( dfft%nthreads ) &
+    !$omp private(mythread,ibatch,bsize,count,ist,is1,is2,ir,offset_state,swap,remswitch,counter) &
     !$omp proc_bind(close)
-    !$ methread = omp_get_thread_num()
-    !$ IF(methread.EQ.1)THEN
-    !$    CALL omp_set_max_active_levels(2)
-    !$    CALL omp_set_num_threads(nested_threads)
-#ifdef _INTEL_MKL
-    !$    CALL mkl_set_dynamic(0)
-    !$    ierr = mkl_set_num_threads_local(nested_threads)
-#endif
-    !$ END IF
-    !$OMP barrier
+    !$ mythread = omp_get_thread_num()
+
+    counter = 0
     
     !Loop over batches
     DO ibatch=1,fft_numbatches+3
        IF(.NOT.rsactive)THEN
-          IF(methread.EQ.1.OR.nthreads.EQ.1)THEN
+          IF(mythread.GE.1.OR.nthreads.EQ.1)THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              IF(ibatch.LE.fft_numbatches+1)THEN
                 IF(ibatch.LE.fft_numbatches)THEN
                    bsize=fft_batchsize
+                   remswitch = 1
                 ELSE
                    bsize=fft_residual
+                   remswitch = 2
                 END IF
                 IF(bsize.NE.0)THEN
                    ! Loop over the electronic states of this batch
@@ -3167,13 +3166,13 @@ CONTAINS
 !                   CALL invfftn_batch(wfn_g,bsize,swap,1,ibatch)
 
                    counter(1) = counter(1) + 1
-                   CALL invfft_4S( dfft, 1, bsize, bsize, 1, 1, counter(1), swap, first_dim3, dfft%aux_array, &
-                                   c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), comm_send, comm_recv ) 
+                   CALL invfft_4S( dfft, 1, bsize, bsize, remswitch, mythread, counter(1), swap, first_dim3, priv, dfft%aux_array, &
+                                   c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), comm_send, comm_recv, ip, jp ) 
                    i_start1=i_start1+bsize*njump
                 END IF
              END IF
           END IF
-          IF(.not. dfft%single_node .and. ( methread.EQ.0.OR.nthreads.EQ.1 ) .and. dfft%my_node_rank .eq. 0 )THEN
+          IF(.not. dfft%single_node .and. ( mythread.EQ.0.OR.nthreads.EQ.1 ) .and. dfft%my_node_rank .eq. 0 )THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              !communication phase
              IF(ibatch.LE.fft_numbatches+1)THEN
@@ -3188,12 +3187,12 @@ CONTAINS
                    swap=mod(ibatch,int_mod)+1
 !                   CALL invfftn_batch(wfn_r,bsize,swap,2,ibatch)
                    counter(2) = counter(2) + 1
-                   CALL invfft_4S( dfft, 2, bsize, 0, 0, 0, counter(2), swap, 0, f_inout2=comm_send, f_inout3=comm_recv )
+                   CALL invfft_4S( dfft, 2, bsize, 0, 0, mythread, counter(2), swap, 0, priv, f_inout2=comm_send, f_inout3=comm_recv )
                 END IF
              END IF
           END IF
           IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr)
-          IF (methread.EQ.1.OR.nthreads.EQ.1)THEN
+          IF (mythread.GE.1.OR.nthreads.EQ.1)THEN
              !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
              !data related to ibatch-1!
 !             IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
@@ -3201,19 +3200,21 @@ CONTAINS
                 IF (ibatch-start_loop1.LE.fft_numbatches)THEN
                    bsize=fft_batchsize
                    dfft%rem = .false.
+                   remswitch = 1
                 ELSE
                    bsize=fft_residual
                    dfft%rem = .true.
+                   remswitch = 2
                 END IF
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop1,int_mod)+1
 !                   CALL invfftn_batch(wfn_r1,bsize,swap,3,ibatch-start_loop1)
                    counter(3) = counter(3) + 1
-                   CALL invfft_4S( dfft, 3, bsize, bsize, 1, 1, counter(3), swap, first_dim1, &
+                   CALL invfft_4S( dfft, 3, bsize, bsize, remswitch, mythread, counter(3), swap, first_dim1, priv, &
 !                                   wfn_r1, comm_recv, dfft%aux_array( : , 1 : 1 ) )
                                    rs_wave, comm_recv, dfft%aux_array( : , 1 : 1 ) )
 !                   CALL invfft_4S( dfft, 4, bsize, bsize, 0, 0, ibatch, swap, first_dim1, wfn_r1 )
-                   CALL invfft_4S( dfft, 4, bsize, bsize, 0, 0, counter(3), swap, first_dim1, rs_wave )
+                   CALL invfft_4S( dfft, 4, bsize, bsize, remswitch, mythread, counter(3), swap, first_dim1, priv, rs_wave )
                 END IF
              END IF
           END IF
@@ -3222,21 +3223,24 @@ CONTAINS
        ! ==------------------------------------------------------------==
        ! == Apply the potential (V), which acts in real space.         ==
 
-       IF(methread.EQ.1.OR.nthreads.EQ.1)THEN
+       IF(mythread.GE.1.OR.nthreads.EQ.1)THEN
 !          IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
                 bsize=fft_batchsize
+                remswitch = 1
              ELSE
                 bsize=fft_residual
+                remswitch = 2
              END IF
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop1,int_mod)+1
                 start = 1+(ibatch-1)*batch_size-start_loop1
 !                IF(rsactive) wfn_r1=>wfn_r(:,start)
+                !$OMP Barrier
                 IF(rsactive) rs_wave=>wfn_real(:,start)
 !                CALL Apply_V_4S( wfn_r1, vpot(:,1), bsize )
-                CALL Apply_V_4S( rs_wave, vpot(:,1), bsize )
+                CALL Apply_V_4S( rs_wave, vpot(:,1), bsize, mythread )
                 
 !                lspin=1
 !                offset_state=i_start2
@@ -3285,44 +3289,51 @@ CONTAINS
              ! == Back transform to reciprocal space the product V.PSI       ==
              ! ==------------------------------------------------------------==
 !                CALL fwfftn_batch(wfn_r1,bsize,swap,1,ibatch-start_loop1)
+                 !$OMP Barrier
                  counter(4) = counter(4) + 1
-                 CALL fwfft_4S( dfft, 1, bsize, bsize, 0, 0, counter(4), swap, first_dim1, &
+                 CALL fwfft_4S( dfft, 1, bsize, bsize, remswitch, mythread, counter(4), swap, first_dim1, priv, &
 !                                wfn_r1, dfft%aux_array( : , 1 : 1 ) )
                                 rs_wave, dfft%aux_array( : , 1 : 1 ) )
-                 CALL fwfft_4S( dfft, 2, bsize, bsize, 1, 1, counter(4), swap, first_dim2, &
-                                dfft%aux_array( : , 1 ), comm_send, comm_recv )
+                 !$OMP Barrier
+                 CALL fwfft_4S( dfft, 2, bsize, bsize, remswitch, mythread, counter(4), swap, first_dim2, priv, &
+                                f_inout4=dfft%aux_array, f_inout2=comm_send, f_inout3=comm_recv )
                 i_start2=i_start2+bsize*njump
              END IF
           END IF
        END IF
-       IF(.not. dfft%single_node .and. ( methread.EQ.0.OR.nthreads.EQ.1 ) .and. dfft%my_node_rank .eq. 0 )THEN
+       IF(.not. dfft%single_node .and. ( mythread.EQ.0.OR.nthreads.EQ.1 ) .and. dfft%my_node_rank .eq. 0 )THEN
 !       IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
                 bsize=fft_batchsize
                 dfft%sendsize = dfft%sendsize_save
+                remswitch = 1
              ELSE
                 bsize=fft_residual
                 dfft%sendsize = sendsize_rem 
+                remswitch = 2
              END IF
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop1,int_mod)+1
    !             CALL fwfftn_batch(wfn_r,bsize,swap,2,ibatch-start_loop1)
                 counter(5) = counter(5) + 1
-                CALL fwfft_4S( dfft, 3, bsize, 0, 0, 0, counter(5), swap, 0, f_inout2=comm_send, f_inout3=comm_recv )
+                !$OMP Barrier
+                CALL fwfft_4S( dfft, 3, bsize, 0, remswitch, mythread, counter(5), swap, 0, priv, f_inout2=comm_send, f_inout3=comm_recv )
              END IF
           END IF
        END IF
        IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr)
-       IF(methread.EQ.1.OR.nthreads.EQ.1)THEN
+       IF(mythread.GE.1.OR.nthreads.EQ.1)THEN
           !data related to ibatch-2
 !          IF(ibatch.GE.3.AND.ibatch.LE.fft_numbatches+3)THEN
           IF(ibatch.GT.start_loop2.AND.ibatch.LE.end_loop2)THEN
 !             IF(ibatch-2.LE.fft_numbatches)THEN
              IF(ibatch-start_loop2.LE.fft_numbatches)THEN
                 bsize=fft_batchsize
+                remswitch = 1
              ELSE
                 bsize=fft_residual
+                remswitch = 2
              END IF
              IF(bsize.NE.0)THEN
 !                IF(rsactive) wfn_r1=>wfn_r(:,ibatch-start_loop2)
@@ -3333,8 +3344,9 @@ CONTAINS
 !                ELSE
 !                   CALL calc_c2(c2,c0,wfn_g,f,bsize,i_start3,njump,nostat)
 !                ENDIF
+                !$OMP Barrier
                 counter(6) = counter(6) + 1
-                CALL fwfft_4S( dfft, 4, bsize, bsize, 1, 1, counter(6), swap, first_dim3, &
+                CALL fwfft_4S( dfft, 4, bsize, bsize, remswitch, mythread, counter(6), swap, first_dim3, priv, &
                                dfft%aux_array, c0(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2 ), &
                                c2(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2), comm_recv )
                 i_start3=i_start3+bsize*njump
@@ -3342,17 +3354,6 @@ CONTAINS
           END IF
        END IF
     END DO
-
-    !$ IF (methread.EQ.1) THEN
-    !$    CALL omp_set_max_active_levels(1)
-    !$    CALL omp_set_num_threads(parai%ncpus)
-#ifdef _INTEL_MKL
-    !$    CALL mkl_set_dynamic(1)
-    !$    ierr = mkl_set_num_threads_local(parai%ncpus)
-#endif
-    !$    CALL dfftw_plan_with_nthreads(parai%ncpus)
-    !$ END IF
-    !$OMP barrier
 
     !$omp end parallel
 

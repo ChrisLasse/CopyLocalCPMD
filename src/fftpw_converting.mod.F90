@@ -57,6 +57,7 @@ CONTAINS
 
     dfft%nproc = parai%nproc
     dfft%mype  = parai%me
+    dfft%nthreads = parai%ncpus
 
     dfft%comm            = MPI_COMM_NULL
     dfft%node_comm       = MPI_COMM_NULL
