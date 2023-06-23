@@ -2155,6 +2155,10 @@ CONTAINS
           write(6,*) "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
        END IF
 
+    ELSE
+
+       STOP
+
     END IF
 
     dfft%wave = .true.
