@@ -463,7 +463,9 @@ SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
   !$omp parallel private( iproc3, i, it, mc, m1, m2, i1, k )
   DO iproc3 = 1, dfft%nproc3
      !$omp do
+!     DO i = 1, MAXVAL( ns ) !( iproc3 )
      DO i = 1, ns( iproc3 )
+!     DO i = 1, ns( dfft%my_node_rank+1 )
         it = ( iproc3 - 1 ) * dfft%small_chunks + dfft%nr3px * (i-1)
         mc = dfft%ismap( i + dfft%iss( iproc3 ) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
         m1 = mod (mc-1,dfft%nr1) + 1
@@ -472,6 +474,7 @@ SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
         DO k = 1, dfft%my_nr3p
            dfft%map_pcfw( k + it ) = i1
            i1 = i1 + dfft%nr2 * dfft%my_nr1p
+!           write(6,*) dfft%my_node_rank, k+it, i1
         ENDDO
      ENDDO
      !$omp end do
@@ -818,7 +821,7 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: batch_size, rem_size
 
-  INTEGER :: i
+  INTEGER :: i, j
 
 ! z things
 
@@ -826,41 +829,45 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
   IF( ALLOCATED( dfft%thread_z_start ) ) DEALLOCATE( dfft%thread_z_start )
   IF( ALLOCATED( dfft%thread_z_end ) ) DEALLOCATE( dfft%thread_z_end )
   
-  ALLOCATE( dfft%thread_z_sticks( dfft%nthreads, 2 ) )
-  ALLOCATE( dfft%thread_z_start( dfft%nthreads, 2 ) )
-  ALLOCATE( dfft%thread_z_end( dfft%nthreads, 2 ) )
+  ALLOCATE( dfft%thread_z_sticks( dfft%nthreads, 2, dfft%node_task_size ) )
+  ALLOCATE( dfft%thread_z_start( dfft%nthreads, 2, dfft%node_task_size ) )
+  ALLOCATE( dfft%thread_z_end( dfft%nthreads, 2, dfft%node_task_size ) )
 
-  DO i = 1, dfft%nthreads
-     dfft%thread_z_sticks( i, 1 ) = ( dfft%nsw( dfft%mype+1 ) * batch_size ) / dfft%nthreads
-  ENDDO
-  DO i = 1, mod( dfft%nsw( dfft%mype+1 ) * batch_size, dfft%nthreads )
-     dfft%thread_z_sticks( i, 1 ) = dfft%thread_z_sticks( i, 1 ) + 1
-  ENDDO
+  DO j = 1, dfft%node_task_size
 
-  dfft%thread_z_start( 1, 1 ) = 1
-  DO i = 2, dfft%nthreads
-     dfft%thread_z_start( i, 1 ) = dfft%thread_z_start( i-1, 1 ) + dfft%thread_z_sticks( i-1, 1 )
-  ENDDO
-  DO i = 1, dfft%nthreads
-     dfft%thread_z_end( i, 1 ) = dfft%thread_z_start( i, 1 ) + dfft%thread_z_sticks( i, 1 ) - 1
-  ENDDO
-
-  IF( rem_size .ne. 0 ) THEN
      DO i = 1, dfft%nthreads
-        dfft%thread_z_sticks( i, 2 ) = ( dfft%nsw( dfft%mype+1 ) * rem_size ) / dfft%nthreads
+        dfft%thread_z_sticks( i, 1, j ) = ( dfft%nsw( j ) * batch_size ) / dfft%nthreads
      ENDDO
-     DO i = 1, mod( dfft%nsw( dfft%mype+1 ) * rem_size, dfft%nthreads )
-        dfft%thread_z_sticks( i, 2 ) = dfft%thread_z_sticks( i, 2 ) + 1
+     DO i = 1, mod( dfft%nsw( j ) * batch_size, dfft%nthreads )
+        dfft%thread_z_sticks( i, 1, j ) = dfft%thread_z_sticks( i, 1, j ) + 1
      ENDDO
    
-     dfft%thread_z_start( 1, 2 ) = 1
+     dfft%thread_z_start( 1, 1, j ) = 1
      DO i = 2, dfft%nthreads
-        dfft%thread_z_start( i, 2 ) = dfft%thread_z_start( i-1, 2 ) + dfft%thread_z_sticks( i-1, 2 )
+        dfft%thread_z_start( i, 1, j ) = dfft%thread_z_start( i-1, 1, j ) + dfft%thread_z_sticks( i-1, 1, j )
      ENDDO
      DO i = 1, dfft%nthreads
-        dfft%thread_z_end( i, 2 ) = dfft%thread_z_start( i, 2 ) + dfft%thread_z_sticks( i, 2 ) - 1
+        dfft%thread_z_end( i, 1, j ) = dfft%thread_z_start( i, 1, j ) + dfft%thread_z_sticks( i, 1, j ) - 1
      ENDDO
-  END IF
+   
+     IF( rem_size .ne. 0 ) THEN
+        DO i = 1, dfft%nthreads
+           dfft%thread_z_sticks( i, 2, j ) = ( dfft%nsw( j ) * rem_size ) / dfft%nthreads
+        ENDDO
+        DO i = 1, mod( dfft%nsw( j ) * rem_size, dfft%nthreads )
+           dfft%thread_z_sticks( i, 2, j ) = dfft%thread_z_sticks( i, 2, j ) + 1
+        ENDDO
+      
+        dfft%thread_z_start( 1, 2, j ) = 1
+        DO i = 2, dfft%nthreads
+           dfft%thread_z_start( i, 2, j ) = dfft%thread_z_start( i-1, 2, j ) + dfft%thread_z_sticks( i-1, 2, j )
+        ENDDO
+        DO i = 1, dfft%nthreads
+           dfft%thread_z_end( i, 2, j ) = dfft%thread_z_start( i, 2, j ) + dfft%thread_z_sticks( i, 2, j ) - 1
+        ENDDO
+     END IF
+
+  ENDDO
 
 ! y things
 

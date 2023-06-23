@@ -1212,7 +1212,7 @@ CONTAINS
        IF( step .eq. 1 ) THEN
 
           CALL SYSTEM_CLOCK( time(1) )
-  
+
           !$OMP Barrier 
 
           CALL SYSTEM_CLOCK( time(2) )
@@ -1224,6 +1224,16 @@ CONTAINS
 
           CALL SYSTEM_CLOCK( time(3) )
           dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(3) - time(2) )
+  
+          IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
+
+             !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
+             !$omp flush( locks_calc_1 )
+             !$  DO WHILE( ANY(locks_calc_1( :, 1+current:dfft%batch_size_save+current ) ) )
+             !$omp flush( locks_calc_1 )
+             !$  END DO
+
+          END IF
 
           !$OMP Barrier 
 
@@ -1262,6 +1272,18 @@ CONTAINS
           CALL invfft_x_section_Man( dfft, f_inout1, remswitch, mythread )
 
           !$OMP Barrier 
+
+          IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
+             IF( dfft%vpsi ) THEN
+                !$  locks_calc_2( dfft%my_node_rank+1, 1+current:dfft%batch_size_save+current ) = .false.
+                !$omp flush( locks_calc_2 )
+             ELSE
+                !$  locks_calc_1( dfft%my_node_rank+1, 1+current+(dfft%batch_size_save*dfft%buffer_size_save):dfft%batch_size_save+current+(dfft%batch_size_save*dfft%buffer_size_save) ) = .false.
+                !$omp flush( locks_calc_1 )
+             END IF
+          END IF
+
+          !$OMP Barrier 
  
        END IF
   
@@ -1271,11 +1293,20 @@ CONTAINS
 
           !$OMP Barrier 
 
-          CALL fwfft_x_section_Man( dfft, f_inout1, f_inout2, dfft%nr1w, remswitch, mythread )
+          CALL fwfft_x_section_Man( dfft, f_inout2, f_inout3, dfft%nr1w, remswitch, mythread )
 
        ELSE IF( step .eq. 2 ) THEN
 
           CALL SYSTEM_CLOCK( time(8) )
+
+          IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
+
+             !$omp flush( locks_calc_2 )
+             !$  DO WHILE( ANY(locks_calc_2(:,1+current:dfft%batch_size_save+current ) ) )
+             !$omp flush( locks_calc_2 )
+             !$  END DO
+
+          END IF
 
           !$OMP Barrier 
   
@@ -1312,9 +1343,22 @@ CONTAINS
 
           !$OMP Barrier 
 
+          IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
+             !$  IF( dfft%rsactive ) THEN
+             !$     locks_calc_2( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:batch_size+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
+             !$omp flush( locks_calc_2 )
+             !$  ELSE 
+             !$     locks_calc_1( dfft%my_node_rank+1, 1+(counter+dfft%num_buff-1)*dfft%batch_size_save:dfft%batch_size_save+(counter+dfft%num_buff-1)*dfft%batch_size_save ) = .false.
+             !$omp flush( locks_calc_1 )
+             !$  END IF
+          END IF
+
+          !$OMP Barrier 
+
           CALL Accumulate_Psi_Man( dfft, f_inout1, f_inout3, dfft%ngms, divparam_1, last, dfft%nsw, f_inout2, mythread )
 
           CALL SYSTEM_CLOCK( time(15) )
+
           !$OMP Barrier 
   
           dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(15) - time(14) )

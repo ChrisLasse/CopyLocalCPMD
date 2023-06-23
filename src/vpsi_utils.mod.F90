@@ -2818,7 +2818,7 @@ CONTAINS
     INTEGER :: counter(6)
     INTEGER :: remswitch, mythread
     COMPLEX(DP), ALLOCATABLE, SAVE, TARGET :: batch_aux(:,:)
-    COMPLEX(DP), CONTIGUOUS, SAVE, POINTER :: rs_wave(:)
+    COMPLEX(DP), CONTIGUOUS, SAVE, POINTER :: rs_wave(:,:)
     INTEGER :: ngms, start
     INTEGER, SAVE :: first_dim1, first_dim2, first_dim3
 
@@ -3085,6 +3085,7 @@ CONTAINS
           locks_calc_2( : , i ) = .false.
        ENDDO
     END IF
+!    locks_calc_1 = .false.
 
 
     CALL MPI_BARRIER(dfft%comm, ierr)
@@ -3093,7 +3094,7 @@ CONTAINS
 
     mythread=0
 !    IF(.NOT.rsactive) wfn_r1=>wfn_r(:,1)
-    IF(.NOT.rsactive) rs_wave=>batch_aux(:,1)
+    IF(.NOT.rsactive) rs_wave=>batch_aux(:,1:1)
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
     CALL SYSTEM_CLOCK( time(1) )
     !$ locks_inv = .TRUE.
@@ -3185,9 +3186,9 @@ CONTAINS
                    counter(3) = counter(3) + 1
                    CALL invfft_4S( dfft, 3, bsize, bsize, remswitch, mythread, counter(3), swap, first_dim1, priv, &
 !                                   wfn_r1, comm_recv, dfft%aux_array( : , 1 : 1 ) )
-                                   rs_wave, comm_recv, dfft%aux_array( : , 1 : 1 ) )
+                                   rs_wave(:,1:1), comm_recv, dfft%aux_array( : , 1 : 1 ) )
 !                   CALL invfft_4S( dfft, 4, bsize, bsize, 0, 0, ibatch, swap, first_dim1, wfn_r1 )
-                   CALL invfft_4S( dfft, 4, bsize, bsize, remswitch, mythread, counter(3), swap, first_dim1, priv, rs_wave )
+                   CALL invfft_4S( dfft, 4, bsize, bsize, remswitch, mythread, counter(3), swap, first_dim1, priv, rs_wave(:,1:1) )
                 END IF
              END IF
           END IF
@@ -3211,9 +3212,9 @@ CONTAINS
                 start = 1+(ibatch-1)*batch_size-start_loop1
 !                IF(rsactive) wfn_r1=>wfn_r(:,start)
                 !$OMP Barrier
-                IF(rsactive) rs_wave=>wfn_real(:,start)
+                IF(rsactive) rs_wave=>wfn_real(:,start:start)
 !                CALL Apply_V_4S( wfn_r1, vpot(:,1), bsize )
-                CALL Apply_V_4S( rs_wave, vpot(:,1), bsize, mythread )
+                CALL Apply_V_4S( rs_wave(:,1:1), vpot(:,1), bsize, mythread )
                 
 !                lspin=1
 !                offset_state=i_start2
@@ -3266,7 +3267,8 @@ CONTAINS
                  counter(4) = counter(4) + 1
                  CALL fwfft_4S( dfft, 1, bsize, bsize, remswitch, mythread, counter(4), swap, first_dim1, priv, &
 !                                wfn_r1, dfft%aux_array( : , 1 : 1 ) )
-                                rs_wave, dfft%aux_array( : , 1 : 1 ) )
+                                f_inout2=rs_wave &
+                                , f_inout3=dfft%aux_array( : , 1 : 1 ) )
                  !$OMP Barrier
                  CALL fwfft_4S( dfft, 2, bsize, bsize, remswitch, mythread, counter(4), swap, first_dim2, priv, &
                                 f_inout4=dfft%aux_array, f_inout2=comm_send, f_inout3=comm_recv )
