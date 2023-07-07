@@ -74,6 +74,7 @@ MODULE rhoofr_utils
                                              locks_com_fw,&
                                              locks_calc_1,&
                                              locks_calc_2,&
+                                             locks_sing_1,&
                                              invfft_pwbatch,&
                                              fwfft_pwbatch,&
                                              invfft_4S
@@ -2201,7 +2202,9 @@ CONTAINS
        
        CALL create_shared_locks_2d( locks_calc_1  , 22, dfft, dfft%node_task_size, nbnd_source + batch_size + (vpsi_mod-1)*batch_size ) !(buffer_size-1)*batch_size )
        CALL create_shared_locks_2d( locks_calc_2  , 23, dfft, dfft%node_task_size, nbnd_source + batch_size + (vpsi_mod-1)*batch_size ) !(buffer_size-1)*batch_size )
-  
+ 
+       CALL create_shared_locks_2d( locks_sing_1  , 24, dfft, dfft%node_task_size, fft_numbatches+3 )
+ 
        dfft%num_buff = buffer_size
 
        CALL Make_Manual_Maps( dfft, batch_size, dfft%rem_size ) 
@@ -2218,6 +2221,7 @@ CONTAINS
     DO i = 1, batch_size*buffer_size
        locks_calc_1( : , i ) = .false.
     ENDDO
+    locks_sing_1   = .true.
 
     write(6,*) batch_size, dfft%rem_size
 
@@ -2303,7 +2307,15 @@ CONTAINS
              END IF
           END IF
        END IF
-       IF( dfft%single_node ) CALL MPI_BARRIER(dfft%comm, ierr)
+       IF( dfft%single_node ) THEN
+          counter(2) = counter(2) + 1
+          !$OMP Barrier 
+          IF( mythread .eq. 0 ) locks_sing_1( dfft%my_node_rank+1, counter(2) ) = .false.
+          !$omp flush( locks_sing_1 )
+          !$  DO WHILE( ANY(locks_sing_1( :, counter(2) ) ) )
+          !$omp flush( locks_sing_1 )
+          !$  END DO
+       END IF
        IF (mythread.GE.1.OR.nthreads.EQ.1)THEN
           !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
           IF(ibatch.GT.start_loop.AND.ibatch.LE.end_loop)THEN
