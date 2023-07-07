@@ -250,7 +250,7 @@ CONTAINS
 !
     nhray=img
     ! SCATTER ARRAY FOR FFT ALONG X
-    ALLOCATE(ms(nhrm,2),STAT=ierr)
+    ALLOCATE(ms(nhrm+1,2),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
     CALL zeroing(ms)!,2*nhrm)

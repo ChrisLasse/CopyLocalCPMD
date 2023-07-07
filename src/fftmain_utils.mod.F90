@@ -108,6 +108,8 @@ MODULE fftmain_utils
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_fw(:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_1(:,:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_2(:,:)
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_sing_1(:,:)
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_sing_2(:,:)
 
   PUBLIC :: comm_send
   PUBLIC :: comm_recv
@@ -117,6 +119,8 @@ MODULE fftmain_utils
   PUBLIC :: locks_com_fw
   PUBLIC :: locks_calc_1
   PUBLIC :: locks_calc_2
+  PUBLIC :: locks_sing_1
+  PUBLIC :: locks_sing_2
 
   PUBLIC :: invfft_pwbatch
   PUBLIC :: fwfft_pwbatch

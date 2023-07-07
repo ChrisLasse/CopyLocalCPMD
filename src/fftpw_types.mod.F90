@@ -1642,6 +1642,8 @@ CONTAINS
        CALL MPI_WIN_FREE( dfft%mpi_window( 21 ) , ierr )
        CALL MPI_WIN_FREE( dfft%mpi_window( 22 ) , ierr )
        CALL MPI_WIN_FREE( dfft%mpi_window( 23 ) , ierr )
+       CALL MPI_WIN_FREE( dfft%mpi_window( 24 ) , ierr )
+       CALL MPI_WIN_FREE( dfft%mpi_window( 25 ) , ierr )
        CALL MPI_WIN_FREE( dfft%mpi_window( 50 ) , ierr )
        CALL MPI_WIN_FREE( dfft%mpi_window( 51 ) , ierr )
        dfft%window_counter = dfft%window_counter - 8

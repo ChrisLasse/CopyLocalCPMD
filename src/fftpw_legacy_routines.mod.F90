@@ -204,7 +204,7 @@
        INTEGER :: void
        !
 
-       write(6,*) "NEW FFT INIT | THREAD:", mythread, "DIM:", howmany( mythread+1, remswitch ), length
+!       write(6,*) "NEW FFT INIT | THREAD:", mythread, "DIM:", howmany( mythread+1, remswitch ), length
        IF( C_ASSOCIATED(fw_plan_1d( icurrent(mythread+1), mythread+1)) ) CALL dfftw_destroy_plan( fw_plan_1d( icurrent(mythread+1), mythread+1) )
        IF( C_ASSOCIATED(bw_plan_1d( icurrent(mythread+1), mythread+1)) ) CALL dfftw_destroy_plan( bw_plan_1d( icurrent(mythread+1), mythread+1) )
        idir = -1
