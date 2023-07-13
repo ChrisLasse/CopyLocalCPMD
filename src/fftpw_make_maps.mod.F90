@@ -825,58 +825,6 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
 
 ! z things
 
-!  IF( ALLOCATED( dfft%thread_z_stickst ) ) DEALLOCATE( dfft%thread_z_stickst )
-!  IF( ALLOCATED( dfft%thread_z_startt ) ) DEALLOCATE( dfft%thread_z_startt )
-!  IF( ALLOCATED( dfft%thread_z_endt ) ) DEALLOCATE( dfft%thread_z_endt )
-!  
-!  ALLOCATE( dfft%thread_z_stickst( dfft%nthreads, 2, dfft%node_task_size * dfft%nodes_numb ) )
-!  ALLOCATE( dfft%thread_z_startt( dfft%nthreads, 2, dfft%node_task_size * dfft%nodes_numb ) )
-!  ALLOCATE( dfft%thread_z_endt( dfft%nthreads, 2, dfft%node_task_size * dfft%nodes_numb ) )
-!!  ALLOCATE( dfft%thread_z_sticks( dfft%nthreads, 2, dfft%node_task_size ) )
-!!  ALLOCATE( dfft%thread_z_start( dfft%nthreads, 2, dfft%node_task_size ) )
-!!  ALLOCATE( dfft%thread_z_end( dfft%nthreads, 2, dfft%node_task_size ) )
-!
-!  DO j = 1, dfft%node_task_size * dfft%nodes_numb
-!!  DO j = 1, dfft%node_task_size
-!
-!     DO i = 1, dfft%nthreads
-!        dfft%thread_z_stickst( i, 1, j ) = ( dfft%nsw( j ) * batch_size ) / dfft%nthreads
-!!        dfft%thread_z_sticks( i, 1, j ) = ( dfft%nsw( dfft%my_node*dfft%node_task_size+j ) * batch_size ) / dfft%nthreads
-!     ENDDO
-!     DO i = 1, mod( dfft%nsw( j ) * batch_size, dfft%nthreads )
-!!     DO i = 1, mod( dfft%nsw( dfft%my_node*dfft%node_task_size+j ) * batch_size, dfft%nthreads )
-!        dfft%thread_z_stickst( i, 1, j ) = dfft%thread_z_stickst( i, 1, j ) + 1
-!     ENDDO
-!   
-!     dfft%thread_z_startt( 1, 1, j ) = 1
-!     DO i = 2, dfft%nthreads
-!        dfft%thread_z_startt( i, 1, j ) = dfft%thread_z_startt( i-1, 1, j ) + dfft%thread_z_stickst( i-1, 1, j )
-!     ENDDO
-!     DO i = 1, dfft%nthreads
-!        dfft%thread_z_endt( i, 1, j ) = dfft%thread_z_startt( i, 1, j ) + dfft%thread_z_stickst( i, 1, j ) - 1
-!     ENDDO
-!   
-!     IF( rem_size .ne. 0 ) THEN
-!        DO i = 1, dfft%nthreads
-!           dfft%thread_z_stickst( i, 2, j ) = ( dfft%nsw( j ) * rem_size ) / dfft%nthreads
-!!           dfft%thread_z_sticks( i, 2, j ) = ( dfft%nsw( dfft%my_node*dfft%node_task_size+j ) * rem_size ) / dfft%nthreads
-!        ENDDO
-!        DO i = 1, mod( dfft%nsw( j ) * rem_size, dfft%nthreads )
-!!        DO i = 1, mod( dfft%nsw( dfft%my_node*dfft%node_task_size+j ) * rem_size, dfft%nthreads )
-!           dfft%thread_z_stickst( i, 2, j ) = dfft%thread_z_stickst( i, 2, j ) + 1
-!        ENDDO
-!      
-!        dfft%thread_z_startt( 1, 2, j ) = 1
-!        DO i = 2, dfft%nthreads
-!           dfft%thread_z_startt( i, 2, j ) = dfft%thread_z_startt( i-1, 2, j ) + dfft%thread_z_stickst( i-1, 2, j )
-!        ENDDO
-!        DO i = 1, dfft%nthreads
-!           dfft%thread_z_endt( i, 2, j ) = dfft%thread_z_startt( i, 2, j ) + dfft%thread_z_stickst( i, 2, j ) - 1
-!        ENDDO
-!     END IF
-!
-!  ENDDO
-
   IF( ALLOCATED( dfft%thread_z_sticks ) ) DEALLOCATE( dfft%thread_z_sticks )
   IF( ALLOCATED( dfft%thread_z_start ) ) DEALLOCATE( dfft%thread_z_start )
   IF( ALLOCATED( dfft%thread_z_end ) ) DEALLOCATE( dfft%thread_z_end )
@@ -884,19 +832,13 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
   ALLOCATE( dfft%thread_z_sticks( dfft%nthreads, 2, dfft%node_task_size * dfft%nodes_numb ) )
   ALLOCATE( dfft%thread_z_start( dfft%nthreads, 2, dfft%node_task_size * dfft%nodes_numb ) )
   ALLOCATE( dfft%thread_z_end( dfft%nthreads, 2, dfft%node_task_size * dfft%nodes_numb ) )
-!  ALLOCATE( dfft%thread_z_sticks( dfft%nthreads, 2, dfft%node_task_size ) )
-!  ALLOCATE( dfft%thread_z_start( dfft%nthreads, 2, dfft%node_task_size ) )
-!  ALLOCATE( dfft%thread_z_end( dfft%nthreads, 2, dfft%node_task_size ) )
 
   DO j = 1, dfft%node_task_size * dfft%nodes_numb
-!  DO j = 1, dfft%node_task_size
 
      DO i = 1, dfft%nthreads
         dfft%thread_z_sticks( i, 1, j ) = ( dfft%nsw( j ) * batch_size ) / dfft%nthreads
-!        dfft%thread_z_sticks( i, 1, j ) = ( dfft%nsw( dfft%my_node*dfft%node_task_size+j ) * batch_size ) / dfft%nthreads
      ENDDO
      DO i = 1, mod( dfft%nsw( j ) * batch_size, dfft%nthreads )
-!     DO i = 1, mod( dfft%nsw( dfft%my_node*dfft%node_task_size+j ) * batch_size, dfft%nthreads )
         dfft%thread_z_sticks( i, 1, j ) = dfft%thread_z_sticks( i, 1, j ) + 1
      ENDDO
    
@@ -911,10 +853,8 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
      IF( rem_size .ne. 0 ) THEN
         DO i = 1, dfft%nthreads
            dfft%thread_z_sticks( i, 2, j ) = ( dfft%nsw( j ) * rem_size ) / dfft%nthreads
-!           dfft%thread_z_sticks( i, 2, j ) = ( dfft%nsw( dfft%my_node*dfft%node_task_size+j ) * rem_size ) / dfft%nthreads
         ENDDO
         DO i = 1, mod( dfft%nsw( j ) * rem_size, dfft%nthreads )
-!        DO i = 1, mod( dfft%nsw( dfft%my_node*dfft%node_task_size+j ) * rem_size, dfft%nthreads )
            dfft%thread_z_sticks( i, 2, j ) = dfft%thread_z_sticks( i, 2, j ) + 1
         ENDDO
       
@@ -971,31 +911,6 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
      ENDDO
   END IF
 
-!! y things
-!
-!  IF( ALLOCATED( dfft%thread_y_sticks ) ) DEALLOCATE( dfft%thread_y_sticks )
-!  IF( ALLOCATED( dfft%thread_y_start ) ) DEALLOCATE( dfft%thread_y_start )
-!  IF( ALLOCATED( dfft%thread_y_end ) ) DEALLOCATE( dfft%thread_y_end )
-!  
-!  ALLOCATE( dfft%thread_y_sticks( dfft%nthreads ) )
-!  ALLOCATE( dfft%thread_y_start( dfft%nthreads ) )
-!  ALLOCATE( dfft%thread_y_end( dfft%nthreads ) )
-!
-!  DO i = 1, dfft%nthreads
-!     dfft%thread_y_sticks( i ) = ( dfft%my_nr1p * dfft%my_nr3p * batch_size ) / dfft%nthreads
-!  ENDDO
-!  DO i = 1, mod( dfft%my_nr1p * dfft%my_nr3p * batch_size, dfft%nthreads )
-!     dfft%thread_y_sticks( i ) = dfft%thread_y_sticks( i ) + 1
-!  ENDDO
-!
-!  dfft%thread_y_start( 1 ) = 1
-!  DO i = 2, dfft%nthreads
-!     dfft%thread_y_start( i ) = dfft%thread_y_start( i-1 ) + dfft%thread_y_sticks( i-1 )
-!  ENDDO
-!  DO i = 1, dfft%nthreads
-!     dfft%thread_y_end( i ) = dfft%thread_y_start( i ) + dfft%thread_y_sticks( i ) - 1
-!  ENDDO
-
 ! x things
 
   IF( ALLOCATED( dfft%thread_x_sticks ) ) DEALLOCATE( dfft%thread_x_sticks )
@@ -1037,31 +952,6 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
         dfft%thread_x_end( i, 2 ) = dfft%thread_x_start( i, 2 ) + dfft%thread_x_sticks( i, 2 ) - 1
      ENDDO
   END IF
-
-!! x things
-!
-!  IF( ALLOCATED( dfft%thread_x_sticks ) ) DEALLOCATE( dfft%thread_x_sticks )
-!  IF( ALLOCATED( dfft%thread_x_start ) ) DEALLOCATE( dfft%thread_x_start )
-!  IF( ALLOCATED( dfft%thread_x_end ) ) DEALLOCATE( dfft%thread_x_end )
-!  
-!  ALLOCATE( dfft%thread_x_sticks( dfft%nthreads ) )
-!  ALLOCATE( dfft%thread_x_start( dfft%nthreads ) )
-!  ALLOCATE( dfft%thread_x_end( dfft%nthreads ) )
-!
-!  DO i = 1, dfft%nthreads
-!     dfft%thread_x_sticks( i ) = ( dfft%my_nr3p * dfft%my_nr2p * batch_size ) / dfft%nthreads
-!  ENDDO
-!  DO i = 1, mod( dfft%my_nr3p * dfft%my_nr2p * batch_size, dfft%nthreads )
-!     dfft%thread_x_sticks( i ) = dfft%thread_x_sticks( i ) + 1
-!  ENDDO
-!
-!  dfft%thread_x_start( 1 ) = 1
-!  DO i = 2, dfft%nthreads
-!     dfft%thread_x_start( i ) = dfft%thread_x_start( i-1 ) + dfft%thread_x_sticks( i-1 )
-!  ENDDO
-!  DO i = 1, dfft%nthreads
-!     dfft%thread_x_end( i ) = dfft%thread_x_start( i ) + dfft%thread_x_sticks( i ) - 1
-!  ENDDO
 
 ! gspace things
 

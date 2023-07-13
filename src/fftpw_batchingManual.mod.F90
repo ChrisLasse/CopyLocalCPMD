@@ -233,7 +233,6 @@ SUBROUTINE invfft_z_section_Man( dfft, aux, comm_mem_send, comm_mem_recv, iset, 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
   CALL SYSTEM_CLOCK( time(2) )
-  !$OMP Barrier
 !------------------------------------------------------
 !---------Pre-Com-Copy Start---------------------------
 
