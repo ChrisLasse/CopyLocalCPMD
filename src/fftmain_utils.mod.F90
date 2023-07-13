@@ -1292,6 +1292,7 @@ CONTAINS
              END IF
           END IF
 
+          !$OMP Barrier 
        END IF
   
     ELSE !! fw fft
@@ -1371,7 +1372,6 @@ CONTAINS
 
           CALL Accumulate_Psi_Man( dfft, f_inout1, f_inout3, dfft%ngms, divparam_1, last, dfft%nsw, f_inout2, mythread )
 
-          !$OMP Barrier 
           CALL SYSTEM_CLOCK( time(15) )
   
           dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(15) - time(14) )
