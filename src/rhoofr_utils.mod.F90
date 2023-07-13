@@ -2154,9 +2154,9 @@ CONTAINS
           write(6,*) "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
        END IF
 
-    ELSE
-
-       STOP
+!    ELSE
+!
+!       STOP
 
     END IF
 
@@ -2250,7 +2250,7 @@ CONTAINS
 
     !Loop over batches
     DO ibatch=1,fft_numbatches+2
-       IF(mythread.GE.1.OR.nthreads.EQ.1)THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           IF(ibatch.LE.fft_numbatches+1)THEN
              IF(ibatch.LE.fft_numbatches)THEN
@@ -2286,7 +2286,7 @@ CONTAINS
              END IF
           END IF
        END IF
-       IF(.not. dfft%single_node .and. ( mythread.EQ.0.OR.nthreads.EQ.1 ) .and. dfft%my_node_rank .eq. 0 )THEN
+          IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           !communication phase
           IF(ibatch.LE.fft_numbatches+1)THEN
@@ -2314,7 +2314,7 @@ CONTAINS
           !$omp flush( locks_sing_1 )
           !$  END DO
        END IF
-       IF (mythread.GE.1.OR.nthreads.EQ.1)THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
           !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
           IF(ibatch.GT.start_loop.AND.ibatch.LE.end_loop)THEN
              IF (ibatch-start_loop.LE.fft_numbatches)THEN
@@ -2343,7 +2343,6 @@ CONTAINS
                 DO i = 1, bsize
                    CALL Build_CD( psi_work(: , ((counter(3)-1)*dfft%batch_size_save)+i ), rhoe(:,1), 2*(((counter(3)-1)*dfft%batch_size_save)+i)-1, mythread )
                 ENDDO
-                !$OMP Barrier
                 ! Compute the charge density from the wave functions
                 ! in real space
                 ! Decode fft batch, setup (lsd) spin settings                     

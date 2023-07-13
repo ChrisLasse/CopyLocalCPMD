@@ -45,57 +45,10 @@ SUBROUTINE Prepare_Psi_Man( dfft, psi, aux, ngms, remswitch, mythread, ns, last,
 !------------------------------------------------------
 !----------Prepare_Psi Start---------------------------
 
-!  DO i = dfft%thread_z_start( mythread+1, remswitch ), dfft%thread_z_end( mythread+1, remswitch )
-!!     iter = mod( i-1, ns(dfft%mype+1) ) + 1
-!!     offset  = ( iter - 1 ) * dfft%nr3
-!!     offset2 = 2 * ( ( (i-1) / ns(dfft%mype+1) ) + 1 )
-!     priv(1) = mod( i-1, ns(dfft%mype+1) ) + 1
-!     priv(2) = ( priv(1) - 1 ) * dfft%nr3
-!     priv(3) = 2 * ( ( (i-1) / ns(dfft%mype+1) ) + 1 )
-!
-!!     DO j = 1, dfft%prep_map(1,iter)-1
-!!        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), offset2 ) )
-!!     ENDDO
-!!     DO j = 1, dfft%prep_map(2,iter)-1
-!!        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), offset2 )
-!!     ENDDO
-!!
-!!     DO j = dfft%prep_map(3,iter), dfft%prep_map(4,iter)
-!!        aux( j, i ) = (0.d0, 0.d0)
-!!     ENDDO
-!!
-!!     DO j = dfft%prep_map(5,iter)+1, dfft%nr3
-!!        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), offset2 )
-!!     ENDDO
-!!     DO j = dfft%prep_map(6,iter)+1, dfft%nr3
-!!        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), offset2 ) )
-!!     ENDDO
-!
-!     DO j = 1, dfft%prep_map(1,priv(1))-1
-!        aux( j, i ) = conjg( psi( dfft%nlm_r( priv(2) + j ), priv(3) - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( priv(2) + j ), priv(3) ) )
-!     ENDDO
-!     DO j = 1, dfft%prep_map(2,priv(1))-1
-!        aux( j, i ) = psi( dfft%nl_r( priv(2) + j ), priv(3) - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( priv(2) + j ), priv(3) )
-!     ENDDO
-!
-!     DO j = dfft%prep_map(3,priv(1)), dfft%prep_map(4,priv(1))
-!        aux( j, i ) = (0.d0, 0.d0)
-!     ENDDO
-!
-!     DO j = dfft%prep_map(5,priv(1))+1, dfft%nr3
-!        aux( j, i ) = psi( dfft%nl_r( priv(2) + j ), priv(3) - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( priv(2) + j ), priv(3) )
-!     ENDDO
-!     DO j = dfft%prep_map(6,priv(1))+1, dfft%nr3
-!        aux( j, i ) = conjg( psi( dfft%nlm_r( priv(2) + j ), priv(3) - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( priv(2) + j ), priv(3) ) )
-!     ENDDO
-!
-!  ENDDO
-!
-!IF( mythread .eq. 0 ) THEN
-!
-!  write(6,*) mythread, "withinLoop1"
+  ! dfft%mype+1 in dfft%thread_z_start eigentlich (dfft%my_node-1)*dfft%node_task_size+dfft%my_node_rank+1
 
-  DO i = dfft%thread_z_start( mythread+1, remswitch, dfft%my_node_rank+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%my_node_rank+1 )
+  DO i = dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 )
+!  DO i = dfft%thread_z_start( mythread+1, remswitch, dfft%my_node_rank+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%my_node_rank+1 )
      iter = mod( i-1, ns(dfft%mype+1) ) + 1
      offset  = ( iter - 1 ) * dfft%nr3
      offset2 = 2 * ( ( (i-1) / ns(dfft%mype+1) ) + 1 )
@@ -119,148 +72,6 @@ SUBROUTINE Prepare_Psi_Man( dfft, psi, aux, ngms, remswitch, mythread, ns, last,
      ENDDO
 
   ENDDO
-
-!END IF
-!
-!  write(6,*) mythread, "afterLoop1, before 1.barrier"
-!
-!!$omp barrier
-!
-!  write(6,*) mythread, "after 1.barrier"
-!
-!IF( mythread .eq. 1 ) THEN
-!
-!  write(6,*) mythread, "withinLoop2"
-!
-!  DO i = dfft%thread_z_start( mythread+1, remswitch ), dfft%thread_z_end( mythread+1, remswitch )
-!     iter = mod( i-1, ns(dfft%mype+1) ) + 1
-!     offset  = ( iter - 1 ) * dfft%nr3
-!     offset2 = 2 * ( ( (i-1) / ns(dfft%mype+1) ) + 1 )
-!
-!     DO j = 1, dfft%prep_map(1,iter)-1
-!        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), offset2 ) )
-!     ENDDO
-!     DO j = 1, dfft%prep_map(2,iter)-1
-!        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), offset2 )
-!     ENDDO
-!
-!     DO j = dfft%prep_map(3,iter), dfft%prep_map(4,iter)
-!        aux( j, i ) = (0.d0, 0.d0)
-!     ENDDO
-!
-!     DO j = dfft%prep_map(5,iter)+1, dfft%nr3
-!        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), offset2 )
-!     ENDDO
-!     DO j = dfft%prep_map(6,iter)+1, dfft%nr3
-!        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), offset2 ) )
-!     ENDDO
-!
-!  ENDDO
-!
-!END IF
-!
-!  write(6,*) mythread, "afterLoop2, before 2.barrier"
-!
-!!$omp barrier
-!
-!  write(6,*) mythread, "after 2.barrier"
-
-!IF( mythread .eq. 0 ) THEN
-!
-!  DO ip = dfft%thread_z_start( mythread+1, remswitch ), dfft%thread_z_end( mythread+1, remswitch )
-!     priv(1) = mod( ip-1, ns(dfft%mype+1) ) + 1
-!     priv(2) = ( priv(1) - 1 ) * dfft%nr3
-!     priv(3) = 2 * ( ( (ip-1) / ns(dfft%mype+1) ) + 1 )
-!
-!     DO jp = 1, dfft%prep_map(1,priv(1))-1
-!        aux( jp, ip ) = conjg( psi( dfft%nlm_r( priv(2) + jp ), priv(3) - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( priv(2) + jp ), priv(3) ) )
-!     ENDDO
-!     DO jp = 1, dfft%prep_map(2,priv(1))-1
-!        aux( jp, ip ) = psi( dfft%nl_r( priv(2) + jp ), priv(3) - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( priv(2) + jp ), priv(3) )
-!     ENDDO
-!
-!     DO jp = dfft%prep_map(3,priv(1)), dfft%prep_map(4,priv(1))
-!        aux( jp, ip ) = (0.d0, 0.d0)
-!     ENDDO
-!
-!     DO jp = dfft%prep_map(5,priv(1))+1, dfft%nr3
-!        aux( jp, ip ) = psi( dfft%nl_r( priv(2) + jp ), priv(3) - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( priv(2) + jp ), priv(3) )
-!     ENDDO
-!     DO jp = dfft%prep_map(6,priv(1))+1, dfft%nr3
-!        aux( jp, ip ) = conjg( psi( dfft%nlm_r( priv(2) + jp ), priv(3) - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( priv(2) + jp ), priv(3) ) )
-!     ENDDO
-!
-!  ENDDO
-!
-!END IF
-!
-!!$omp barrier
-!
-!IF( mythread .eq. 1 ) THEN
-!
-!  DO ip = dfft%thread_z_start( mythread+1, remswitch ), dfft%thread_z_end( mythread+1, remswitch )
-!     priv(1) = mod( ip-1, ns(dfft%mype+1) ) + 1
-!     priv(2) = ( priv(1) - 1 ) * dfft%nr3
-!     priv(3) = 2 * ( ( (ip-1) / ns(dfft%mype+1) ) + 1 )
-!
-!     DO jp = 1, dfft%prep_map(1,priv(1))-1
-!        aux( jp, ip ) = conjg( psi( dfft%nlm_r( priv(2) + jp ), priv(3) - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( priv(2) + jp ), priv(3) ) )
-!     ENDDO
-!     DO jp = 1, dfft%prep_map(2,priv(1))-1
-!        aux( jp, ip ) = psi( dfft%nl_r( priv(2) + jp ), priv(3) - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( priv(2) + jp ), priv(3) )
-!     ENDDO
-!
-!     DO jp = dfft%prep_map(3,priv(1)), dfft%prep_map(4,priv(1))
-!        aux( jp, ip ) = (0.d0, 0.d0)
-!     ENDDO
-!
-!     DO jp = dfft%prep_map(5,priv(1))+1, dfft%nr3
-!        aux( jp, ip ) = psi( dfft%nl_r( priv(2) + jp ), priv(3) - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( priv(2) + jp ), priv(3) )
-!     ENDDO
-!     DO jp = dfft%prep_map(6,priv(1))+1, dfft%nr3
-!        aux( jp, ip ) = conjg( psi( dfft%nlm_r( priv(2) + jp ), priv(3) - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( priv(2) + jp ), priv(3) ) )
-!     ENDDO
-!
-!  ENDDO
-!
-!END IF
-
-! Waiting for case where the number of states is uneven
-!  !$omp parallel do private( i, j, iter, offset, offset2 )
-!  DO i = 1, ns( dfft%mype+1 ) * z_group_size
-!     iter = mod( i-1, ns(dfft%mype+1) ) + 1
-!     offset  = ( iter - 1 ) * dfft%nr3
-!     offset2 = 2 * ( ( (i-1) / ns(dfft%mype+1) ) + 1 )
-!     !$omp simd
-!     DO j = 1, dfft%zero_prep_start(iter,1)-1
-!        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 )
-!     ENDDO
-!     !$omp simd
-!     DO j = dfft%zero_prep_start(iter,2), dfft%zero_prep_end(iter,2)
-!        aux( j, i ) = (0.d0, 0.d0)
-!     ENDDO
-!     !$omp simd
-!     DO j = dfft%zero_prep_end(iter,1)+1, dfft%nr3
-!        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 )
-!     ENDDO
-!  ENDDO
-!  !$omp end parallel do
-!  
-!  !$omp parallel do private( i, j, iter, offset, offset2 )
-!  DO i = 1, ns( dfft%mype+1 ) * z_group_size
-!     iter = mod( i-1, ns(dfft%mype+1) ) + 1
-!     offset  = ( iter - 1 ) * dfft%nr3
-!     offset2 = 2 * ( ( (i-1) / ns(dfft%mype+1) ) + 1 )
-!     !$omp simd
-!     DO j = 1, dfft%zero_prep_start(iter,3)-1
-!        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) )
-!     ENDDO
-!     !$omp simd
-!     DO j = dfft%zero_prep_end(iter,3)+1, dfft%nr3
-!        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) )
-!     ENDDO
-!  ENDDO
-!  !$omp end parallel do
 
 !----------Prepare_Psi End-----------------------------
 !------------------------------------------------------
@@ -416,13 +227,13 @@ SUBROUTINE invfft_z_section_Man( dfft, aux, comm_mem_send, comm_mem_recv, iset, 
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
-  CALL fft_noOMP_1D( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%my_node_rank+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%my_node_rank+1 ) ) , &
-                     dfft%thread_z_sticks(:,:,dfft%my_node_rank+1), dfft%nr3, remswitch, mythread, dfft%nthreads, 2 )
+  CALL fft_noOMP_1D( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ) , &
+                     dfft%thread_z_sticks(:,:,dfft%mype+1), dfft%nr3, remswitch, mythread, dfft%nthreads, 2 )
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
   CALL SYSTEM_CLOCK( time(2) )
-  !$OMP Barrier 
+  !$OMP Barrier
 !------------------------------------------------------
 !---------Pre-Com-Copy Start---------------------------
 
@@ -437,7 +248,7 @@ SUBROUTINE invfft_z_section_Man( dfft, aux, comm_mem_send, comm_mem_recv, iset, 
         DO m = 1, dfft%node_task_size
            j = (l-1)*dfft%node_task_size + m
            offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (iset-1)*batch_size ) * dfft%big_chunks
-           DO k = dfft%thread_z_start( mythread+1, remswitch, dfft%my_node_rank+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%my_node_rank+1 )
+           DO k = dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 )
               kdest = offset + dfft%nr3px * mod( (k-1), ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks
               DO i = 1, dfft%nr3p( j )
                  comm_mem_send( kdest + i ) = aux( i + dfft%nr3p_offset( j ), k )
@@ -457,7 +268,7 @@ SUBROUTINE invfft_z_section_Man( dfft, aux, comm_mem_send, comm_mem_recv, iset, 
      DO m = 1, dfft%node_task_size
         j = dfft%my_node*dfft%node_task_size + m
         offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (iset-1)*batch_size ) * dfft%big_chunks
-        DO k = dfft%thread_z_start( mythread+1, remswitch, dfft%my_node_rank+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%my_node_rank+1 )
+        DO k = dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 )
            kdest = offset + dfft%nr3px * mod( k-1, ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks
            DO i = 1, dfft%nr3p( j )
               comm_mem_recv( kdest + i ) = aux( i + dfft%nr3p_offset( j ), k )
@@ -495,15 +306,11 @@ SUBROUTINE invfft_y_section_Man( dfft, aux, comm_mem_recv, aux2_r, map_acinv, ma
 
   INTEGER(INT64) :: time(5)
 
-  !$OMP barrier
-
   Call First_Part_y_section( aux2_r )
 
   !$OMP barrier
  
   Call Second_Part_y_section( aux2_r )
-
-  !$OMP barrier
 
   CONTAINS
 
@@ -513,7 +320,6 @@ SUBROUTINE invfft_y_section_Man( dfft, aux, comm_mem_recv, aux2_r, map_acinv, ma
       COMPLEX(DP), INTENT(INOUT) :: aux2( dfft%nr2 , * ) !nr1s(dfft%mype2+1) * dfft%my_nr3p *  y_group_size )
 
 
-        !$OMP barrier
         CALL SYSTEM_CLOCK( time(1) )
       !------------------------------------------------------
       !--------After-Com-Copy Start--------------------------
@@ -563,7 +369,6 @@ SUBROUTINE invfft_y_section_Man( dfft, aux, comm_mem_recv, aux2_r, map_acinv, ma
       !---------After-Com-Copy End---------------------------
       !------------------------------------------------------
         CALL SYSTEM_CLOCK( time(2) )
-        !$OMP barrier
       !------------------------------------------------------
       !------------y-FFT Start-------------------------------
       
@@ -572,7 +377,6 @@ SUBROUTINE invfft_y_section_Man( dfft, aux, comm_mem_recv, aux2_r, map_acinv, ma
       !-------------y-FFT End--------------------------------
       !------------------------------------------------------
         CALL SYSTEM_CLOCK( time(3) )
-        !$OMP barrier
 
         dfft%time_adding( 4 ) = dfft%time_adding( 4 ) + ( time(2) - time(1) )
         dfft%time_adding( 5 ) = dfft%time_adding( 5 ) + ( time(3) - time(2) )
@@ -583,7 +387,6 @@ SUBROUTINE invfft_y_section_Man( dfft, aux, comm_mem_recv, aux2_r, map_acinv, ma
 
       IMPLICIT NONE
       COMPLEX(DP), INTENT(INOUT) :: aux2  ( dfft%my_nr1p * dfft%my_nr3p * dfft%nr2, * ) !y_group_size
-        !$OMP barrier
         CALL SYSTEM_CLOCK( time(4) )
       !------------------------------------------------------
       !-------------yx-scatter-------------------------------
@@ -605,7 +408,6 @@ SUBROUTINE invfft_y_section_Man( dfft, aux, comm_mem_recv, aux2_r, map_acinv, ma
       !-------------yx-scatter-------------------------------
       !------------------------------------------------------
         CALL SYSTEM_CLOCK( time(5) )
-        !$OMP barrier
       
         dfft%time_adding( 6 ) = dfft%time_adding( 6 ) + ( time(5) - time(4) )
 
@@ -622,7 +424,6 @@ SUBROUTINE invfft_x_section_Man( dfft, aux, remswitch, mythread )
 
   INTEGER(INT64) :: time(2)
 
-  !$OMP barrier
   CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
@@ -632,7 +433,6 @@ SUBROUTINE invfft_x_section_Man( dfft, aux, remswitch, mythread )
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
   CALL SYSTEM_CLOCK( time(2) )
-  !$OMP barrier
 
   dfft%time_adding( 7 ) = dfft%time_adding( 7 ) + ( time(2) - time(1) )
 
@@ -651,15 +451,11 @@ SUBROUTINE fwfft_x_section_Man( dfft, aux_r, aux2, nr1s, remswitch, mythread )
 
   INTEGER(INT64) :: time(4)
 
-  !$OMP barrier
-
   Call First_Part_x_section( aux_r )
 
   !$OMP barrier
  
   Call Second_Part_x_section( aux_r )
-
-  !$OMP barrier
 
   CONTAINS
 
@@ -669,7 +465,6 @@ SUBROUTINE fwfft_x_section_Man( dfft, aux_r, aux2, nr1s, remswitch, mythread )
       COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr1 , * ) !dfft%my_nr3p * dfft%nr2 * x_group_size )
 
 
-        !$OMP Barrier 
         CALL SYSTEM_CLOCK( time(1) )
       !------------------------------------------------------
       !------------x-FFT Start-------------------------------
@@ -679,7 +474,6 @@ SUBROUTINE fwfft_x_section_Man( dfft, aux_r, aux2, nr1s, remswitch, mythread )
       !-------------x-FFT End--------------------------------
       !------------------------------------------------------
         CALL SYSTEM_CLOCK( time(2) )
-        !$OMP Barrier 
 
         dfft%time_adding( 9 ) = dfft%time_adding( 9 ) + ( time(2) - time(1) )
 
@@ -705,7 +499,6 @@ SUBROUTINE fwfft_x_section_Man( dfft, aux_r, aux2, nr1s, remswitch, mythread )
       !-------Forward xy-scatter End-------------------------
       !------------------------------------------------------
         CALL SYSTEM_CLOCK( time(4) )
-        !$OMP Barrier 
       
         dfft%time_adding( 10 ) = dfft%time_adding( 10 ) + ( time(4) - time(3) )
 
@@ -729,15 +522,11 @@ SUBROUTINE fwfft_y_section_Man( dfft, aux, comm_mem_send, comm_mem_recv, map_pcf
 
   INTEGER(INT64) :: time(3)
 
-  !$OMP Barrier 
-
   Call First_Part_y_section( aux )
 
   !$OMP barrier
  
   Call Second_Part_y_section( aux )
-
-  !$OMP Barrier 
 
   CONTAINS
 
@@ -747,7 +536,6 @@ SUBROUTINE fwfft_y_section_Man( dfft, aux, comm_mem_send, comm_mem_recv, map_pcf
       COMPLEX(DP), INTENT(INOUT) :: aux2( dfft%nr2 , * ) !nr1s(dfft%mype2+1) * dfft%my_nr3p *  y_group_size )
 
         CALL SYSTEM_CLOCK( time(1) )
-        !$OMP Barrier 
       !------------------------------------------------------
       !------------y-FFT Start-------------------------------
       
@@ -756,7 +544,6 @@ SUBROUTINE fwfft_y_section_Man( dfft, aux, comm_mem_send, comm_mem_recv, map_pcf
       !-------------y-FFT End--------------------------------
       !------------------------------------------------------
         CALL SYSTEM_CLOCK( time(2) )
-        !$OMP Barrier 
 
         dfft%time_adding( 11 ) = dfft%time_adding( 11 ) + ( time(2) - time(1) )
 
@@ -767,7 +554,6 @@ SUBROUTINE fwfft_y_section_Man( dfft, aux, comm_mem_send, comm_mem_recv, map_pcf
       IMPLICIT NONE
       COMPLEX(DP), INTENT(INOUT) :: aux2  ( dfft%my_nr1p * dfft%my_nr3p * dfft%nr2, * ) !y_group_size
 
-        !$OMP Barrier 
         CALL SYSTEM_CLOCK( time(2) )
 
       !------------------------------------------------------
@@ -841,7 +627,6 @@ SUBROUTINE fwfft_y_section_Man( dfft, aux, comm_mem_send, comm_mem_recv, map_pcf
       !----------Pre-Com-Copy End----------------------------
       !------------------------------------------------------
         CALL SYSTEM_CLOCK( time(3) )
-        !$OMP Barrier 
       
         dfft%time_adding( 12 ) = dfft%time_adding( 12 ) + ( time(3) - time(2) )
 
@@ -863,7 +648,6 @@ SUBROUTINE fwfft_z_section_Man( dfft, comm_mem_recv, aux, iset, batch_size, rems
 
   INTEGER(INT64) :: time(3)
 
-  !$OMP Barrier 
   CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !--------After-Com-Copy Start--------------------------
@@ -888,7 +672,6 @@ SUBROUTINE fwfft_z_section_Man( dfft, comm_mem_recv, aux, iset, batch_size, rems
 !---------After-Com-Copy End---------------------------
 !------------------------------------------------------
   CALL SYSTEM_CLOCK( time(2) )
-  !$OMP Barrier 
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
@@ -898,7 +681,6 @@ SUBROUTINE fwfft_z_section_Man( dfft, comm_mem_recv, aux, iset, batch_size, rems
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
   CALL SYSTEM_CLOCK( time(3) )
-  !$OMP Barrier 
 
   dfft%time_adding( 13 ) = dfft%time_adding( 13 ) + ( time(2) - time(1) )
   dfft%time_adding( 14 ) = dfft%time_adding( 14 ) + ( time(3) - time(2) )

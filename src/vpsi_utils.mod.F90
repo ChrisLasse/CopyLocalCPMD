@@ -3116,7 +3116,7 @@ CONTAINS
     !Loop over batches
     DO ibatch=1,fft_numbatches+3
        IF(.NOT.rsactive)THEN
-          IF(mythread.GE.1.OR.nthreads.EQ.1)THEN
+          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              IF(ibatch.LE.fft_numbatches+1)THEN
                 IF(ibatch.LE.fft_numbatches)THEN
@@ -3153,7 +3153,7 @@ CONTAINS
                 END IF
              END IF
           END IF
-          IF(.not. dfft%single_node .and. ( mythread.EQ.0.OR.nthreads.EQ.1 ) .and. dfft%my_node_rank .eq. 0 )THEN
+          IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              !communication phase
              IF(ibatch.LE.fft_numbatches+1)THEN
@@ -3181,7 +3181,7 @@ CONTAINS
              !$omp flush( locks_sing_1 )
              !$  END DO
           END IF
-          IF (mythread.GE.1.OR.nthreads.EQ.1)THEN
+          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
              !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
              !data related to ibatch-1!
 !             IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
@@ -3212,7 +3212,7 @@ CONTAINS
        ! ==------------------------------------------------------------==
        ! == Apply the potential (V), which acts in real space.         ==
 
-       IF(mythread.GE.1.OR.nthreads.EQ.1)THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
 !          IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
@@ -3226,7 +3226,6 @@ CONTAINS
                 swap=mod(ibatch-start_loop1,int_mod)+1
                 start = 1+(ibatch-1)*batch_size-start_loop1
 !                IF(rsactive) wfn_r1=>wfn_r(:,start)
-                !$OMP Barrier
                 IF(rsactive) rs_wave=>wfn_real(:,start:start)
 !                CALL Apply_V_4S( wfn_r1, vpot(:,1), bsize )
                 CALL Apply_V_4S( rs_wave(:,1:1), vpot(:,1), bsize, mythread )
@@ -3278,20 +3277,18 @@ CONTAINS
              ! == Back transform to reciprocal space the product V.PSI       ==
              ! ==------------------------------------------------------------==
 !                CALL fwfftn_batch(wfn_r1,bsize,swap,1,ibatch-start_loop1)
-                 !$OMP Barrier
                  counter(4) = counter(4) + 1
                  CALL fwfft_4S( dfft, 1, bsize, bsize, remswitch, mythread, counter(4), swap, first_dim1, priv, &
 !                                wfn_r1, dfft%aux_array( : , 1 : 1 ) )
                                 f_inout2=rs_wave &
                                 , f_inout3=dfft%aux_array( : , 1 : 1 ) )
-                 !$OMP Barrier
                  CALL fwfft_4S( dfft, 2, bsize, bsize, remswitch, mythread, counter(4), swap, first_dim2, priv, &
                                 f_inout4=dfft%aux_array, f_inout2=comm_send, f_inout3=comm_recv )
                 i_start2=i_start2+bsize*njump
              END IF
           END IF
        END IF
-       IF(.not. dfft%single_node .and. ( mythread.EQ.0.OR.nthreads.EQ.1 ) .and. dfft%my_node_rank .eq. 0 )THEN
+       IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
 !       IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
@@ -3307,7 +3304,6 @@ CONTAINS
                 swap=mod(ibatch-start_loop1,int_mod)+1
    !             CALL fwfftn_batch(wfn_r,bsize,swap,2,ibatch-start_loop1)
                 counter(5) = counter(5) + 1
-                !$OMP Barrier
                 CALL fwfft_4S( dfft, 3, bsize, 0, remswitch, mythread, counter(5), swap, 0, priv, f_inout2=comm_send, f_inout3=comm_recv )
              END IF
           END IF
@@ -3321,7 +3317,7 @@ CONTAINS
           !$omp flush( locks_sing_2 )
           !$  END DO
        END IF
-       IF(mythread.GE.1.OR.nthreads.EQ.1)THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
           !data related to ibatch-2
 !          IF(ibatch.GE.3.AND.ibatch.LE.fft_numbatches+3)THEN
           IF(ibatch.GT.start_loop2.AND.ibatch.LE.end_loop2)THEN
@@ -3342,7 +3338,6 @@ CONTAINS
 !                ELSE
 !                   CALL calc_c2(c2,c0,wfn_g,f,bsize,i_start3,njump,nostat)
 !                ENDIF
-                !$OMP Barrier
                 counter(6) = counter(6) + 1
                 CALL fwfft_4S( dfft, 4, bsize, bsize, remswitch, mythread, counter(6), swap, first_dim3, priv, &
                                dfft%aux_array, c0(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2 ), &

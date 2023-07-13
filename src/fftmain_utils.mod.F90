@@ -1228,24 +1228,29 @@ CONTAINS
 
           CALL SYSTEM_CLOCK( time(3) )
           dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(3) - time(2) )
-  
-          IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
 
-             !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
-             !$omp flush( locks_calc_1 )
-             !$  DO WHILE( ANY(locks_calc_1( :, 1+current:dfft%batch_size_save+current ) ) )
-             !$omp flush( locks_calc_1 )
-             !$  END DO
-
-          END IF
-
-          !$OMP Barrier 
+          !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
+          !$omp flush( locks_calc_1 )
+          !$  DO WHILE( ANY(locks_calc_1( :, 1+current:dfft%batch_size_save+current ) ) )
+          !$omp flush( locks_calc_1 )
+          !$  END DO
 
           CALL invfft_z_section_Man( dfft, f_inout1, f_inout3(:,work_buffer), f_inout4(:,work_buffer), 1, batch_size, remswitch, mythread, dfft%nsw )
+
+          !$OMP Barrier
+          !$  IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
+          !$     locks_calc_inv( dfft%my_node_rank+1, counter ) = .false.
+          !$omp flush( locks_calc_fw )
+          !$  END IF
   
        ELSE IF( step .eq. 2 ) THEN
   
           CALL SYSTEM_CLOCK( time(4) )
+
+          !$omp flush( locks_calc_inv )
+          !$  DO WHILE( ANY( locks_calc_inv( :, counter ) ) )
+          !$omp flush( locks_calc_inv )
+          !$  END DO
 
           CALL SYSTEM_CLOCK( time(5) )
           dfft%time_adding( 23 ) = dfft%time_adding( 23 ) + ( time(5) - time(4) )
@@ -1255,11 +1260,17 @@ CONTAINS
           CALL SYSTEM_CLOCK( time(16) )
           dfft%time_adding( 28 ) = dfft%time_adding( 28 ) + ( time(16) - time(5) )
   
+          !$  locks_com_inv( counter ) = .false.
+          !$omp flush( locks_com_inv )
+  
        ELSE IF( step .eq. 3 ) THEN
   
           CALL SYSTEM_CLOCK( time(6) )
 
-          !$OMP Barrier 
+          !$omp flush( locks_com_inv )
+          !$  DO WHILE( locks_com_inv( counter ) .and. .not. dfft%single_node )
+          !$omp flush( locks_com_inv )
+          !$  END DO
 
           CALL SYSTEM_CLOCK( time(7) )
           dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(7) - time(6) )
@@ -1267,15 +1278,9 @@ CONTAINS
           CALL invfft_y_section_Man( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
                                      dfft%map_acinv, dfft%map_acinv_rem, dfft%nr1w, divparam_1, 1, remswitch, mythread )
 
-          !$OMP Barrier 
-
        ELSE IF( step .eq. 4 ) THEN
 
-          !$OMP Barrier 
-
           CALL invfft_x_section_Man( dfft, f_inout1, remswitch, mythread )
-
-          !$OMP Barrier 
 
           IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
              IF( dfft%vpsi ) THEN
@@ -1287,15 +1292,11 @@ CONTAINS
              END IF
           END IF
 
-          !$OMP Barrier 
- 
        END IF
   
     ELSE !! fw fft
   
        IF( step .eq. 1 ) THEN
-
-          !$OMP Barrier 
 
           CALL fwfft_x_section_Man( dfft, f_inout2, f_inout3, dfft%nr1w, remswitch, mythread )
 
@@ -1303,16 +1304,10 @@ CONTAINS
 
           CALL SYSTEM_CLOCK( time(8) )
 
-          IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
-
-             !$omp flush( locks_calc_2 )
-             !$  DO WHILE( ANY(locks_calc_2(:,1+current:dfft%batch_size_save+current ) ) )
-             !$omp flush( locks_calc_2 )
-             !$  END DO
-
-          END IF
-
-          !$OMP Barrier 
+          !$omp flush( locks_calc_2 )
+          !$  DO WHILE( ANY(locks_calc_2(:,1+current:dfft%batch_size_save+current ) ) )
+          !$omp flush( locks_calc_2 )
+          !$  END DO
   
           CALL SYSTEM_CLOCK( time(9) )
           dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(9) - time(8) )
@@ -1320,9 +1315,20 @@ CONTAINS
           CALL fwfft_y_section_Man( dfft, f_inout4, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
                                     dfft%map_pcfw, dfft%nr1w, dfft%nsw, batch_size, divparam_1, 1, remswitch, mythread )
 
+          !$OMP Barrier
+          !$  IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
+          !$     locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
+          !$omp flush( locks_calc_fw )
+          !$  END IF
+
        ELSE IF( step .eq. 3 ) THEN
 
           CALL SYSTEM_CLOCK( time(10) )
+
+          !$omp flush( locks_calc_fw )
+          !$  DO WHILE( ANY( locks_calc_fw( :, counter ) ) )
+          !$omp flush( locks_calc_fw )
+          !$  END DO
   
           CALL SYSTEM_CLOCK( time(11) )
           dfft%time_adding( 26 ) = dfft%time_adding( 26 ) + ( time(11) - time(10) )
@@ -1331,12 +1337,18 @@ CONTAINS
                             dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
           CALL SYSTEM_CLOCK( time(17) )
           dfft%time_adding( 29 ) = dfft%time_adding( 29 ) + ( time(17) - time(11) )
+
+          !$  locks_com_fw( counter ) = .false.
+          !$omp flush( locks_com_fw )
   
        ELSE IF( step .eq. 4 ) THEN
   
           CALL SYSTEM_CLOCK( time(12) )
 
-          !$OMP Barrier 
+          !$omp flush( locks_com_fw )
+          !$  DO WHILE( locks_com_fw( counter ) .and. .not. dfft%single_node )
+          !$omp flush( locks_com_fw )
+          !$  END DO
 
           CALL SYSTEM_CLOCK( time(13) )
           dfft%time_adding( 27 ) = dfft%time_adding( 27 ) + ( time(13) - time(12) )
@@ -1344,8 +1356,6 @@ CONTAINS
           CALL fwfft_z_section_Man( dfft, f_inout4(:,work_buffer), f_inout1, 1, batch_size, remswitch, mythread, dfft%nsw )
 
           CALL SYSTEM_CLOCK( time(14) )
-
-          !$OMP Barrier 
 
           IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
              !$  IF( dfft%rsactive ) THEN
@@ -1361,9 +1371,8 @@ CONTAINS
 
           CALL Accumulate_Psi_Man( dfft, f_inout1, f_inout3, dfft%ngms, divparam_1, last, dfft%nsw, f_inout2, mythread )
 
-          CALL SYSTEM_CLOCK( time(15) )
-
           !$OMP Barrier 
+          CALL SYSTEM_CLOCK( time(15) )
   
           dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(15) - time(14) )
  

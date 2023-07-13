@@ -170,7 +170,7 @@
 
      END IF
 
-     !$OMP Barrier
+     !$OMP Barrier !WEG
 !
 !     CALL lookup()
 
