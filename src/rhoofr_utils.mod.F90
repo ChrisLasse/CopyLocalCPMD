@@ -2223,7 +2223,7 @@ CONTAINS
     ENDDO
     locks_sing_1   = .true.
 
-    write(6,*) batch_size, dfft%rem_size
+!    write(6,*) batch_size, dfft%rem_size
 
     CALL MPI_BARRIER(dfft%comm, ierr)
 

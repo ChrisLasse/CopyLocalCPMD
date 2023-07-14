@@ -656,7 +656,7 @@ SUBROUTINE fwfft_z_section_Man( dfft, comm_mem_recv, aux, iset, batch_size, rems
   DO j = 1, dfft%nodes_numb
      DO l = 1, dfft%node_task_size
         offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (iset-1)*batch_size ) * dfft%big_chunks
-        DO k = dfft%thread_z_start( mythread+1, remswitch, dfft%my_node_rank+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%my_node_rank+1 )
+        DO k = dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 )
            kfrom = offset + dfft%nr3px * mod( k-1, ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks
            DO i = 1, dfft%nr3p( (j-1)*dfft%node_task_size + l )
               aux( dfft%nr3p_offset( (j-1)*dfft%node_task_size + l ) + i, k ) = comm_mem_recv( kfrom + i )
@@ -674,8 +674,8 @@ SUBROUTINE fwfft_z_section_Man( dfft, comm_mem_recv, aux, iset, batch_size, rems
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
-  CALL fft_noOMP_1D( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%my_node_rank+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%my_node_rank+1 ) ), &
-                     dfft%thread_z_sticks(:,:,dfft%my_node_rank+1), dfft%nr3, remswitch, mythread, dfft%nthreads, -2 )
+  CALL fft_noOMP_1D( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ), &
+                     dfft%thread_z_sticks(:,:,dfft%mype+1), dfft%nr3, remswitch, mythread, dfft%nthreads, -2 )
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
