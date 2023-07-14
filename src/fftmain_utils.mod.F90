@@ -1299,6 +1299,7 @@ CONTAINS
   
        IF( step .eq. 1 ) THEN
 
+!          !$OMP Barrier !Should be here?
           CALL fwfft_x_section_Man( dfft, f_inout2, f_inout3, dfft%nr1w, remswitch, mythread )
 
        ELSE IF( step .eq. 2 ) THEN
