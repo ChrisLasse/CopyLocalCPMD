@@ -360,7 +360,7 @@ CONTAINS
                clsd%nlsd,redist_c2)
           CALL SYSTEM_CLOCK( time(2) )
           CALL SYSTEM_CLOCK( count_rate = cr )
-!          IF ( ( dfft%timings .or. dfft%timings2 ) .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
+          IF ( ( dfft%timings .or. dfft%timings2 ) .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
 !          IF( .true. .and. .not. tunning_finished .and. dfft%tunning .and. .not. dfft%autotune_finished ) THEN
 !             CALL SYSTEM_CLOCK( time(1) )
 !             CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,nstate)

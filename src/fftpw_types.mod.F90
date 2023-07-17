@@ -112,6 +112,7 @@ MODULE fftpw_types
     INTEGER :: node_task_size = 0
     INTEGER :: nodes_numb = 1
     INTEGER :: nthreads = 1
+    INTEGER :: eff_nthreads = 1
     INTEGER :: window_counter = 0
     LOGICAL :: shared = .false.
     LOGICAL :: single_node = .false.

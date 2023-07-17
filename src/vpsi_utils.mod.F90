@@ -79,6 +79,7 @@ MODULE vpsi_utils
   USE fftpw_base,                      ONLY: dfft,&
                                              wfn_real
   USE fftpw_batching,                  ONLY: Apply_v
+  USE fftpw_batchingManual,            ONLY: locks_omp
   USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
                                              Set_Req_Vals,&
                                              MapVals_CleanUp,&
@@ -2996,6 +2997,8 @@ CONTAINS
 
 
     dfft%nthreads = parai%ncpus
+    dfft%eff_nthreads = parai%ncpus
+    IF( cntl%overlapp_comm_comp .and. dfft%nthreads .gt. 1 ) dfft%eff_nthreads = dfft%eff_nthreads - 1
 
     nbnd_source = nstate
     ngms = dfft%ngw
@@ -3062,6 +3065,9 @@ CONTAINS
 
        CALL create_shared_locks_2d( locks_sing_1  , 24, dfft, dfft%node_task_size, fft_numbatches+3 )
        CALL create_shared_locks_2d( locks_sing_2  , 25, dfft, dfft%node_task_size, fft_numbatches+3 )
+
+       IF( allocated( locks_omp ) ) DEALLOCATE( locks_omp )
+       ALLOCATE( locks_omp( dfft%nthreads, fft_numbatches+3, 20 ) )
   
        dfft%num_buff = buffer_size
        IF( ALLOCATED( batch_aux ) )        DEALLOCATE( batch_aux )
@@ -3092,6 +3098,8 @@ CONTAINS
     END IF
     locks_sing_1   = .true.
     locks_sing_2   = .true.
+    locks_omp   = .true.
+    IF( cntl%overlapp_comm_comp ) locks_omp( 1, :, : ) = .false.
 !    locks_calc_1 = .false.
 
 
@@ -3116,7 +3124,7 @@ CONTAINS
     !Loop over batches
     DO ibatch=1,fft_numbatches+3
        IF(.NOT.rsactive)THEN
-          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
+          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 ) THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              IF(ibatch.LE.fft_numbatches+1)THEN
                 IF(ibatch.LE.fft_numbatches)THEN
@@ -3181,7 +3189,7 @@ CONTAINS
              !$omp flush( locks_sing_1 )
              !$  END DO
           END IF
-          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
+          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 ) THEN
              !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
              !data related to ibatch-1!
 !             IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
@@ -3212,7 +3220,7 @@ CONTAINS
        ! ==------------------------------------------------------------==
        ! == Apply the potential (V), which acts in real space.         ==
 
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 ) THEN
 !          IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
@@ -3317,7 +3325,7 @@ CONTAINS
           !$omp flush( locks_sing_2 )
           !$  END DO
        END IF
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 ) THEN
           !data related to ibatch-2
 !          IF(ibatch.GE.3.AND.ibatch.LE.fft_numbatches+3)THEN
           IF(ibatch.GT.start_loop2.AND.ibatch.LE.end_loop2)THEN
