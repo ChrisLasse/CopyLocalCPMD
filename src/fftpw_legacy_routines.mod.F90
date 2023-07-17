@@ -127,6 +127,7 @@
 !     INTEGER, SAVE :: dims_1d( 2, ndims, 2 ) = -1
 !     INTEGER, SAVE :: icurrent( 2 ) = 1
      LOGICAL :: done( nthreads )
+     LOGICAL, SAVE ::  allo = .false.
  
      !   Pointers to the "C" structures containing FFT factors ( PLAN )
 
@@ -139,40 +140,37 @@
      !
      !   Here initialize table only if necessary
      !
-     IF(.not. allocated( bw_plan_1d ) .and. mythread .eq. 0 ) THEN
-        ALLOCATE( bw_plan_1d( ndims, nthreads ) )
-        ALLOCATE( fw_plan_1d( ndims, nthreads ) )
-        bw_plan_1d = C_NULL_PTR
-        fw_plan_1d = C_NULL_PTR
-        ALLOCATE( dims_1d( 2, ndims, nthreads ) )
-        dims_1d = -1
-        ALLOCATE( icurrent( nthreads ) )
-        icurrent = 1
+     IF( .not. allo ) THEN
+        IF( mythread .eq. 1 .or. nthreads .eq. 1 ) THEN
+           ALLOCATE( bw_plan_1d( ndims, nthreads ) )
+           ALLOCATE( fw_plan_1d( ndims, nthreads ) )
+           bw_plan_1d = C_NULL_PTR
+           fw_plan_1d = C_NULL_PTR
+           ALLOCATE( dims_1d( 2, ndims, nthreads ) )
+           dims_1d = -1
+           ALLOCATE( icurrent( nthreads ) )
+           icurrent = 1
+           allo = .true.
+        ELSE
+           !$omp flush( allo )
+           !$  DO WHILE( .not. allo )
+           !$omp flush( allo )
+           !$  END DO
+        END IF
      END IF
-
-     !$OMP Barrier
 
      done(mythread+1) = .false.
 
      CALL lookup()
-  
 
      IF( .NOT. done(mythread+1) ) THEN!.and. mythread .eq. 0 ) THEN
 
        !   no table exist for these parameters
        !   initialize a new one
-!        !$OMP Barrier
-
-!        IF( mythread .eq. 0 ) THEN
-           
        
        CALL init_plan()
 
      END IF
-
-     !$OMP Barrier !WEG
-!
-!     CALL lookup()
 
      !
      !   Now perform the FFTs using machine specific drivers

@@ -81,6 +81,7 @@ MODULE rhoofr_utils
   USE fftnew_utils,                    ONLY: setfftn
   USE fftpw_base,                      ONLY: dfft,&
                                              wfn_real
+  USE fftpw_batchingManual,            ONLY: locks_omp
   USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
                                              Set_Req_Vals,&
                                              MapVals_CleanUp,&
@@ -2132,6 +2133,8 @@ CONTAINS
 !#endif
 
     dfft%nthreads = parai%ncpus
+    dfft%eff_nthreads = parai%ncpus
+    IF( cntl%overlapp_comm_comp .and. dfft%nthreads .gt. 1 ) dfft%eff_nthreads = dfft%eff_nthreads - 1
 
     nbnd_source = nstate
     ngms = dfft%ngw
@@ -2204,6 +2207,9 @@ CONTAINS
        CALL create_shared_locks_2d( locks_calc_2  , 23, dfft, dfft%node_task_size, nbnd_source + batch_size + (vpsi_mod-1)*batch_size ) !(buffer_size-1)*batch_size )
  
        CALL create_shared_locks_2d( locks_sing_1  , 24, dfft, dfft%node_task_size, fft_numbatches+3 )
+
+       IF( allocated( locks_omp ) ) DEALLOCATE( locks_omp )
+       ALLOCATE( locks_omp( dfft%nthreads, fft_numbatches+3, 20 ) )
  
        dfft%num_buff = buffer_size
 
@@ -2222,6 +2228,8 @@ CONTAINS
        locks_calc_1( : , i ) = .false.
     ENDDO
     locks_sing_1   = .true.
+    locks_omp   = .true.
+    IF( cntl%overlapp_comm_comp ) locks_omp( 1, :, : ) = .false.
 
 !    write(6,*) batch_size, dfft%rem_size
 
@@ -2252,7 +2260,7 @@ CONTAINS
 
     !Loop over batches
     DO ibatch=1,fft_numbatches+2
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           IF(ibatch.LE.fft_numbatches+1)THEN
              IF(ibatch.LE.fft_numbatches)THEN
@@ -2288,7 +2296,7 @@ CONTAINS
              END IF
           END IF
        END IF
-          IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
+       IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           !communication phase
           IF(ibatch.LE.fft_numbatches+1)THEN
@@ -2316,7 +2324,7 @@ CONTAINS
           !$omp flush( locks_sing_1 )
           !$  END DO
        END IF
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 ) THEN
           !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
           IF(ibatch.GT.start_loop.AND.ibatch.LE.end_loop)THEN
              IF (ibatch-start_loop.LE.fft_numbatches)THEN
