@@ -90,7 +90,7 @@ MODULE forces_driver
                                              zclean_k
   USE vpsi_utils,                      ONLY: vpsi,&
                                              vpsi_batchfft,&
-                                             do_the_vpsi_thing,&
+!                                             do_the_vpsi_thing,&
                                              vpsi_pw_batchfft
 !!use rotate_utils, only : rotate_c
 !!use ovlap_utils, only : ovlap_c
