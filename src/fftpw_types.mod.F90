@@ -139,8 +139,10 @@ MODULE fftpw_types
     LOGICAL :: tunning = .false.
     LOGICAL :: overlapp != .false. deprecated
     LOGICAL :: rsactive != .false. deprecated
-    LOGICAL :: timings = .true.
-    LOGICAL :: timings2 = .false.
+    LOGICAL :: fft_extra_timings_general = .false.
+    LOGICAL :: fft_timing = .false.
+!    LOGICAL :: timings = .true.
+!    LOGICAL :: timings2 = .false.
     LOGICAL :: VPSI_4S = .true.
 
     TYPE( MPI_REQUEST ), ALLOCATABLE :: send_handle(:,:)

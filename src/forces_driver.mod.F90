@@ -360,26 +360,7 @@ CONTAINS
                clsd%nlsd,redist_c2)
           CALL SYSTEM_CLOCK( time(2) )
           CALL SYSTEM_CLOCK( count_rate = cr )
-          IF ( ( dfft%timings .or. dfft%timings2 ) .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
-!          IF( .true. .and. .not. tunning_finished .and. dfft%tunning .and. .not. dfft%autotune_finished ) THEN
-!             CALL SYSTEM_CLOCK( time(1) )
-!             CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,nstate)
-!             CALL SYSTEM_CLOCK( time(2) )
-!             CALL SYSTEM_CLOCK( count_rate = cr )
-!             total_time = REAL( time(2)-time(1) ) / REAL( cr )
-!             IF ( ( dfft%timings .or. dfft%timings2 ) .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", total_time
-!             IF( dfft%VPSI_4S ) THEN
-!                CALL autotune_pw_4Svpsi( total_time )
-!             ELSE
-!                CALL autotune_pw_vpsi( total_time , tunning_finished )
-!             END IF
-!          ELSE
-!             CALL SYSTEM_CLOCK( time(1) )
-!             CALL do_the_vpsi_thing(c0_ptr(:,:,ik),c2,rhoe,nstate)
-!             CALL SYSTEM_CLOCK( time(2) )
-!             CALL SYSTEM_CLOCK( count_rate = cr )
-!             IF ( ( dfft%timings .or. dfft%timings2 ) .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
-!          END IF
+          IF ( dfft%fft_timing .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
        ELSE
           CALL vpsi(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,&
                redist_c2)

@@ -3700,6 +3700,18 @@ CONTAINS
                 ELSE
                    cntl%overlapp_comm_comp=.TRUE.
                 ENDIF
+             ELSEIF ( keyword_contains(line,'NEW_FFT_TIMINGS_GENERAL') ) THEN
+                IF ( keyword_contains(line,'ON') ) THEN
+                   dfft%fft_extra_timings_general=.TRUE.
+                ELSE
+                   dfft%fft_extra_timings_general=.FALSE.
+                ENDIF
+             ELSEIF ( keyword_contains(line,'NEW_FFT_TIMING') ) THEN
+                IF ( keyword_contains(line,'ON') ) THEN
+                   dfft%fft_timing=.TRUE.
+                ELSE
+                   dfft%fft_timing=.FALSE.
+                ENDIF
              ELSEIF ( keyword_contains(line,'BLOCKSIZE_USPP') ) THEN
                 READ(iunit,'(A)',iostat=ierr) line
                 CALL readsi(line,1,last,cnti%blocksize_uspp,erread)

@@ -939,7 +939,7 @@ CONTAINS
     INTEGER :: ibatch, current, howmany
     LOGICAL :: last
     INTEGER(INT64) :: auto_time(4)
-    INTEGER(INT64) :: time(17), cr
+    INTEGER(INT64) :: time(29), cr
  
     current = (counter-1)*dfft%batch_size_save
   
@@ -947,7 +947,7 @@ CONTAINS
   
        IF( step .eq. 1 ) THEN
 
-          CALL SYSTEM_CLOCK( time(1) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 
           !$  locks_omp( mythread+1, counter, 1 ) = .false.
           !$omp flush( locks_omp )
@@ -955,15 +955,12 @@ CONTAINS
           !$omp flush( locks_omp )
           !$  END DO
 
-          CALL SYSTEM_CLOCK( time(2) )
-          dfft%time_adding( 22 ) = dfft%time_adding( 22 ) + ( time(2) - time(1) )
-
-          CALL SYSTEM_CLOCK( time(2) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 16 ) = dfft%time_adding( 16 ) + ( time(2) - time(1) )
 
           CALL Prepare_Psi( dfft, f_inout2, f_inout1, dfft%ngms, remswitch, mythread, dfft%nsw, last, priv, ip, jp )
 
-          CALL SYSTEM_CLOCK( time(3) )
-          dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(3) - time(2) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
 
           !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
           !$omp flush( locks_calc_1 )
@@ -971,13 +968,21 @@ CONTAINS
           !$omp flush( locks_calc_1 )
           !$  END DO
 
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 17 ) = dfft%time_adding( 17 ) + ( time(4) - time(3) )
+
           CALL invfft_z_section( dfft, f_inout1, f_inout3(:,work_buffer), f_inout4(:,work_buffer), 1, batch_size, remswitch, mythread, dfft%nsw )
+
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(5) )
 
           !$  locks_omp( mythread+1, counter, 2 ) = .false.
           !$omp flush( locks_omp )
           !$  DO WHILE( ANY( locks_omp( :, counter, 2 ) ) )
           !$omp flush( locks_omp )
           !$  END DO
+
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(6) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 18 ) = dfft%time_adding( 18 ) + ( time(6) - time(5) )
 
           !$  IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
           !$     locks_calc_inv( dfft%my_node_rank+1, counter ) = .false.
@@ -986,35 +991,36 @@ CONTAINS
   
        ELSE IF( step .eq. 2 ) THEN
   
-          CALL SYSTEM_CLOCK( time(4) )
+          IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(7) )
 
           !$omp flush( locks_calc_inv )
           !$  DO WHILE( ANY( locks_calc_inv( :, counter ) ) )
           !$omp flush( locks_calc_inv )
           !$  END DO
 
-          CALL SYSTEM_CLOCK( time(5) )
-          dfft%time_adding( 23 ) = dfft%time_adding( 23 ) + ( time(5) - time(4) )
+          IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(8) )
+          IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 19 ) = dfft%time_adding( 19 ) + ( time(8) - time(7) )
   
           CALL fft_com( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
                             dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
-          CALL SYSTEM_CLOCK( time(16) )
-          dfft%time_adding( 28 ) = dfft%time_adding( 28 ) + ( time(16) - time(5) )
+
+          IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(9) )
+          IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 20 ) = dfft%time_adding( 20 ) + ( time(9) - time(8) )
   
           !$  locks_com_inv( counter ) = .false.
           !$omp flush( locks_com_inv )
   
        ELSE IF( step .eq. 3 ) THEN
   
-          CALL SYSTEM_CLOCK( time(6) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(10) )
 
           !$omp flush( locks_com_inv )
           !$  DO WHILE( locks_com_inv( counter ) .and. .not. dfft%single_node )
           !$omp flush( locks_com_inv )
           !$  END DO
 
-          CALL SYSTEM_CLOCK( time(7) )
-          dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(7) - time(6) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(11) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 21 ) = dfft%time_adding( 21 ) + ( time(11) - time(10) )
 
           CALL invfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
                                      dfft%map_acinv, dfft%map_acinv_rem, dfft%nr1w, divparam_1, counter, remswitch, mythread )
@@ -1033,11 +1039,17 @@ CONTAINS
              END IF
           END IF
 
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(12) )
+
           !$  locks_omp( mythread+1, counter, 3 ) = .false.
           !$omp flush( locks_omp )
           !$  DO WHILE( ANY( locks_omp( :, counter, 3 ) ) )
           !$omp flush( locks_omp )
           !$  END DO
+
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(13) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 22 ) = dfft%time_adding( 22 ) + ( time(13) - time(12) )
+
        END IF
   
     ELSE !! fw fft
@@ -1049,24 +1061,29 @@ CONTAINS
 
        ELSE IF( step .eq. 2 ) THEN
 
-          CALL SYSTEM_CLOCK( time(8) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(14) )
 
           !$omp flush( locks_calc_2 )
           !$  DO WHILE( ANY(locks_calc_2(:,1+current:dfft%batch_size_save+current ) ) )
           !$omp flush( locks_calc_2 )
           !$  END DO
   
-          CALL SYSTEM_CLOCK( time(9) )
-          dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(9) - time(8) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(15) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 23 ) = dfft%time_adding( 23 ) + ( time(15) - time(14) )
   
           CALL fwfft_y_section( dfft, f_inout4, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
                                     dfft%map_pcfw, dfft%nr1w, dfft%nsw, batch_size, divparam_1, counter, remswitch, mythread )
+
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(16) )
 
           !$  locks_omp( mythread+1, counter, 4 ) = .false.
           !$omp flush( locks_omp )
           !$  DO WHILE( ANY( locks_omp( :, counter, 4 ) ) )
           !$omp flush( locks_omp )
           !$  END DO
+  
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(17) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(17) - time(16) )
 
           !$  IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
           !$     locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
@@ -1075,39 +1092,38 @@ CONTAINS
 
        ELSE IF( step .eq. 3 ) THEN
 
-          CALL SYSTEM_CLOCK( time(10) )
+          IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(18) )
 
           !$omp flush( locks_calc_fw )
           !$  DO WHILE( ANY( locks_calc_fw( :, counter ) ) )
           !$omp flush( locks_calc_fw )
           !$  END DO
   
-          CALL SYSTEM_CLOCK( time(11) )
-          dfft%time_adding( 26 ) = dfft%time_adding( 26 ) + ( time(11) - time(10) )
+          IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(19) )
+          IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(19) - time(18) )
      
           CALL fft_com( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
                             dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
-          CALL SYSTEM_CLOCK( time(17) )
-          dfft%time_adding( 29 ) = dfft%time_adding( 29 ) + ( time(17) - time(11) )
+
+          IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(20) )
+          IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 26 ) = dfft%time_adding( 26 ) + ( time(20) - time(19) )
 
           !$  locks_com_fw( counter ) = .false.
           !$omp flush( locks_com_fw )
   
        ELSE IF( step .eq. 4 ) THEN
   
-          CALL SYSTEM_CLOCK( time(12) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(21) )
 
           !$omp flush( locks_com_fw )
           !$  DO WHILE( locks_com_fw( counter ) .and. .not. dfft%single_node )
           !$omp flush( locks_com_fw )
           !$  END DO
 
-          CALL SYSTEM_CLOCK( time(13) )
-          dfft%time_adding( 27 ) = dfft%time_adding( 27 ) + ( time(13) - time(12) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(22) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 27 ) = dfft%time_adding( 27 ) + ( time(22) - time(21) )
   
           CALL fwfft_z_section( dfft, f_inout4(:,work_buffer), f_inout1, counter, batch_size, remswitch, mythread, dfft%nsw )
-
-          CALL SYSTEM_CLOCK( time(14) )
 
           IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
              !$  IF( dfft%rsactive ) THEN
@@ -1119,13 +1135,20 @@ CONTAINS
              !$  END IF
           END IF
 
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(23) )
+
           !$  locks_omp( mythread+1, counter, 5 ) = .false.
           !$omp flush( locks_omp )
           !$  DO WHILE( ANY( locks_omp( :, counter, 5 ) ) )
           !$omp flush( locks_omp )
           !$  END DO
 
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(24) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 28 ) = dfft%time_adding( 28 ) + ( time(24) - time(23) )
+
           CALL Accumulate_Psi( dfft, f_inout1, f_inout3, dfft%ngms, divparam_1, last, dfft%nsw, f_inout2, mythread )
+
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(25) )
 
           !$  locks_omp( mythread+1, counter, 6 ) = .false.
           !$omp flush( locks_omp )
@@ -1133,9 +1156,8 @@ CONTAINS
           !$omp flush( locks_omp )
           !$  END DO
 
-          CALL SYSTEM_CLOCK( time(15) )
-  
-          dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(15) - time(14) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(26) )
+          IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 29 ) = dfft%time_adding( 29 ) + ( time(26) - time(25) )
  
        END IF
   
