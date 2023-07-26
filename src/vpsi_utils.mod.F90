@@ -1839,7 +1839,7 @@ CONTAINS
   
     INTEGER(INT64) :: time(2)
   
-    CALL SYSTEM_CLOCK( time(1) )
+    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
   !------------------------------------------------------
   !-----------Apply V Start------------------------------
   
@@ -1851,9 +1851,8 @@ CONTAINS
   
   !------------Apply V End-------------------------------
   !------------------------------------------------------
-    CALL SYSTEM_CLOCK( time(2) )
-  
-    dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
+    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
   
   END SUBROUTINE Apply_V_4S
 
@@ -1920,6 +1919,8 @@ CONTAINS
     COMPLEX(DP), CONTIGUOUS, SAVE, POINTER :: rs_wave(:,:)
     INTEGER :: ngms, start
     INTEGER, SAVE :: first_dim1, first_dim2, first_dim3
+    REAL(DP) :: timer(29)
+    INTEGER(INT64), SAVE :: cr
 
     INTEGER :: priv(10)
     INTEGER :: ip, jp
@@ -2203,6 +2204,8 @@ CONTAINS
 
 !    write(6,*) "WITHIN VPSI"
 
+    dfft%time_adding=0
+    CALL SYSTEM_CLOCK( count_rate = cr )
     mythread=0
 !    IF(.NOT.rsactive) wfn_r1=>wfn_r(:,1)
     IF(.NOT.rsactive) rs_wave=>batch_aux(:,1:1)
@@ -2438,7 +2441,82 @@ CONTAINS
     !$omp end parallel
 
     CALL SYSTEM_CLOCK( time(2) )
-    dfft%time_adding( 99 ) = time(2) - time(1)
+    dfft%time_adding( 30 ) = time(2) - time(1)
+
+    DO i = 1, 30
+       timer( i ) = REAL( dfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
+    ENDDO
+
+    IF( dfft%fft_extra_timings_general .and. dfft%mype .eq. 0 ) THEN
+
+       WRITE(6,*)" "
+       WRITE(6,*)"Some extra VPSI times"
+       write(6,*)"==================================="
+       write(6,*)"INV FFT before Com"
+       write(6,*)"OMP LOCK 1            ", dfft%my_node_rank, timer(16)
+       write(6,*)"Prepare_psi           ", dfft%my_node_rank, timer(1)
+       write(6,*)"CALC LOCK 1           ", dfft%my_node_rank, timer(17)
+       write(6,*)"INV z_fft             ", dfft%my_node_rank, timer(2)
+       write(6,*)"INV Pre_com_copy      ", dfft%my_node_rank, timer(3)
+       write(6,*)"OMP LOCK 2            ", dfft%my_node_rank, timer(18)
+     
+       write(6,*)"INV FFT before Com sum  ",timer(1)+timer(2)+timer(3)+timer(16)+timer(17)+timer(18)
+       write(6,*)"==================================="
+       write(6,*)"INV FFT after Com"
+       write(6,*)"CALC_COM LOCK 1       ", dfft%my_node_rank, timer(21)
+       write(6,*)"INV After_com_copy    ", dfft%my_node_rank, timer(4)
+       write(6,*)"INV y_fft             ", dfft%my_node_rank, timer(5)
+       write(6,*)"INV xy_scatter        ", dfft%my_node_rank, timer(6)
+       write(6,*)"INV x_fft             ", dfft%my_node_rank, timer(7)
+       write(6,*)"OMP LOCK 3            ", dfft%my_node_rank, timer(22)
+       write(6,*)"Apply V               ", dfft%my_node_rank, timer(8)
+     
+       write(6,*)"INV FFT after Com sum ",  timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(21)+timer(22)
+       write(6,*)"==================================="
+       write(6,*)"FW FFT before Com"
+       write(6,*)"FW x_fft              ", dfft%my_node_rank, timer(9)
+       write(6,*)"FW xy_scatter         ", dfft%my_node_rank, timer(10)
+       write(6,*)"CALC LOCK 2           ", dfft%my_node_rank, timer(23)
+       write(6,*)"FW y_fft              ", dfft%my_node_rank, timer(11)
+       write(6,*)"FW Pre_com_copy       ", dfft%my_node_rank, timer(12)
+       write(6,*)"OMP LOCK 4            ", dfft%my_node_rank, timer(24)
+     
+       write(6,*)"FW FFT before Com sum ",  timer(9)+timer(10)+timer(11)+timer(12)+timer(23)+timer(24)
+!       write(6,*)"INV/APPLY/FW x-y-sections sum ", timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(24)+timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
+       write(6,*)"==================================="
+       write(6,*)"FW FFT after Com"
+       write(6,*)"CALC_COM LOCK 2       ", dfft%my_node_rank, timer(27)
+       write(6,*)"FW After_com_copy     ", dfft%my_node_rank, timer(13)
+       write(6,*)"FW z_fft              ", dfft%my_node_rank, timer(14)
+       write(6,*)"OMP LOCK 5            ", dfft%my_node_rank, timer(28)
+       write(6,*)"Accumulate_Psi        ", dfft%my_node_rank, timer(15)
+       write(6,*)"OMP LOCK 6            ", dfft%my_node_rank, timer(29)
+     
+       write(6,*)"FW FFT after Com sum",  timer(13)+timer(14)+timer(15)+timer(27)+timer(28)+timer(29)
+       write(6,*)"==================================="
+       write(6,*)"COM LOCK 1            ", dfft%my_node_rank, timer(19)
+       write(6,*)"FIRST COMM TIMES:     ", dfft%my_node_rank, timer(20)
+       write(6,*)"COM LOCK 2            ", dfft%my_node_rank, timer(25)
+       write(6,*)"SECOND COMM TIMES:    ", dfft%my_node_rank, timer(26)
+       write(6,*)"==================================="
+       write(6,*)"Adding up CALC:       ", dfft%my_node_rank, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+                                                              timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
+                                                              timer(13)+timer(14)+timer(15)+timer(16)+timer(17)+&
+                                                              timer(18)+timer(21)+timer(22)+timer(23)+timer(24)+&
+                                                              timer(27)+timer(28)+timer(29)
+       write(6,*)"Adding up COMM:       ", dfft%my_node_rank, timer(19)+timer(20)+timer(25)+timer(26)
+!       write(6,*)"VPSI ADD Control:     ", dfft%my_node_rank, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+!                               timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
+!                               timer(13)+timer(14)+timer(15)+timer(16)+timer(17)+timer(18)+timer(19)+timer(20)+&
+!                               timer(21)+timer(22)+timer(23)+timer(24)+timer(25)+timer(26)+timer(27)+timer(28)+timer(29)
+!       write(6,*)"VPSI WITHOUT Control: ", dfft%my_node_rank, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+!                               timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
+!                               timer(13)+timer(14)+timer(15)+timer(16)+timer(17)+timer(18)+timer(19)+timer(20)+&
+!                               timer(22)+timer(23)+timer(24)+timer(25)+timer(26)+timer(28)+timer(29)
+!       write(6,*)"VPSI Direct Control:  ", dfft%my_node_rank, timer(30)
+       WRITE(6,*)" "
+
+    END IF
 
     IF(cntl%fft_tune_batchsize) fft_time_total(fft_tune_num_it)=fft_time_total(fft_tune_num_it)+m_walltime()-temp_time
 

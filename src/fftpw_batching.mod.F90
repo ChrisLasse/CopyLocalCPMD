@@ -44,7 +44,7 @@ SUBROUTINE Prepare_Psi( dfft, psi, aux, ngms, remswitch, mythread, ns, last, pri
 
   INTEGER(INT64) :: time(2), cr
 
-  CALL SYSTEM_CLOCK( time(1) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !----------Prepare_Psi Start---------------------------
 
@@ -77,9 +77,9 @@ SUBROUTINE Prepare_Psi( dfft, psi, aux, ngms, remswitch, mythread, ns, last, pri
 
 !----------Prepare_Psi End-----------------------------
 !------------------------------------------------------
-  CALL SYSTEM_CLOCK( time(2) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(2) - time(1) )
 
-  dfft%time_adding( 1 ) = dfft%time_adding( 1 ) + ( time(2) - time(1) )
 !  CALL SYSTEM_CLOCK( count_rate = cr )
 !  write(6,*) "ACTUAL", REAL( dfft%time_adding( 1 ) / REAL( cr ) )
 
@@ -181,7 +181,7 @@ SUBROUTINE Accumulate_Psi( dfft, aux, hpsi, ngms, z_group_size, last, ns, psi, m
 
   INTEGER(INT64) :: time(2)
 
-  CALL SYSTEM_CLOCK( time(1) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !--------Accumulate_Psi Start--------------------------
    
@@ -204,9 +204,8 @@ SUBROUTINE Accumulate_Psi( dfft, aux, hpsi, ngms, z_group_size, last, ns, psi, m
 
 !---------Accumulate_Psi End---------------------------
 !------------------------------------------------------
-  CALL SYSTEM_CLOCK( time(2) )
-
-  dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(2) - time(1) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(2) - time(1) )
 
 END SUBROUTINE Accumulate_Psi
 
@@ -224,7 +223,7 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batc
 
   INTEGER(INT64) :: time(3)
 
-  CALL SYSTEM_CLOCK( time(1) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
@@ -233,7 +232,7 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batc
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
-  CALL SYSTEM_CLOCK( time(2) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
 !------------------------------------------------------
 !---------Pre-Com-Copy Start---------------------------
 
@@ -280,11 +279,9 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batc
 
 !----------Pre-Com-Copy End----------------------------
 !------------------------------------------------------
-  CALL SYSTEM_CLOCK( time(3) )
-
-  dfft%time_adding( 2 ) = dfft%time_adding( 2 ) + ( time(2) - time(1) )
-  dfft%time_adding( 3 ) = dfft%time_adding( 3 ) + ( time(3) - time(2) )
-  dfft%counter(2) = dfft%counter(2) + 1
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 2 ) = dfft%time_adding( 2 ) + ( time(2) - time(1) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 3 ) = dfft%time_adding( 3 ) + ( time(3) - time(2) )
 
 END SUBROUTINE invfft_z_section 
 
@@ -322,7 +319,7 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
       COMPLEX(DP), INTENT(INOUT) :: aux2( dfft%nr2 , * ) !nr1s(dfft%mype2+1) * dfft%my_nr3p *  y_group_size )
 
 
-        CALL SYSTEM_CLOCK( time(1) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
       !------------------------------------------------------
       !--------After-Com-Copy Start--------------------------
       
@@ -366,7 +363,7 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
       
       !---------After-Com-Copy End---------------------------
       !------------------------------------------------------
-        CALL SYSTEM_CLOCK( time(2) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
       !------------------------------------------------------
       !------------y-FFT Start-------------------------------
       
@@ -374,10 +371,9 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
       
       !-------------y-FFT End--------------------------------
       !------------------------------------------------------
-        CALL SYSTEM_CLOCK( time(3) )
-
-        dfft%time_adding( 4 ) = dfft%time_adding( 4 ) + ( time(2) - time(1) )
-        dfft%time_adding( 5 ) = dfft%time_adding( 5 ) + ( time(3) - time(2) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 4 ) = dfft%time_adding( 4 ) + ( time(2) - time(1) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 5 ) = dfft%time_adding( 5 ) + ( time(3) - time(2) )
 
     END SUBROUTINE First_Part_y_section
 
@@ -385,7 +381,8 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
 
       IMPLICIT NONE
       COMPLEX(DP), INTENT(INOUT) :: aux2  ( dfft%my_nr1p * dfft%my_nr3p * dfft%nr2, * ) !y_group_size
-        CALL SYSTEM_CLOCK( time(4) )
+
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
       !------------------------------------------------------
       !-------------yx-scatter-------------------------------
       
@@ -405,9 +402,8 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
       
       !-------------yx-scatter-------------------------------
       !------------------------------------------------------
-        CALL SYSTEM_CLOCK( time(5) )
-      
-        dfft%time_adding( 6 ) = dfft%time_adding( 6 ) + ( time(5) - time(4) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(5) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 6 ) = dfft%time_adding( 6 ) + ( time(5) - time(4) )
 
     END SUBROUTINE Second_Part_y_section
 
@@ -422,7 +418,7 @@ SUBROUTINE invfft_x_section( dfft, aux, remswitch, mythread )
 
   INTEGER(INT64) :: time(2)
 
-  CALL SYSTEM_CLOCK( time(1) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
@@ -430,9 +426,8 @@ SUBROUTINE invfft_x_section( dfft, aux, remswitch, mythread )
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
-  CALL SYSTEM_CLOCK( time(2) )
-
-  dfft%time_adding( 7 ) = dfft%time_adding( 7 ) + ( time(2) - time(1) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 7 ) = dfft%time_adding( 7 ) + ( time(2) - time(1) )
 
 END SUBROUTINE invfft_x_section
 
@@ -467,7 +462,7 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythrea
       COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr1 , * ) !dfft%my_nr3p * dfft%nr2 * x_group_size )
 
 
-        CALL SYSTEM_CLOCK( time(1) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
       !------------------------------------------------------
       !------------x-FFT Start-------------------------------
       
@@ -481,9 +476,8 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythrea
       
       !-------------x-FFT End--------------------------------
       !------------------------------------------------------
-        CALL SYSTEM_CLOCK( time(2) )
-
-        dfft%time_adding( 9 ) = dfft%time_adding( 9 ) + ( time(2) - time(1) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 9 ) = dfft%time_adding( 9 ) + ( time(2) - time(1) )
 
     END SUBROUTINE First_Part_x_section
 
@@ -492,7 +486,7 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythrea
       IMPLICIT NONE
       COMPLEX(DP), INTENT(INOUT)  :: aux( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size )
 
-        CALL SYSTEM_CLOCK( time(3) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
       !------------------------------------------------------
       !------Forward xy-scatter Start------------------------
       
@@ -506,9 +500,8 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythrea
       
       !-------Forward xy-scatter End-------------------------
       !------------------------------------------------------
-        CALL SYSTEM_CLOCK( time(4) )
-      
-        dfft%time_adding( 10 ) = dfft%time_adding( 10 ) + ( time(4) - time(3) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 10 ) = dfft%time_adding( 10 ) + ( time(4) - time(3) )
 
     END SUBROUTINE Second_Part_x_section
 
@@ -547,7 +540,7 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
       Implicit NONE
       COMPLEX(DP), INTENT(INOUT) :: aux2( dfft%nr2 , * ) !nr1s(dfft%mype2+1) * dfft%my_nr3p *  y_group_size )
 
-        CALL SYSTEM_CLOCK( time(1) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
       !------------------------------------------------------
       !------------y-FFT Start-------------------------------
       
@@ -555,9 +548,8 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
       
       !-------------y-FFT End--------------------------------
       !------------------------------------------------------
-        CALL SYSTEM_CLOCK( time(2) )
-
-        dfft%time_adding( 11 ) = dfft%time_adding( 11 ) + ( time(2) - time(1) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 11 ) = dfft%time_adding( 11 ) + ( time(2) - time(1) )
 
     END SUBROUTINE First_Part_y_section
 
@@ -566,7 +558,7 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
       IMPLICIT NONE
       COMPLEX(DP), INTENT(INOUT) :: aux2  ( dfft%my_nr1p * dfft%my_nr3p * dfft%nr2, * ) !y_group_size
 
-        CALL SYSTEM_CLOCK( time(3) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
 
       !------------------------------------------------------
       !---------Pre-Com-Copy Start---------------------------
@@ -638,9 +630,8 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
       
       !----------Pre-Com-Copy End----------------------------
       !------------------------------------------------------
-        CALL SYSTEM_CLOCK( time(4) )
-      
-        dfft%time_adding( 12 ) = dfft%time_adding( 12 ) + ( time(4) - time(3) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 12 ) = dfft%time_adding( 12 ) + ( time(4) - time(3) )
 
     END SUBROUTINE Second_Part_y_section
       
@@ -660,7 +651,7 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remsw
 
   INTEGER(INT64) :: time(3)
 
-  CALL SYSTEM_CLOCK( time(1) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
 !--------After-Com-Copy Start--------------------------
 
@@ -682,7 +673,7 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remsw
 
 !---------After-Com-Copy End---------------------------
 !------------------------------------------------------
-  CALL SYSTEM_CLOCK( time(2) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
@@ -697,10 +688,9 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remsw
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
-  CALL SYSTEM_CLOCK( time(3) )
-
-  dfft%time_adding( 13 ) = dfft%time_adding( 13 ) + ( time(2) - time(1) )
-  dfft%time_adding( 14 ) = dfft%time_adding( 14 ) + ( time(3) - time(2) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 13 ) = dfft%time_adding( 13 ) + ( time(2) - time(1) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 14 ) = dfft%time_adding( 14 ) + ( time(3) - time(2) )
 
 END SUBROUTINE fwfft_z_section
 
