@@ -462,7 +462,6 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythrea
       COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr1 , * ) !dfft%my_nr3p * dfft%nr2 * x_group_size )
 
 
-        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
       !------------------------------------------------------
       !------------x-FFT Start-------------------------------
       
@@ -471,6 +470,8 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythrea
         !$  DO WHILE( ANY( locks_omp( :, counter, 9 ) ) )
         !$omp flush( locks_omp )
         !$  END DO
+
+        IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 
         CALL fft_noOMP_1D( aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ), dfft%thread_x_sticks, dfft%nr1, remswitch, mythread, dfft%nthreads, -2 )
       
@@ -683,14 +684,16 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remsw
   !$omp flush( locks_omp )
   !$  END DO
 
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+
   CALL fft_noOMP_1D( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ), &
                      dfft%thread_z_sticks(:,:,dfft%mype+1), dfft%nr3, remswitch, mythread, dfft%nthreads, -2 )
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
-  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 13 ) = dfft%time_adding( 13 ) + ( time(2) - time(1) )
-  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 14 ) = dfft%time_adding( 14 ) + ( time(3) - time(2) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 14 ) = dfft%time_adding( 14 ) + ( time(4) - time(3) )
 
 END SUBROUTINE fwfft_z_section
 

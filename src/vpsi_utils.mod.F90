@@ -2486,7 +2486,7 @@ CONTAINS
 !                               timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
 !                               timer(13)+timer(14)+timer(15)+timer(16)+timer(17)+timer(18)+timer(19)+timer(20)+&
 !                               timer(22)+timer(23)+timer(24)+timer(25)+timer(26)+timer(28)+timer(29)
-!       write(6,*)"VPSI Direct Control:  ", dfft%my_node_rank, timer(30)
+       write(6,*)"VPSI Direct Control:  ", dfft%my_node_rank, timer(30)
        WRITE(6,*)" "
 
     END IF
