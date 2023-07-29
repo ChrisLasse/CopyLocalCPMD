@@ -507,11 +507,11 @@ SUBROUTINE MapVals_CleanUp( dfft )
 
 END SUBROUTINE MapVals_CleanUp
 
-SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, inter_node_comm, nodes_numb, inter_me, buffer_size, send_handle, recv_handle, send_handle_rem, recv_handle_rem )
+SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, comm, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size, send_handle, recv_handle, send_handle_rem, recv_handle_rem )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN)                            :: sendsize, sendsize_rem, nodes_numb, inter_me, buffer_size
-  TYPE(MPI_COMM), INTENT(IN)                     :: inter_node_comm
+  INTEGER, INTENT(IN)                            :: sendsize, sendsize_rem, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size
+  TYPE(MPI_COMM), INTENT(IN)                     :: comm
   COMPLEX(DP), INTENT(IN)                        :: comm_send( : , : )
   COMPLEX(DP), INTENT(INOUT)                     :: comm_recv( : , : )
   TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)               :: send_handle( : , : )
@@ -521,7 +521,8 @@ SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, inter_nod
 
   INTEGER, SAVE :: sendsize_save = 0
   LOGICAL, SAVE :: first = .true.
-  INTEGER :: ierr, i, f, j, k
+  INTEGER :: ierr, i, f, j, k, rank_offset
+  INTEGER, ALLOCATABLE :: task_sendsize(:)
   INTEGER, SAVE :: buffer_size_save
 
   IF( first ) THEN
@@ -553,17 +554,29 @@ SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, inter_nod
   ALLOCATE( send_handle_rem( nodes_numb-1, buffer_size ) )
   ALLOCATE( recv_handle_rem( nodes_numb-1, buffer_size ) )
 
+  IF( ALLOCATED( task_sendsize ) ) DEALLOCATE( task_sendsize )
+  ALLOCATE( task_sendsize( node_task_size ) )
+
+  task_sendsize = sendsize / node_task_size
+  DO i = 1, mod( sendsize, node_task_size ) 
+     task_sendsize(i) = task_sendsize(i) + 1
+  ENDDO
+  rank_offset = 0
+  DO i = 1, my_node_rank
+     rank_offset = rank_offset + task_sendsize( i )
+  ENDDO
+
   DO k = 1, buffer_size !INITIALIZE SENDING AND RECEIVING
 
      f = 0
      DO i = 1, nodes_numb
      
-        IF( i-1 .eq. inter_me ) CYCLE
+        IF( i-1 .eq. my_node ) CYCLE
         f = f + 1
-        CALL MPI_SEND_INIT( comm_send( 1 + (i-1)*sendsize, k ), sendsize, MPI_DOUBLE_COMPLEX, i-1, &
-                        inter_me, inter_node_comm, send_handle( f , k ), ierr )
-        CALL MPI_RECV_INIT( comm_recv( 1 + (i-1)*sendsize, k ), sendsize, MPI_DOUBLE_COMPLEX, i-1, &
-                        MPI_ANY_TAG, inter_node_comm, recv_handle( f , k ), ierr )
+        CALL MPI_SEND_INIT( comm_send( 1 + rank_offset + (i-1)*sendsize, k ), task_sendsize( my_node_rank+1 ), MPI_DOUBLE_COMPLEX, (i-1)*node_task_size+my_node_rank, &
+                            mype, comm, send_handle( f , k ), ierr )
+        CALL MPI_RECV_INIT( comm_recv( 1 + rank_offset + (i-1)*sendsize, k ), task_sendsize( my_node_rank+1 ), MPI_DOUBLE_COMPLEX, (i-1)*node_task_size+my_node_rank, &
+                            MPI_ANY_TAG, comm, recv_handle( f , k ), ierr )
      
      ENDDO
 
@@ -571,17 +584,29 @@ SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, inter_nod
 
   IF( sendsize_rem .ne. 0 ) THEN
 
+     IF( ALLOCATED( task_sendsize ) ) DEALLOCATE( task_sendsize )
+     ALLOCATE( task_sendsize( node_task_size ) )
+   
+     task_sendsize = sendsize_rem / node_task_size
+     DO i = 1, mod( sendsize_rem, node_task_size ) 
+        task_sendsize(i) = task_sendsize(i) + 1
+     ENDDO
+     rank_offset = 0
+     DO i = 1, my_node_rank
+        rank_offset = rank_offset + task_sendsize( i )
+     ENDDO
+
      DO k = 1, buffer_size !INITIALIZE SENDING AND RECEIVING
    
         f = 0
         DO i = 1, nodes_numb
         
-           IF( i-1 .eq. inter_me ) CYCLE
+           IF( i-1 .eq. my_node ) CYCLE
            f = f + 1
-           CALL MPI_SEND_INIT( comm_send( 1 + (i-1)*sendsize_rem, k ), sendsize_rem, MPI_DOUBLE_COMPLEX, i-1, &
-                           inter_me, inter_node_comm, send_handle_rem( f , k ), ierr )
-           CALL MPI_RECV_INIT( comm_recv( 1 + (i-1)*sendsize_rem, k ), sendsize_rem, MPI_DOUBLE_COMPLEX, i-1, &
-                           MPI_ANY_TAG, inter_node_comm, recv_handle_rem( f , k ), ierr )
+           CALL MPI_SEND_INIT( comm_send( 1 + rank_offset + (i-1)*sendsize_rem, k ), task_sendsize( my_node_rank+1 ), MPI_DOUBLE_COMPLEX, (i-1)*node_task_size+my_node_rank, &
+                               mype, comm, send_handle_rem( f , k ), ierr )
+           CALL MPI_RECV_INIT( comm_recv( 1 + rank_offset + (i-1)*sendsize_rem, k ), task_sendsize( my_node_rank+1 ), MPI_DOUBLE_COMPLEX, (i-1)*node_task_size+my_node_rank, &
+                               MPI_ANY_TAG, comm, recv_handle_rem( f , k ), ierr )
         
         ENDDO
    

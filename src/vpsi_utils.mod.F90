@@ -2148,14 +2148,17 @@ CONTAINS
        CALL create_shared_memory_window_2d( comm_send, 1, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
        CALL create_shared_memory_window_2d( comm_recv, 2, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
     
-       IF( dfft%non_blocking .and. dfft%my_node_rank .eq. 0 ) CALL Prep_fft_com( comm_send, comm_recv, dfft%sendsize, sendsize_rem, &
-                                                                                 dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, buffer_size, &
-                                                                                 dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem )
+!       IF( dfft%non_blocking .and. dfft%my_node_rank .eq. 0 ) CALL Prep_fft_com( comm_send, comm_recv, dfft%sendsize, sendsize_rem, &
+!                                                                                 dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, buffer_size, &
+!                                                                                 dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem )
+       IF( dfft%non_blocking ) CALL Prep_fft_com( comm_send, comm_recv, dfft%sendsize, sendsize_rem, &
+                                                  dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, dfft%node_task_size, buffer_size, &
+                                                  dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem )
  
        CALL create_shared_locks_2d( locks_calc_inv, 20, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
        CALL create_shared_locks_2d( locks_calc_fw,  21, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
-       CALL create_shared_locks_1d( locks_com_inv,  50, dfft, ( nbnd_source / batch_size ) + 1 )
-       CALL create_shared_locks_1d( locks_com_fw,   51, dfft, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_2d( locks_com_inv,  50, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
+       CALL create_shared_locks_2d( locks_com_fw,   51, dfft, dfft%node_task_size, ( nbnd_source / batch_size ) + 1 )
        
        CALL create_shared_locks_2d( locks_calc_1  , 22, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
        CALL create_shared_locks_2d( locks_calc_2  , 23, dfft, dfft%node_task_size, nbnd_source + batch_size + (buffer_size-1)*batch_size )
@@ -2259,7 +2262,7 @@ CONTAINS
                 END IF
              END IF
           END IF
-          IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
+          IF( .not. dfft%single_node .and. mythread .eq. 0 ) THEN ! .and. dfft%my_node_rank .eq. 0 ) THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              !communication phase
              IF(ibatch.LE.fft_numbatches+1)THEN
@@ -2386,7 +2389,7 @@ CONTAINS
              END IF
           END IF
        END IF
-       IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%my_node_rank .eq. 0 ) THEN
+       IF( .not. dfft%single_node .and. mythread .eq. 0 ) THEN !.and. dfft%my_node_rank .eq. 0 ) THEN
 !       IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
