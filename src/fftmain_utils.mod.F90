@@ -103,9 +103,9 @@ MODULE fftmain_utils
   COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: comm_send(:,:)
   COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: comm_recv(:,:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_inv(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_inv(:)
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_inv(:,:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_fw(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_fw(:)
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_fw(:,:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_1(:,:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_2(:,:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_sing_1(:,:)
@@ -1001,13 +1001,14 @@ CONTAINS
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(8) )
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 19 ) = dfft%time_adding( 19 ) + ( time(8) - time(7) )
   
-          CALL fft_com( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
-                            dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
+!          CALL fft_com( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
+!                            dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
+          CALL fft_com( dfft, dfft%sendsize, dfft%nodes_numb, work_buffer )
 
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(9) )
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 20 ) = dfft%time_adding( 20 ) + ( time(9) - time(8) )
   
-          !$  locks_com_inv( counter ) = .false.
+          !$  locks_com_inv( dfft%my_node_rank+1, counter ) = .false.
           !$omp flush( locks_com_inv )
   
        ELSE IF( step .eq. 3 ) THEN
@@ -1015,7 +1016,7 @@ CONTAINS
           IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(10) )
 
           !$omp flush( locks_com_inv )
-          !$  DO WHILE( locks_com_inv( counter ) .and. .not. dfft%single_node )
+          !$  DO WHILE( ANY( locks_com_inv( :, counter ) ) .and. .not. dfft%single_node )
           !$omp flush( locks_com_inv )
           !$  END DO
 
@@ -1102,13 +1103,14 @@ CONTAINS
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(19) )
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(19) - time(18) )
      
-          CALL fft_com( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
-                            dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
+!          CALL fft_com( dfft, f_inout2(:,work_buffer), f_inout3(:,work_buffer), dfft%sendsize, dfft%my_node_rank, &
+!                            dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking, work_buffer )
+          CALL fft_com( dfft, dfft%sendsize, dfft%nodes_numb, work_buffer )
 
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(20) )
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 26 ) = dfft%time_adding( 26 ) + ( time(20) - time(19) )
 
-          !$  locks_com_fw( counter ) = .false.
+          !$  locks_com_fw( dfft%my_node_rank+1, counter ) = .false.
           !$omp flush( locks_com_fw )
   
        ELSE IF( step .eq. 4 ) THEN
@@ -1116,7 +1118,7 @@ CONTAINS
           IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(21) )
 
           !$omp flush( locks_com_fw )
-          !$  DO WHILE( locks_com_fw( counter ) .and. .not. dfft%single_node )
+          !$  DO WHILE( ANY( locks_com_fw( :, counter ) ) .and. .not. dfft%single_node )
           !$omp flush( locks_com_fw )
           !$  END DO
 
