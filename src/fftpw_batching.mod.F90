@@ -98,19 +98,19 @@ SUBROUTINE fft_com( dfft, sendsize, nodes_numb, work_buffer )
 
   IF( sendsize .eq. dfft%sendsize_save ) THEN
   
-     CALL MPI_STARTALL( nodes_numb-1, dfft%send_handle(:,work_buffer) )
-     CALL MPI_STARTALL( nodes_numb-1, dfft%recv_handle(:,work_buffer) )
+     CALL MPI_STARTALL( dfft%comm_sendrecv(1), dfft%send_handle(:,work_buffer) )
+     CALL MPI_STARTALL( dfft%comm_sendrecv(2), dfft%recv_handle(:,work_buffer) )
   
-     CALL MPI_WAITALL( nodes_numb-1, dfft%send_handle(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
-     CALL MPI_WAITALL( nodes_numb-1, dfft%recv_handle(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
+     CALL MPI_WAITALL( dfft%comm_sendrecv(1), dfft%send_handle(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
+     CALL MPI_WAITALL( dfft%comm_sendrecv(2), dfft%recv_handle(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
   
   ELSE
   
-     CALL MPI_STARTALL( nodes_numb-1, dfft%send_handle_rem(:,work_buffer) )
-     CALL MPI_STARTALL( nodes_numb-1, dfft%recv_handle_rem(:,work_buffer) )
+     CALL MPI_STARTALL( dfft%comm_sendrecv(1), dfft%send_handle_rem(:,work_buffer) )
+     CALL MPI_STARTALL( dfft%comm_sendrecv(2), dfft%recv_handle_rem(:,work_buffer) )
   
-     CALL MPI_WAITALL( nodes_numb-1, dfft%send_handle_rem(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
-     CALL MPI_WAITALL( nodes_numb-1, dfft%recv_handle_rem(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
+     CALL MPI_WAITALL( dfft%comm_sendrecv(1), dfft%send_handle_rem(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
+     CALL MPI_WAITALL( dfft%comm_sendrecv(2), dfft%recv_handle_rem(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
   
   END IF
 
