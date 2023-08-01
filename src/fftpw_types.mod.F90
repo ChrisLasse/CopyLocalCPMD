@@ -145,6 +145,8 @@ MODULE fftpw_types
 !    LOGICAL :: timings2 = .false.
     LOGICAL :: VPSI_4S = .true.
 
+    LOGICAL :: do_comm
+    INTEGER, ALLOCATABLE :: comm_sendrecv(:)
     TYPE( MPI_REQUEST ), ALLOCATABLE :: send_handle(:,:)
     TYPE( MPI_REQUEST ), ALLOCATABLE :: recv_handle(:,:)
     TYPE( MPI_REQUEST ), ALLOCATABLE :: send_handle_rem(:,:)
