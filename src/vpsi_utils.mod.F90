@@ -71,17 +71,18 @@ MODULE vpsi_utils
                                              locks_calc_2,&
                                              locks_sing_1,&
                                              locks_sing_2,&
-                                             invfft_4S,&
-                                             fwfft_4S
+                                             invfft_batch,&
+                                             fwfft_batch
   USE fftnew_utils,                    ONLY: setfftn
   USE fftpw_base,                      ONLY: dfft,&
                                              wfn_real
-  USE fftpw_batching,                  ONLY: locks_omp
-  USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
-                                             Set_Req_Vals,&
+  USE fftpw_batching,                  ONLY: locks_omp,&
+                                             Prepare_Psi,&
+                                             Accumulate_Psi
+  USE fftpw_make_maps,                 ONLY: Prep_pwFFT_Maps,&
+                                             Set_pwFFT_Vals,&
                                              MapVals_CleanUp,&
                                              Prep_fft_com,&
-                                             GIMME_GROUP_SIZES,&
                                              Make_Manual_Maps
   USE fftpw_param,                     ONLY: DP
   USE fftpw_types,                     ONLY: create_shared_memory_window_2d,&
@@ -1801,7 +1802,7 @@ CONTAINS
     !$omp end parallel
   END SUBROUTINE calc_c2
 
-  SUBROUTINE Apply_V_4S( f, v, batch_size, mythread )
+  SUBROUTINE Apply_V( f, v, batch_size, mythread )
     IMPLICIT NONE
   
     COMPLEX(DP), INTENT(INOUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size
@@ -1827,7 +1828,7 @@ CONTAINS
     IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
     IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
   
-  END SUBROUTINE Apply_V_4S
+  END SUBROUTINE Apply_V
 
   ! ==================================================================
   SUBROUTINE vpsi_pw_batchfft(c0,c2,f,vpot,psi,nstate,ikind,ispin,redist_c2)
@@ -1859,7 +1860,7 @@ CONTAINS
     INTEGER                                  :: nstate, ikind, ispin
     LOGICAL                                  :: redist_c2
     LOGICAL                                  :: lg_vpotx3a, lg_vpotx3b
-    CHARACTER(*), PARAMETER                  :: procedureN = 'vpsi_batchfft'
+    CHARACTER(*), PARAMETER                  :: procedureN = 'vpsi_pw_batchfft'
     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
 
     COMPLEX(real_8)                          :: fm, fp, psii, psin
@@ -2105,11 +2106,11 @@ CONTAINS
        dfft%remember_buffer_vpsi = buffer_size
        CALL Clean_up_shared( dfft, 1 ) 
 
-       CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size, dfft%ir1w, dfft%nsw )
+       CALL Set_pwFFT_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size, dfft%ir1w, dfft%nsw )
 
        dfft%rem_size = fft_residual
 
-       CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
+       CALL Prep_pwFFT_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
   
        dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
        sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
@@ -2118,9 +2119,6 @@ CONTAINS
        CALL create_shared_memory_window_2d( comm_send, 1, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
        CALL create_shared_memory_window_2d( comm_recv, 2, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
     
-!       IF( dfft%non_blocking .and. dfft%my_node_rank .eq. 0 ) CALL Prep_fft_com( comm_send, comm_recv, dfft%sendsize, sendsize_rem, &
-!                                                                                 dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, buffer_size, &
-!                                                                                 dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem )
        IF( dfft%non_blocking ) CALL Prep_fft_com( comm_send, comm_recv, dfft%sendsize, sendsize_rem, &
                                                   dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, dfft%node_task_size, buffer_size, &
                                                   dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem, dfft%comm_sendrecv, dfft%do_comm )
@@ -2216,27 +2214,27 @@ CONTAINS
                    remswitch = 2
                 END IF
                 IF(bsize.NE.0)THEN
+                   counter(1) = counter(1) + 1
                    ! Loop over the electronic states of this batch
-!                   CALL set_psi_batch_g(c0,wfn_g,int(il_wfng(1)),i_start1,bsize,nstate,me_grp,n_grp)
-!                   ! ==--------------------------------------------------------------==
-!                   ! ==  Fourier transform the wave functions to real space.         ==
-!                   ! ==  In the array PSI was used also the fact that the wave       ==
-!                   ! ==  functions at Gamma are real, to form a complex array (PSI)  ==
-!                   ! ==  with the wave functions corresponding to two different      ==
-!                   ! ==  states (i and i+1) as the real and imaginary part. This     ==
-!                   ! ==  allows to call the FFT routine 1/2 of the times and save    ==
-!                   ! ==  time.                                                       ==
-!                   ! ==  Here we operate on a batch of states, containing njump*bsize==
-!                   ! ==  states. To achive better overlapping of the communication   ==
-!                   ! ==  and communication phase, we operate on two batches at once  ==
-!                   ! ==  ist revers to the current batch (rsactive) or is identical  ==
-!                   ! ==  to swap                                                     ==
-!                   ! ==--------------------------------------------------------------==
+                   CALL Prepare_Psi( dfft, c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), dfft%aux_array, remswitch, mythread, dfft%nsw )
+                   ! ==--------------------------------------------------------------==
+                   ! ==  Fourier transform the wave functions to real space.         ==
+                   ! ==  In the array PSI was used also the fact that the wave       ==
+                   ! ==  functions at Gamma are real, to form a complex array (PSI)  ==
+                   ! ==  with the wave functions corresponding to two different      ==
+                   ! ==  states (i and i+1) as the real and imaginary part. This     ==
+                   ! ==  allows to call the FFT routine 1/2 of the times and save    ==
+                   ! ==  time.                                                       ==
+                   ! ==  Here we operate on a batch of states, containing njump*bsize==
+                   ! ==  states. To achive better overlapping of the communication   ==
+                   ! ==  and communication phase, we operate on two batches at once  ==
+                   ! ==  ist revers to the current batch (rsactive) or is identical  ==
+                   ! ==  to swap                                                     ==
+                   ! ==--------------------------------------------------------------==
                    swap=mod(ibatch,int_mod)+1
 
-                   counter(1) = counter(1) + 1
-                   CALL invfft_4S( dfft, 1, bsize, bsize, remswitch, mythread, counter(1), swap, first_dim3, priv, dfft%aux_array, &
-                                   c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), comm_send, comm_recv, ip, jp ) 
+                   CALL invfft_batch( dfft, 1, bsize, remswitch, mythread, counter(1), swap, first_dim3, dfft%aux_array, &
+                                   c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), comm_send, comm_recv ) 
                    i_start1=i_start1+bsize*njump
                 END IF
              END IF
@@ -2255,7 +2253,7 @@ CONTAINS
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch,int_mod)+1
                    counter(2) = counter(2) + 1
-                   CALL invfft_4S( dfft, 2, bsize, 0, 0, mythread, counter(2), swap, 0, priv, f_inout2=comm_send, f_inout3=comm_recv )
+                   CALL invfft_batch( dfft, 2, bsize, 0, mythread, counter(2), swap, 0 )
                 END IF
              END IF
           END IF
@@ -2285,9 +2283,9 @@ CONTAINS
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop1,int_mod)+1
                    counter(3) = counter(3) + 1
-                   CALL invfft_4S( dfft, 3, bsize, bsize, remswitch, mythread, counter(3), swap, first_dim1, priv, &
+                   CALL invfft_batch( dfft, 3, bsize, remswitch, mythread, counter(3), swap, first_dim1, &
                                    rs_wave(:,1:1), comm_recv, dfft%aux_array( : , 1 : 1 ) )
-                   CALL invfft_4S( dfft, 4, bsize, bsize, remswitch, mythread, counter(3), swap, first_dim1, priv, rs_wave(:,1:1) )
+                   CALL invfft_batch( dfft, 4, bsize, remswitch, mythread, counter(3), swap, first_dim1, rs_wave(:,1:1) )
                 END IF
              END IF
           END IF
@@ -2310,7 +2308,7 @@ CONTAINS
                 swap=mod(ibatch-start_loop1,int_mod)+1
                 start = 1+(ibatch-1)*batch_size-start_loop1
                 IF(rsactive) rs_wave=>wfn_real(:,start:start)
-                CALL Apply_V_4S( rs_wave(:,1:1), vpot(:,1), bsize, mythread )
+                CALL Apply_V( rs_wave(:,1:1), vpot(:,1), bsize, mythread )
                 
 !                lspin=1
 !                offset_state=i_start2
@@ -2359,10 +2357,9 @@ CONTAINS
              ! == Back transform to reciprocal space the product V.PSI       ==
              ! ==------------------------------------------------------------==
                  counter(4) = counter(4) + 1
-                 CALL fwfft_4S( dfft, 1, bsize, bsize, remswitch, mythread, counter(4), swap, first_dim1, priv, &
-                                f_inout2=rs_wave &
-                                , f_inout3=dfft%aux_array( : , 1 : 1 ) )
-                 CALL fwfft_4S( dfft, 2, bsize, bsize, remswitch, mythread, counter(4), swap, first_dim2, priv, &
+                 CALL fwfft_batch( dfft, 1, bsize, remswitch, mythread, counter(4), swap, first_dim1, &
+                                f_inout2=rs_wave, f_inout3=dfft%aux_array( : , 1 : 1 ) )
+                 CALL fwfft_batch( dfft, 2, bsize, remswitch, mythread, counter(4), swap, first_dim2, &
                                 f_inout4=dfft%aux_array, f_inout2=comm_send, f_inout3=comm_recv )
                 i_start2=i_start2+bsize*njump
              END IF
@@ -2383,7 +2380,7 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop1,int_mod)+1
                 counter(5) = counter(5) + 1
-                CALL fwfft_4S( dfft, 3, bsize, 0, remswitch, mythread, counter(5), swap, 0, priv, f_inout2=comm_send, f_inout3=comm_recv )
+                CALL fwfft_batch( dfft, 3, bsize, 0, mythread, counter(5), swap, 0 )
              END IF
           END IF
        END IF
@@ -2411,9 +2408,11 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop2,int_mod)+1
                 counter(6) = counter(6) + 1
-                CALL fwfft_4S( dfft, 4, bsize, bsize, remswitch, mythread, counter(6), swap, first_dim3, priv, &
+                CALL fwfft_batch( dfft, 4, bsize, remswitch, mythread, counter(6), swap, first_dim3, &
                                dfft%aux_array, c0(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2 ), &
                                c2(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2), comm_recv )
+                CALL Accumulate_Psi( dfft, dfft%aux_array, c2(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2), &
+                                     c0(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2 ), mythread, bsize, counter(6), dfft%nsw )
                 i_start3=i_start3+bsize*njump
              END IF
           END IF
@@ -2435,14 +2434,13 @@ CONTAINS
        WRITE(6,*)"Some extra VPSI times"
        write(6,*)"==================================="
        write(6,*)"INV FFT before Com"
-       write(6,*)"OMP LOCK 1            ", dfft%my_node_rank, timer(16)
        write(6,*)"Prepare_psi           ", dfft%my_node_rank, timer(1)
        write(6,*)"CALC LOCK 1           ", dfft%my_node_rank, timer(17)
        write(6,*)"INV z_fft             ", dfft%my_node_rank, timer(2)
        write(6,*)"INV Pre_com_copy      ", dfft%my_node_rank, timer(3)
        write(6,*)"OMP LOCK 2            ", dfft%my_node_rank, timer(18)
      
-       write(6,*)"INV FFT before Com sum  ",timer(1)+timer(2)+timer(3)+timer(16)+timer(17)+timer(18)
+       write(6,*)"INV FFT before Com sum  ",timer(1)+timer(2)+timer(3)+timer(17)+timer(18)
        write(6,*)"==================================="
        write(6,*)"INV FFT after Com"
        write(6,*)"CALC_COM LOCK 1       ", dfft%my_node_rank, timer(21)
@@ -2483,7 +2481,7 @@ CONTAINS
        write(6,*)"==================================="
        write(6,*)"Adding up CALC:       ", dfft%my_node_rank, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
                                                               timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
-                                                              timer(13)+timer(14)+timer(15)+timer(16)+timer(17)+&
+                                                              timer(13)+timer(14)+timer(15)+timer(17)+&
                                                               timer(18)+timer(21)+timer(22)+timer(23)+timer(24)+&
                                                               timer(27)+timer(28)+timer(29)
        write(6,*)"Adding up COMM:       ", dfft%my_node_rank, timer(19)+timer(20)+timer(25)+timer(26)

@@ -575,6 +575,7 @@ CONTAINS
 
     IF(fft_tune_num_it.EQ.fft_tune_max_it)THEN
        cntl%fft_tune_batchsize=.FALSE.
+       dfft%fft_tuning = .false.
     ELSE
        fft_tune_num_it=fft_tune_num_it+1
        fft_batchsize=fft_batchsizes(fft_tune_num_it)

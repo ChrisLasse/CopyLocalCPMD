@@ -7,6 +7,8 @@ MODULE fftpw_batching
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
   USE kinds,                                    ONLY: real_8
   USE system,                                   ONLY: parm
+  USE timer,                           ONLY: tihalt,&
+                                             tiset
   USE iso_fortran_env
   IMPLICIT NONE
   PRIVATE
@@ -27,22 +29,27 @@ MODULE fftpw_batching
 
 CONTAINS
 
-SUBROUTINE Prepare_Psi( dfft, psi, aux, ngms, remswitch, mythread, ns, last, priv, ip, jp )
+SUBROUTINE Prepare_Psi( dfft, psi, aux, remswitch, mythread, ns )
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: ns( * )
-  INTEGER, INTENT(IN) :: ngms, remswitch, mythread
-  INTEGER, INTENT(INOUT) :: ip, jp
-  LOGICAL, INTENT(IN) :: last
-  INTEGER, INTENT(INOUT) :: priv(:)
+  INTEGER, INTENT(IN) :: remswitch, mythread
   COMPLEX(DP), INTENT(IN)  :: psi ( : , : )
   COMPLEX(DP), INTENT(OUT)  :: aux ( dfft%nr3 , * ) !ns(dfft%mype+1)*z_group_size )
 
   INTEGER :: j, i, iter
   INTEGER :: offset, offset2
+!  INTEGER :: isub, isub4
+!  CHARACTER(*), PARAMETER :: procedureN = 'Prepare_Psi'
 
   INTEGER(INT64) :: time(2), cr
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!  END IF
 
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
@@ -83,6 +90,12 @@ SUBROUTINE Prepare_Psi( dfft, psi, aux, ngms, remswitch, mythread, ns, last, pri
 !  CALL SYSTEM_CLOCK( count_rate = cr )
 !  write(6,*) "ACTUAL", REAL( dfft%time_adding( 1 ) / REAL( cr ) )
 
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!  END IF
+
 END SUBROUTINE Prepare_Psi
 
 SUBROUTINE fft_com( dfft, sendsize, nodes_numb, work_buffer )
@@ -91,7 +104,15 @@ SUBROUTINE fft_com( dfft, sendsize, nodes_numb, work_buffer )
   INTEGER, INTENT(IN)                            :: sendsize, nodes_numb, work_buffer
   TYPE(PW_fft_type_descriptor), INTENT(INOUT)       :: dfft
 
-  INTEGER :: ierr
+  CHARACTER(*), PARAMETER :: procedureN = 'fft_com'
+
+  INTEGER :: ierr, isub, isub4
+
+  IF( dfft%fft_tuning ) THEN
+     CALL tiset(procedureN//'_tuning',isub4)
+  ELSE
+     CALL tiset(procedureN,isub)
+  END IF
 
   !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 1 ), ierr )
   !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
@@ -117,57 +138,85 @@ SUBROUTINE fft_com( dfft, sendsize, nodes_numb, work_buffer )
   !CALL mpi_win_unlock_all( dfft%mpi_window( 2 ), ierr )
   !CALL mpi_win_unlock_all( dfft%mpi_window( 1 ), ierr )
 
+  IF( dfft%fft_tuning ) THEN
+     CALL tihalt(procedureN//'_tuning',isub4)
+  ELSE
+     CALL tihalt(procedureN,isub)
+  END IF
+
 END SUBROUTINE fft_com
 
-SUBROUTINE Accumulate_Psi( dfft, aux, hpsi, ngms, z_group_size, last, ns, psi, mythread )
+SUBROUTINE Accumulate_Psi( dfft, aux, hpsi, psi, mythread, batch_size, counter, ns )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN) :: z_group_size, ngms, mythread
+  INTEGER, INTENT(IN) :: batch_size, mythread, counter
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: ns( * )
   COMPLEX(DP), INTENT(IN), OPTIONAL :: psi( : , : )
   COMPLEX(DP), INTENT(INOUT) :: hpsi( : , : )
   COMPLEX(DP), INTENT(IN)  :: aux ( dfft%nr3 * ns(dfft%mype+1), * ) !z_group_size )
-  LOGICAL, INTENT(IN) :: last
 
   COMPLEX(DP) :: fp, fm
-  INTEGER :: j, l, k, i, igroup
-  INTEGER :: offset
+  INTEGER :: j, ibatch
+!  INTEGER :: isub, isub4
+!  CHARACTER(*), PARAMETER :: procedureN = 'Accumulate_Psi'
 
-  INTEGER(INT64) :: time(2)
+  INTEGER(INT64) :: time(4)
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!  END IF
 
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+
+  !$  locks_omp( mythread+1, counter, 4 ) = .false.
+  !$omp flush( locks_omp )
+  !$  DO WHILE( ANY( locks_omp( :, counter, 4 ) ) )
+  !$omp flush( locks_omp )
+  !$  END DO
+
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 28 ) = dfft%time_adding( 28 ) + ( time(2) - time(1) )
 !------------------------------------------------------
 !--------Accumulate_Psi Start--------------------------
    
-  !Somehow slower in the beginning than previous  implementation... needs investigation
-  DO igroup = 1, z_group_size
+  DO ibatch = 1, batch_size
      DO j = dfft%thread_ngms_start( mythread+1 ), dfft%thread_ngms_end( mythread+1 )
-        fp = ( aux( dfft%nl(j), igroup ) + aux( dfft%nlm(j), igroup ) ) * (- dfft%tscale )
-        fm = ( aux( dfft%nl(j), igroup ) - aux( dfft%nlm(j), igroup ) ) * (- dfft%tscale )
-        hpsi ( j, (2*igroup)-1 ) = -1 * ((parm%tpiba2*dfft%gg_pw(j))*psi( j, (2*igroup)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
-        hpsi ( j, (2*igroup)   ) = -1 * ((parm%tpiba2*dfft%gg_pw(j))*psi( j, (2*igroup)   ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
+        fp = ( aux( dfft%nl(j), ibatch ) + aux( dfft%nlm(j), ibatch ) ) * (- dfft%tscale )
+        fm = ( aux( dfft%nl(j), ibatch ) - aux( dfft%nlm(j), ibatch ) ) * (- dfft%tscale )
+        hpsi ( j, (2*ibatch)-1 ) = -1 * ((parm%tpiba2*dfft%gg_pw(j))*psi( j, (2*ibatch)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
+        hpsi ( j, (2*ibatch)   ) = -1 * ((parm%tpiba2*dfft%gg_pw(j))*psi( j, (2*ibatch)   ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
      END DO
   ENDDO
-     
-! Waiting for case where the number of states is uneven (Probably faulty even then)
-!        !$omp parallel do private( j )
-!        DO j = 1, ngms
-!           hpsi( j, (2*igroup)-1 ) = dfft%aux2( dfft%nl( j ) + offset ) * dfft%tscale
-!        END DO
-!        !$omp end parallel do
 
 !---------Accumulate_Psi End---------------------------
 !------------------------------------------------------
-  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(2) - time(1) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(3) - time(2) )
+
+  !$  locks_omp( mythread+1, counter, 5 ) = .false. 
+  !$omp flush( locks_omp )
+  !$  DO WHILE( ANY( locks_omp( :, counter, 5 ) ) )
+  !$omp flush( locks_omp )
+  !$  END DO 
+
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+  IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 29 ) = dfft%time_adding( 29 ) + ( time(4) - time(3) )
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!  END IF
 
 END SUBROUTINE Accumulate_Psi
 
-SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batch_size, remswitch, mythread, ns )
+SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, batch_size, remswitch, mythread, ns )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN) :: iset, batch_size, remswitch, mythread
+  INTEGER, INTENT(IN) :: batch_size, remswitch, mythread
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: ns( * )
   COMPLEX(DP), INTENT(INOUT) :: comm_mem_send( * ), comm_mem_recv( * )
@@ -175,8 +224,16 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batc
 
   INTEGER :: l, m, j, k, i
   INTEGER :: offset, kdest, ierr
+!  INTEGER :: isub, isub4
+!  CHARACTER(*), PARAMETER :: procedureN = 'invfft_z_section'
 
   INTEGER(INT64) :: time(3)
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!  END IF
 
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
@@ -199,7 +256,7 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batc
         IF( dfft%non_blocking .and. l .eq. dfft%my_node+1 ) CYCLE 
         DO m = 1, dfft%node_task_size
            j = (l-1)*dfft%node_task_size + m
-           offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (iset-1)*batch_size ) * dfft%big_chunks
+           offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + (l-1)*(batch_size-1) * dfft%big_chunks
            DO k = dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 )
               kdest = offset + dfft%nr3px * mod( (k-1), ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks
               DO i = 1, dfft%nr3p( j )
@@ -219,7 +276,7 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batc
 
      DO m = 1, dfft%node_task_size
         j = dfft%my_node*dfft%node_task_size + m
-        offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (iset-1)*batch_size ) * dfft%big_chunks
+        offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + dfft%my_node*(batch_size-1) * dfft%big_chunks
         DO k = dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ), dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 )
            kdest = offset + dfft%nr3px * mod( k-1, ns(dfft%mype+1) ) + ( (k-1) / ns(dfft%mype+1) ) * dfft%big_chunks
            DO i = 1, dfft%nr3p( j )
@@ -238,23 +295,36 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, iset, batc
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 2 ) = dfft%time_adding( 2 ) + ( time(2) - time(1) )
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 3 ) = dfft%time_adding( 3 ) + ( time(3) - time(2) )
 
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!  END IF
+
 END SUBROUTINE invfft_z_section 
 
-SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, nr1s, y_group_size, counter, remswitch, mythread )
+SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, counter, remswitch, mythread )
   !$ USE omp_lib
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  INTEGER, INTENT(IN) :: y_group_size, remswitch, mythread, counter
+  INTEGER, INTENT(IN) :: remswitch, mythread, counter
   COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
-  INTEGER, INTENT(IN) :: nr1s( * )
   COMPLEX(DP), INTENT(INOUT) :: aux ( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !y_group_size
   COMPLEX(DP), INTENT(INOUT) :: aux2_r( : , : )
   INTEGER, INTENT(IN) :: map_acinv( * ), map_acinv_rem( * )
 
-  INTEGER :: i, k, offset, iter, igroup
+  INTEGER :: i, k, offset, iter
+!  INTEGER :: isub, isub4
+!  CHARACTER(*), PARAMETER :: procedureN = 'invfft_y_section'
 
   INTEGER(INT64) :: time(5)
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!  END IF
 
   Call First_Part_y_section( aux2_r )
 
@@ -265,6 +335,12 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
   !$  END DO
  
   Call Second_Part_y_section( aux2_r )
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!  END IF
 
   CONTAINS
 
@@ -336,6 +412,7 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
 
       IMPLICIT NONE
       COMPLEX(DP), INTENT(INOUT) :: aux2  ( dfft%my_nr1p * dfft%my_nr3p * dfft%nr2, * ) !y_group_size
+      INTEGER :: ibatch
 
         IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
       !------------------------------------------------------
@@ -343,15 +420,15 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
       
         DO i = dfft%thread_x_start( mythread+1, remswitch ), dfft%thread_x_end( mythread+1, remswitch )
            offset = mod( i-1, dfft%my_nr3p * dfft%my_nr2p ) * dfft%nr1
-           igroup = ( ( (i-1) / ( dfft%my_nr3p * dfft%my_nr2p ) ) + 1 )
+           ibatch = ( ( (i-1) / ( dfft%my_nr3p * dfft%my_nr2p ) ) + 1 )
            DO k = 1, dfft%zero_scatter_start - 1
-              aux( offset + k, igroup ) = aux2( dfft%map_scatter_inv( offset + k ), igroup )
+              aux( offset + k, ibatch ) = aux2( dfft%map_scatter_inv( offset + k ), ibatch )
            END DO
            DO k = dfft%zero_scatter_start, dfft%zero_scatter_end
-              aux( offset + k, igroup ) = (0.0_DP, 0.0_DP)
+              aux( offset + k, ibatch ) = (0.0_DP, 0.0_DP)
            END DO
            DO k = dfft%zero_scatter_end + 1, dfft%nr1
-              aux( offset + k, igroup ) = aux2( dfft%map_scatter_inv( offset + k ), igroup )
+              aux( offset + k, ibatch ) = aux2( dfft%map_scatter_inv( offset + k ), ibatch )
            END DO
         END DO
       
@@ -371,7 +448,16 @@ SUBROUTINE invfft_x_section( dfft, aux, remswitch, mythread )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr1, * ) !dfft%my_nr3p * dfft%nr2 * x_group_size )
 
+!  INTEGER :: isub, isub4
+!  CHARACTER(*), PARAMETER :: procedureN = 'invfft_x_section'
+
   INTEGER(INT64) :: time(2)
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!  END IF
 
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
@@ -384,6 +470,12 @@ SUBROUTINE invfft_x_section( dfft, aux, remswitch, mythread )
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 7 ) = dfft%time_adding( 7 ) + ( time(2) - time(1) )
 
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!  END IF
+
 END SUBROUTINE invfft_x_section
 
 SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythread )
@@ -395,9 +487,17 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythrea
   COMPLEX(DP), INTENT(INOUT)  :: aux_r( : , : ) !dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size )
   COMPLEX(DP), INTENT(INOUT) :: aux2( nr1s(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 , * ) !x_group_size )
 
-  INTEGER :: i, j, igroup, offset
+  INTEGER :: i, j, offset
+!  INTEGER :: isub, isub4
+!  CHARACTER(*), PARAMETER :: procedureN = 'fwfft_x_section'
 
   INTEGER(INT64) :: time(4)
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!  END IF
 
   Call First_Part_x_section( aux_r )
 
@@ -409,13 +509,18 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythrea
  
   Call Second_Part_x_section( aux_r )
 
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!  END IF
+
   CONTAINS
 
     SUBROUTINE First_Part_x_section( aux )
 
       IMPLICIT NONE
       COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr1 , * ) !dfft%my_nr3p * dfft%nr2 * x_group_size )
-
 
       !------------------------------------------------------
       !------------x-FFT Start-------------------------------
@@ -441,16 +546,17 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythrea
 
       IMPLICIT NONE
       COMPLEX(DP), INTENT(INOUT)  :: aux( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size )
+      INTEGER :: ibatch
 
         IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
       !------------------------------------------------------
       !------Forward xy-scatter Start------------------------
       
         DO i = dfft%thread_y_start( mythread+1, remswitch ), dfft%thread_y_end( mythread+1, remswitch )
-           igroup = ( ( (i-1) / ( dfft%my_nr3p * dfft%nr1s ) ) + 1 )
+           ibatch = ( ( (i-1) / ( dfft%my_nr3p * dfft%nr1s ) ) + 1 )
            offset = dfft%my_nr2p * mod( i-1, dfft%nr1s * dfft%my_nr3p )
            DO j = 1, dfft%my_nr2p
-              aux2( j + offset , igroup ) = aux( dfft%map_scatter_fw( j + offset ), igroup )
+              aux2( j + offset , ibatch ) = aux( dfft%map_scatter_fw( j + offset ), ibatch )
            ENDDO
         ENDDO
       
@@ -463,21 +569,29 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, nr1s, counter, remswitch, mythrea
 
 END SUBROUTINE fwfft_x_section
 
-SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, nr1s, ns, batch_size, y_group_size, counter, remswitch, mythread )
+SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, ns, batch_size, counter, remswitch, mythread )
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  INTEGER, INTENT(IN) :: y_group_size, counter, batch_size, remswitch, mythread
+  INTEGER, INTENT(IN) :: counter, batch_size, remswitch, mythread
   COMPLEX(DP), INTENT(INOUT)  :: comm_mem_send( * )
   COMPLEX(DP), INTENT(INOUT)  :: comm_mem_recv( * )
-  INTEGER, INTENT(IN) :: nr1s( * ), ns( * )
+  INTEGER, INTENT(IN) :: ns( * )
 !  COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p , * ) !y_group_size )
   COMPLEX(DP), INTENT(INOUT) :: aux( : , : )
   INTEGER, INTENT(IN) :: map_pcfw( * )
 
-  INTEGER :: l, m, i, offset, j, k, igroup, jter, offset2, offset3
+  INTEGER :: l, m, i, offset, j, k, ibatch, jter, offset2
+!  INTEGER :: isub, isub4
+!  CHARACTER(*), PARAMETER :: procedureN = 'fwfft_y_section'
 
   INTEGER(INT64) :: time(4)
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!  END IF
 
   Call First_Part_y_section( aux )
 
@@ -488,6 +602,12 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
   !$  END DO
  
   Call Second_Part_y_section( aux )
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!  END IF
 
   CONTAINS
 
@@ -530,11 +650,11 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
                  offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + (l-1)*(batch_size-1) * dfft%big_chunks
                  DO j = dfft%thread_z_start( mythread+1, remswitch, i ), dfft%thread_z_end( mythread+1, remswitch, i )
                     jter = mod( j-1, ns( i ) ) 
-                    igroup = ( (j-1) / ns( i ) )
-                    offset2 =  igroup * dfft%big_chunks
+                    ibatch = ( (j-1) / ns( i ) )
+                    offset2 =  ibatch * dfft%big_chunks
                     DO k = 1, dfft%my_nr3p
                        comm_mem_send( offset + offset2 + jter*dfft%nr3px + k ) = &
-                       aux2( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), igroup+1 )
+                       aux2( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), ibatch+1 )
                     END DO
                  END DO
               END DO
@@ -553,11 +673,11 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
               offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + dfft%my_node*(batch_size-1) * dfft%big_chunks
               DO j = dfft%thread_z_start( mythread+1, remswitch, i ), dfft%thread_z_end( mythread+1, remswitch, i )
                  jter = mod( j-1, ns( i ) ) 
-                 igroup = ( (j-1) / ns( i ) )
-                 offset2 =  igroup * dfft%big_chunks
+                 ibatch = ( (j-1) / ns( i ) )
+                 offset2 =  ibatch * dfft%big_chunks
                  DO k = 1, dfft%my_nr3p
                     comm_mem_recv( offset + offset2 + jter*dfft%nr3px + k ) = &
-                    aux2( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), igroup+1 )
+                    aux2( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), ibatch+1 )
                  END DO
               END DO
            END DO
@@ -571,11 +691,11 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, n
               offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + dfft%my_node*(batch_size-1) * dfft%big_chunks
               DO j = dfft%thread_z_start( mythread+1, remswitch, i ), dfft%thread_z_end( mythread+1, remswitch, i )
                  jter = mod( j-1, ns( i ) ) 
-                 igroup = ( (j-1) / ns( i ) )
-                 offset2 =  igroup * dfft%big_chunks
+                 ibatch = ( (j-1) / ns( i ) )
+                 offset2 =  ibatch * dfft%big_chunks
                  DO k = 1, dfft%my_nr3p
                     comm_mem_recv( offset + offset2 + jter*dfft%nr3px + k ) = &
-                    aux2( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), igroup+1 )
+                    aux2( dfft%map_pcfw( (i-1)*dfft%small_chunks + jter*dfft%nr3px + k ), ibatch+1 )
                  END DO
               END DO
            END DO
@@ -604,8 +724,16 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remsw
 
   INTEGER :: j, l, k, i
   INTEGER :: offset, kfrom, ierr
+!  INTEGER :: isub, isub4
+!  CHARACTER(*), PARAMETER :: procedureN = 'fwfft_z_section'
 
   INTEGER(INT64) :: time(3)
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!  END IF
 
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 !------------------------------------------------------
@@ -649,6 +777,12 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remsw
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 13 ) = dfft%time_adding( 13 ) + ( time(2) - time(1) )
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 14 ) = dfft%time_adding( 14 ) + ( time(4) - time(3) )
+
+!  IF( dfft%fft_tuning ) THEN
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+!  ELSE
+!     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!  END IF
 
 END SUBROUTINE fwfft_z_section
 

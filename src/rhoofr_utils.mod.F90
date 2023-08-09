@@ -75,13 +75,14 @@ MODULE rhoofr_utils
                                              locks_calc_1,&
                                              locks_calc_2,&
                                              locks_sing_1,&
-                                             invfft_4S
+                                             invfft_batch
   USE fftnew_utils,                    ONLY: setfftn
   USE fftpw_base,                      ONLY: dfft,&
                                              wfn_real
-  USE fftpw_batching,                  ONLY: locks_omp
-  USE fftpw_make_maps,                 ONLY: Prep_copy_Maps,&
-                                             Set_Req_Vals,&
+  USE fftpw_batching,                  ONLY: locks_omp,&
+                                             Prepare_Psi
+  USE fftpw_make_maps,                 ONLY: Prep_pwFFT_Maps,&
+                                             Set_pwFFT_Vals,&
                                              MapVals_CleanUp,&
                                              Prep_fft_com,&
                                              Make_Manual_Maps
@@ -1345,7 +1346,7 @@ CONTAINS
     INTEGER                                  :: nstate
     COMPLEX(real_8), TARGET __CONTIGUOUS     :: psi(:)
 
-    CHARACTER(*), PARAMETER                  :: procedureN = 'rhoofr_batchfft'
+    CHARACTER(*), PARAMETER                  :: procedureN = 'rhoofr_pw_batchfft'
     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
     COMPLEX(real_8), POINTER __CONTIGUOUS &
                            , ASYNCHRONOUS    :: wfn_r1(:)
@@ -1531,11 +1532,11 @@ CONTAINS
        dfft%remember_buffer_rho = buffer_size
        CALL Clean_up_shared( dfft, 1 ) 
 
-       CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size, dfft%ir1w, dfft%nsw )
+       CALL Set_pwFFT_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size, dfft%ir1w, dfft%nsw )
 
        dfft%rem_size = fft_residual
 
-       CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
+       CALL Prep_pwFFT_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
   
        dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
        sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
@@ -1635,8 +1636,9 @@ CONTAINS
                 remswitch = 2
              END IF
              IF(bsize.NE.0)THEN
+                counter(1) = counter(1) + 1
                 ! Loop over the electronic states of this batch
-!                CALL set_psi_batch_g(c0,wfn_g,int(il_wfng(1)),i_start1,bsize,nstate,me_grp,n_grp)
+                CALL Prepare_Psi( dfft, c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), dfft%aux_array, remswitch, mythread, dfft%nsw )
 !                ! ==--------------------------------------------------------------==
 !                ! ==  Fourier transform the wave functions to real space.         ==
 !                ! ==  In the array PSI was used also the fact that the wave       ==
@@ -1652,9 +1654,8 @@ CONTAINS
 !                ! ==  to swap                                                     ==
 !                ! ==--------------------------------------------------------------==
                 swap=mod(ibatch,int_mod)+1
-                counter(1) = counter(1) + 1
-                CALL invfft_4S( dfft, 1, bsize, bsize, remswitch, mythread, counter(1), swap, first_dim3, priv, dfft%aux_array, &
-                                c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), comm_send, comm_recv, ip=ip, jp=jp ) 
+                CALL invfft_batch( dfft, 1, bsize, remswitch, mythread, counter(1), swap, first_dim3, dfft%aux_array, &
+                                c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), comm_send, comm_recv ) 
                 i_start1=i_start1+bsize*2
              END IF
           END IF
@@ -1673,7 +1674,7 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch,int_mod)+1
                 counter(2) = counter(2) + 1
-                CALL invfft_4S( dfft, 2, bsize, 0, 0, mythread, counter(2), swap, 0, priv, f_inout2=comm_send, f_inout3=comm_recv )
+                CALL invfft_batch( dfft, 2, bsize, 0, mythread, counter(2), swap, 0 )
              END IF
           END IF
        END IF
@@ -1703,13 +1704,10 @@ CONTAINS
                 counter(3) = counter(3) + 1
                 start = (1+((counter(3)-1)*dfft%batch_size_save))
                 ending = (1+(counter(3)-1)*dfft%batch_size_save)+bsize-1
-                CALL invfft_4S( dfft, 3, bsize, bsize, remswitch, mythread, counter(3), swap, first_dim1, priv, &
-                                psi_work( : , start : ending ), & !(1+((counter(3)-1)*dfft%batch_size_save)):(1+(counter(3)-1)*dfft%batch_size_save)+bsize-1 ), &
-                                comm_recv, &
-                                dfft%aux_array( : , 1 : 1 ) &
-                              )
-                CALL invfft_4S( dfft, 4, bsize, bsize, remswitch, mythread, counter(3), swap, first_dim1, priv, &
-                                psi_work( : , start : ending ) ) !(1+((counter(3)-1)*dfft%batch_size_save)):(1+(counter(3)-1)*dfft%batch_size_save)+bsize-1 )  )
+                CALL invfft_batch( dfft, 3, bsize, remswitch, mythread, counter(3), swap, first_dim1, &
+                                psi_work( : , start : ending ), comm_recv, dfft%aux_array( : , 1 : 1 ) )
+                CALL invfft_batch( dfft, 4, bsize, remswitch, mythread, counter(3), swap, first_dim1, &
+                                psi_work( : , start : ending ) )
                 DO i = 1, bsize
                    CALL Build_CD( psi_work(: , ((counter(3)-1)*dfft%batch_size_save)+i ), rhoe(:,1), 2*(((counter(3)-1)*dfft%batch_size_save)+i)-1, mythread )
                 ENDDO

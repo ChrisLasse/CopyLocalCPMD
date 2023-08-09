@@ -7,20 +7,21 @@ MODULE fftpw_make_maps
                                             fft_numbatches
   USE fftpw_param
   USE fftpw_types,                    ONLY: PW_fft_type_descriptor
+  USE timer,                           ONLY: tihalt,&
+                                             tiset
   IMPLICIT NONE
 
   PRIVATE
   
-  PUBLIC :: Prep_Copy_Maps
-  PUBLIC :: Set_Req_Vals
+  PUBLIC :: Prep_pwFFT_Maps
+  PUBLIC :: Set_pwFFT_Vals
   PUBLIC :: MapVals_CleanUp
   PUBLIC :: Prep_fft_com
-  PUBLIC :: GIMME_GROUP_SIZES
   PUBLIC :: Make_Manual_Maps
 
 CONTAINS
 
-SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
+SUBROUTINE Set_pwFFT_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN)  :: batch_size, nbnd, num_buff
@@ -28,10 +29,13 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
 
   INTEGER, INTENT(IN)  :: ir1(:), ns(:)
+  CHARACTER(*), PARAMETER :: procedureN = 'Set_pwFFT_Vals'
 
   INTEGER, SAVE :: last_batch  = 0
   INTEGER, SAVE :: last_buffer = 0
-  INTEGER :: i, j, k, l, f
+  INTEGER :: i, j, k, l, f, isub
+
+  CALL tiset(procedureN,isub)
 
   IF( dfft%make_first ) THEN
 
@@ -42,7 +46,6 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
      dfft%big_chunks = dfft%small_chunks * dfft%node_task_size * dfft%node_task_size
    
      dfft%tscale = 1.0d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
-     dfft%tscale_gamma = 0.5d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
 
      ALLOCATE( dfft%aux( dfft%nnr ) )
      ALLOCATE( dfft%aux2( dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * dfft%max_batch_size ) ) 
@@ -83,9 +86,11 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
   dfft%first_step = .true.
   rem_size = mod( (nbnd+1)/2, batch_size )
 
-END SUBROUTINE Set_Req_Vals
+  CALL tihalt(procedureN,isub)
 
-SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
+END SUBROUTINE Set_pwFFT_Vals
+
+SUBROUTINE Prep_pwFFT_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN)  :: ngms, batch_size, rem_size
@@ -95,6 +100,10 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
 
   INTEGER, SAVE :: last_batch = 0
   LOGICAL, SAVE :: one_done = .false.
+  CHARACTER(*), PARAMETER :: procedureN = 'Prep_pwFFT_Maps'
+  INTEGER :: isub
+
+  CALL tiset(procedureN,isub)
 
   IF( .not. allocated( dfft%zero_prep_start ) ) THEN
 
@@ -144,7 +153,9 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
 
   END IF
 
-END SUBROUTINE Prep_Copy_Maps
+  CALL tihalt(procedureN,isub)
+
+END SUBROUTINE Prep_pwFFT_Maps
 
 
 SUBROUTINE Make_PrepPsi_Maps( zero_start, zero_end, prep_map, nr3, my_nsw, ngms, nl, nlm )
@@ -456,30 +467,23 @@ SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
 
   INTEGER, INTENT(IN)  :: ir1(:), ns(:)
 
-  INTEGER :: iproc3, i, k, it, mc, m1, m2, i1
+  INTEGER :: iproc, i, k, it, mc, m1, m2, i1
 
   dfft%map_pcfw = 0
 
-  !$omp parallel private( iproc3, i, it, mc, m1, m2, i1, k )
-  DO iproc3 = 1, dfft%nproc3
-     !$omp do
-!     DO i = 1, MAXVAL( ns ) !( iproc3 )
-     DO i = 1, ns( iproc3 )
-!     DO i = 1, ns( dfft%my_node_rank+1 )
-        it = ( iproc3 - 1 ) * dfft%small_chunks + dfft%nr3px * (i-1)
-        mc = dfft%ismap( i + dfft%iss( iproc3 ) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
-        m1 = mod (mc-1,dfft%nr1) + 1
+  DO iproc = 1, dfft%nproc
+     DO i = 1, ns( iproc )
+        it = ( iproc - 1 ) * dfft%small_chunks + dfft%nr3px * (i-1)
+        mc = dfft%ismap( i + dfft%iss( iproc ) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
+        m1 = mod(mc-1,dfft%nr1) + 1
         m2 = (mc-1)/dfft%nr1 + 1
-        i1 = m2 + ( ir1(m1) - 1 ) * dfft%nr2
+        i1 = m2 + ( ir1( m1 ) - 1 ) * dfft%nr2
         DO k = 1, dfft%my_nr3p
            dfft%map_pcfw( k + it ) = i1
            i1 = i1 + dfft%nr2 * dfft%my_nr1p
-!           write(6,*) dfft%my_node_rank, k+it, i1
         ENDDO
      ENDDO
-     !$omp end do
   ENDDO
-  !$omp end parallel
 
 END SUBROUTINE Make_fw_yzCOM_Map
 
@@ -510,25 +514,26 @@ END SUBROUTINE MapVals_CleanUp
 SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, comm, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size, send_handle, recv_handle, send_handle_rem, recv_handle_rem, comm_sendrecv, do_comm )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN)                            :: sendsize, sendsize_rem, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size
-  TYPE(MPI_COMM), INTENT(IN)                     :: comm
-  COMPLEX(DP), INTENT(IN)                        :: comm_send( : , : )
-  COMPLEX(DP), INTENT(INOUT)                     :: comm_recv( : , : )
-  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)               :: send_handle( : , : )
-  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)               :: recv_handle( : , : )
-  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)               :: send_handle_rem( : , : )
-  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)               :: recv_handle_rem( : , : )
-  INTEGER, ALLOCATABLE, INTENT(OUT) :: comm_sendrecv( : )
-  LOGICAL, INTENT(OUT) :: do_comm
+  INTEGER, INTENT(IN)                                 :: sendsize, sendsize_rem, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size
+  TYPE(MPI_COMM), INTENT(IN)                          :: comm
+  COMPLEX(DP), INTENT(IN)                             :: comm_send( : , : )
+  COMPLEX(DP), INTENT(INOUT)                          :: comm_recv( : , : )
+  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)     :: send_handle( : , : )
+  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)     :: recv_handle( : , : )
+  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)     :: send_handle_rem( : , : )
+  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)     :: recv_handle_rem( : , : )
+  INTEGER, ALLOCATABLE, INTENT(OUT)                   :: comm_sendrecv( : )
+  LOGICAL, INTENT(OUT)                                :: do_comm
 
-  INTEGER, SAVE :: sendsize_save = 0
   LOGICAL, SAVE :: first = .true.
-  INTEGER :: ierr, i, f, j, k, rank_offset, eff_nodes, rem, m, n, l, p, origin_node, target_node
-  INTEGER, ALLOCATABLE :: task_sendsize(:)
-  INTEGER :: howmany_sending( node_task_size, nodes_numb ) , howmany_receiving( node_task_size, nodes_numb )
-  INTEGER, ALLOCATABLE :: comm_info_send(:,:), comm_info_recv(:,:)
-  LOGICAL :: com_done( nodes_numb )
   INTEGER, SAVE :: buffer_size_save
+
+  INTEGER, ALLOCATABLE :: comm_info_send(:,:), comm_info_recv(:,:)
+
+  INTEGER :: i, j, k, l, m, n, p
+  INTEGER :: ierr, eff_nodes, rem, origin_node, target_node
+  INTEGER :: howmany_sending( node_task_size, nodes_numb ) , howmany_receiving( node_task_size, nodes_numb )
+  LOGICAL :: com_done( nodes_numb )
 
   eff_nodes = nodes_numb - 1
 
@@ -663,292 +668,7 @@ s_loop: DO l = 1, howmany_sending( k, i )
 
   END IF
 
-
-!  IF( ALLOCATED( task_sendsize ) ) DEALLOCATE( task_sendsize )
-!  ALLOCATE( task_sendsize( node_task_size ) )
-!
-!  task_sendsize = sendsize / node_task_size
-!  DO i = 1, mod( sendsize, node_task_size ) 
-!     task_sendsize(i) = task_sendsize(i) + 1
-!  ENDDO
-!  rank_offset = 0
-!  DO i = 1, my_node_rank
-!     rank_offset = rank_offset + task_sendsize( i )
-!  ENDDO
-!
-!  DO k = 1, buffer_size !INITIALIZE SENDING AND RECEIVING
-!
-!     f = 0
-!     DO i = 1, nodes_numb
-!     
-!        IF( i-1 .eq. my_node ) CYCLE
-!        f = f + 1
-!        CALL MPI_SEND_INIT( comm_send( 1 + rank_offset + (i-1)*sendsize, k ), task_sendsize( my_node_rank+1 ), MPI_DOUBLE_COMPLEX, (i-1)*node_task_size+my_node_rank, &
-!                            mype, comm, send_handle( f , k ), ierr )
-!        CALL MPI_RECV_INIT( comm_recv( 1 + rank_offset + (i-1)*sendsize, k ), task_sendsize( my_node_rank+1 ), MPI_DOUBLE_COMPLEX, (i-1)*node_task_size+my_node_rank, &
-!                            MPI_ANY_TAG, comm, recv_handle( f , k ), ierr )
-!     
-!     ENDDO
-!
-!  ENDDO
-!
-!  IF( sendsize_rem .ne. 0 ) THEN
-!
-!     IF( ALLOCATED( task_sendsize ) ) DEALLOCATE( task_sendsize )
-!     ALLOCATE( task_sendsize( node_task_size ) )
-!   
-!     task_sendsize = sendsize_rem / node_task_size
-!     DO i = 1, mod( sendsize_rem, node_task_size ) 
-!        task_sendsize(i) = task_sendsize(i) + 1
-!     ENDDO
-!     rank_offset = 0
-!     DO i = 1, my_node_rank
-!        rank_offset = rank_offset + task_sendsize( i )
-!     ENDDO
-!
-!     DO k = 1, buffer_size !INITIALIZE SENDING AND RECEIVING
-!   
-!        f = 0
-!        DO i = 1, nodes_numb
-!        
-!           IF( i-1 .eq. my_node ) CYCLE
-!           f = f + 1
-!           CALL MPI_SEND_INIT( comm_send( 1 + rank_offset + (i-1)*sendsize_rem, k ), task_sendsize( my_node_rank+1 ), MPI_DOUBLE_COMPLEX, (i-1)*node_task_size+my_node_rank, &
-!                               mype, comm, send_handle_rem( f , k ), ierr )
-!           CALL MPI_RECV_INIT( comm_recv( 1 + rank_offset + (i-1)*sendsize_rem, k ), task_sendsize( my_node_rank+1 ), MPI_DOUBLE_COMPLEX, (i-1)*node_task_size+my_node_rank, &
-!                               MPI_ANY_TAG, comm, recv_handle_rem( f , k ), ierr )
-!        
-!        ENDDO
-!   
-!     ENDDO
-!
-!  END IF
-
 END SUBROUTINE Prep_fft_com
-
-SUBROUTINE GIMME_GROUP_SIZES( dfft, last_time )
-  IMPLICIT NONE
-
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  LOGICAL, INTENT(OUT) :: last_time
-
-  INTEGER :: i
-
-  INTEGER :: x_last_size, y_last_size, z_last_size
-  CHARACTER(len=12) :: z_format, y_format, x_format, z_remformat, y_remformat, x_remformat
-
-  last_time = .false.
-
-  IF( ( .not. dfft%autotune_finished .and. dfft%tunning ) .or. .not. last_time ) THEN
-
-     IF( dfft%autotune_finished .or. .not. dfft%tunning ) last_time = .true.
-
-     IF( dfft%y_z_optimal ) THEN
-        DO i = 1, dfft%max_batch_size
-           IF( dfft%optimal_groups( i, dfft%buffer_size_save, 2 ) .le. dfft%batch_size_save ) THEN
-              dfft%y_group_size = dfft%optimal_groups( i, dfft%buffer_size_save, 2 )
-              EXIT
-           ENDIF
-        ENDDO
-        DO i = 1, dfft%max_batch_size
-           IF( dfft%optimal_groups( i, dfft%buffer_size_save, 3 ) .le. dfft%batch_size_save ) THEN
-              dfft%z_group_size = dfft%optimal_groups( i, dfft%buffer_size_save, 3 )
-              EXIT
-           ENDIF
-        ENDDO
-     ELSE
-        dfft%y_group_size = dfft%y_group_autosize
-        dfft%z_group_size = dfft%z_group_autosize
-     END IF
-
-     IF( mod( dfft%batch_size_save, dfft%y_group_size ) .eq. 0 ) THEN
-         dfft%y_loop_size(1) = dfft%batch_size_save / dfft%y_group_size
-         dfft%y_groups(:,1) = dfft%y_group_size
-     ELSE
-         dfft%y_rem1 = .true.
-         dfft%y_loop_size(1) = dfft%batch_size_save / dfft%y_group_size + 1
-         y_last_size = dfft%batch_size_save - (dfft%y_loop_size(1)-1) * dfft%y_group_size
-         dfft%y_groups(:,1) = dfft%y_group_size
-         dfft%y_groups(dfft%y_loop_size(1),1) = y_last_size
-     ENDIF
-     IF( mod( dfft%batch_size_save, dfft%z_group_size ) .eq. 0 ) THEN
-         dfft%z_loop_size(1) = dfft%batch_size_save / dfft%z_group_size
-         dfft%z_groups(:,1) = dfft%z_group_size
-     ELSE
-         dfft%z_loop_size(1) = dfft%batch_size_save / dfft%z_group_size + 1
-         z_last_size = dfft%batch_size_save - (dfft%z_loop_size(1)-1) * dfft%z_group_size
-         dfft%z_groups(:,1) = dfft%z_group_size
-         dfft%z_groups(dfft%z_loop_size(1),1) = z_last_size
-     ENDIF
-
-     IF( dfft%rem_size .ne. 0 ) THEN
-
-        IF( dfft%y_z_optimal ) THEN
-           DO i = 1, dfft%max_batch_size
-              IF( dfft%optimal_groups( i, dfft%buffer_size_save, 2 ) .le. dfft%rem_size ) THEN
-                 dfft%y_group_remsize = dfft%optimal_groups( i, dfft%buffer_size_save, 2 )
-                 EXIT
-              ENDIF
-           ENDDO
-           DO i = 1, dfft%max_batch_size
-              IF( dfft%optimal_groups( i, dfft%buffer_size_save, 3 ) .le. dfft%rem_size ) THEN
-                 dfft%z_group_remsize = dfft%optimal_groups( i, dfft%buffer_size_save, 3 )
-                 EXIT
-              ENDIF
-           ENDDO
-        ELSE
-           dfft%y_group_remsize = MIN( dfft%rem_size, dfft%y_group_autosize )
-           dfft%z_group_remsize = MIN( dfft%rem_size, dfft%z_group_autosize )
-        END IF
-
-        IF( mod( dfft%rem_size, dfft%y_group_remsize ) .eq. 0 ) THEN
-            dfft%y_loop_size(2) = dfft%rem_size / dfft%y_group_remsize
-            dfft%y_groups(:,2) = dfft%y_group_remsize
-        ELSE
-            dfft%y_rem2 = .true.
-            dfft%y_loop_size(2) = dfft%rem_size / dfft%y_group_remsize + 1
-            y_last_size = dfft%rem_size - (dfft%y_loop_size(2)-1) * dfft%y_group_remsize
-            dfft%y_groups(:,2) = dfft%y_group_remsize
-            dfft%y_groups(dfft%y_loop_size(2),2) = y_last_size
-        ENDIF
-        IF( mod( dfft%rem_size, dfft%z_group_remsize ) .eq. 0 ) THEN
-            dfft%z_loop_size(2) = dfft%rem_size / dfft%z_group_remsize
-            dfft%z_groups(:,2) = dfft%z_group_remsize
-        ELSE
-            dfft%z_loop_size(2) = dfft%rem_size / dfft%z_group_remsize + 1
-            z_last_size = dfft%rem_size - (dfft%z_loop_size(2)-1) * dfft%z_group_remsize
-            dfft%z_groups(:,2) = dfft%z_group_remsize
-            dfft%z_groups(dfft%z_loop_size(2),2) = z_last_size
-        ENDIF
-
-     END IF
-
-!========== x_size -> 4 arrays possible ================
-
-     IF( dfft%x_optimal ) THEN
-        DO i = 1, dfft%max_batch_size
-           IF( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) .le. dfft%y_groups(1,1) ) THEN
-              dfft%x_group_size = dfft%optimal_groups( i, dfft%buffer_size_save, 1 )
-              EXIT
-           ENDIF
-        ENDDO
-     ELSE
-        dfft%x_group_size = dfft%x_group_autosize
-     END IF
-     IF( mod( dfft%y_groups(1,1), dfft%x_group_size ) .eq. 0 ) THEN
-         dfft%x_loop_size(1) = dfft%y_groups(1,1) / dfft%x_group_size
-         dfft%x_groups(:,1) = dfft%x_group_size
-     ELSE
-         dfft%x_loop_size(1) = dfft%y_groups(1,1) / dfft%x_group_size + 1
-         x_last_size = dfft%y_groups(1,1) - (dfft%x_loop_size(1)-1) * dfft%x_group_size
-         dfft%x_groups(:,1) = dfft%x_group_size
-         dfft%x_groups(dfft%x_loop_size(1),1) = x_last_size
-     ENDIF
-
-     IF( dfft%y_rem1 ) THEN
-
-        IF( dfft%x_optimal ) THEN
-           DO i = 1, dfft%max_batch_size
-              IF( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) .le. dfft%y_groups(dfft%y_loop_size(1),1) ) THEN
-                 dfft%x_group_size = dfft%optimal_groups( i, dfft%buffer_size_save, 1 )
-                 EXIT
-              ENDIF
-           ENDDO
-        ELSE
-           dfft%x_group_size = MIN( dfft%y_groups(dfft%y_loop_size(1),1), dfft%x_group_autosize )
-        END IF
-        IF( mod( dfft%y_groups(dfft%y_loop_size(1),1), dfft%x_group_size ) .eq. 0 ) THEN
-            dfft%x_loop_size(2) = dfft%y_groups(dfft%y_loop_size(1),1) / dfft%x_group_size
-            dfft%x_groups(:,2) = dfft%x_group_size
-        ELSE
-            dfft%x_loop_size(2) = dfft%y_groups(dfft%y_loop_size(1),1) / dfft%x_group_size + 1
-            x_last_size = dfft%y_groups(dfft%y_loop_size(1),1) - (dfft%x_loop_size(2)-1) * dfft%x_group_size
-            dfft%x_groups(:,2) = dfft%x_group_size
-            dfft%x_groups(dfft%x_loop_size(2),2) = x_last_size
-        ENDIF
-
-     END IF
-
-     IF( dfft%rem_size .ne. 0 ) THEN
-
-        IF( dfft%x_optimal ) THEN
-           DO i = 1, dfft%max_batch_size
-              IF( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) .le. dfft%y_groups(1,2) ) THEN
-                 dfft%x_group_remsize = dfft%optimal_groups( i, dfft%buffer_size_save, 1 )
-                 EXIT
-              ENDIF
-           ENDDO
-        ELSE
-           dfft%x_group_remsize = MIN( dfft%y_groups(1,2), dfft%x_group_autosize )
-        END IF
-        IF( mod( dfft%y_groups(1,2), dfft%x_group_remsize ) .eq. 0 ) THEN
-            dfft%x_loop_size(3) = dfft%y_groups(1,2) / dfft%x_group_remsize
-            dfft%x_groups(:,3) = dfft%x_group_remsize
-        ELSE
-            dfft%x_loop_size(3) = dfft%y_groups(1,2) / dfft%x_group_remsize + 1
-            x_last_size = dfft%y_groups(1,2) - (dfft%x_loop_size(3)-1) * dfft%x_group_remsize
-            dfft%x_groups(:,3) = dfft%x_group_remsize
-            dfft%x_groups(dfft%x_loop_size(3),3) = x_last_size
-        ENDIF
-
-        IF( dfft%y_rem2 ) THEN
-
-           IF( dfft%x_optimal ) THEN
-              DO i = 1, dfft%max_batch_size
-                 IF( dfft%optimal_groups( i, dfft%buffer_size_save, 1 ) .le. dfft%y_groups(dfft%y_loop_size(2),2) ) THEN
-                    dfft%x_group_remsize = dfft%optimal_groups( i, dfft%buffer_size_save, 1 )
-                    EXIT
-                 ENDIF
-              ENDDO
-           ELSE
-              dfft%x_group_remsize = MIN( dfft%y_groups(dfft%y_loop_size(2),2), dfft%x_group_autosize )
-           END IF
-           IF( mod( dfft%y_groups(dfft%y_loop_size(2),2), dfft%x_group_remsize ) .eq. 0 ) THEN
-               dfft%x_loop_size(4) = dfft%y_groups(dfft%y_loop_size(2),2) / dfft%x_group_remsize
-               dfft%x_groups(:,4) = dfft%x_group_remsize
-           ELSE
-               dfft%x_loop_size(4) = dfft%y_groups(dfft%y_loop_size(2),2) / dfft%x_group_remsize + 1
-               x_last_size = dfft%y_groups(dfft%y_loop_size(2),2) - (dfft%x_loop_size(4)-1) * dfft%x_group_remsize
-               dfft%x_groups(:,4) = dfft%x_group_remsize
-               dfft%x_groups(dfft%x_loop_size(4),4) = x_last_size
-           ENDIF
-
-        END IF
-
-     END IF
-
-  END IF
-
-  IF( dfft%mype .eq. 0 .and. ( .false. .or. last_time ) ) THEN
-     write(6,*) " "
-     write(6,*) "buffer, batch sizes", dfft%buffer_size_save, dfft%batch_size_save
-     IF( .not. last_time ) write(6,*) "x,y,z autogroup sizes", dfft%x_group_autosize, dfft%y_group_autosize, dfft%z_group_autosize
-     write(6,*) " "
-     write(z_format,'(A5,I2,A5)') "(A10,", dfft%z_loop_size(1), "(I3))"
-     write(6,z_format) "z_groups:", ( dfft%z_groups(i,1), i = 1, dfft%z_loop_size(1) )
-     write(z_remformat,'(A5,I2,A5)') "(A14,", dfft%z_loop_size(2), "(I3))"
-     IF( dfft%rem_size .ne. 0 ) write(6,z_remformat) "z_rem_groups:", ( dfft%z_groups(i,2), i = 1, dfft%z_loop_size(2) )
-     write(6,*) " "
-     write(y_format,'(A5,I2,A5)') "(A10,", dfft%y_loop_size(1), "(I3))"
-     write(6,y_format) "y_groups:", ( dfft%y_groups(i,1), i = 1, dfft%y_loop_size(1) )
-     write(y_remformat,'(A5,I2,A5)') "(A14,", dfft%y_loop_size(2), "(I3))"
-     IF( dfft%rem_size .ne. 0 ) write(6,y_remformat) "y_rem_groups:", ( dfft%y_groups(i,2), i = 1, dfft%y_loop_size(2) )
-     write(6,*) " "
-     write(x_format,'(A5,I2,A5)') "(A10,", dfft%x_loop_size(1), "(I3))"
-     write(6,x_format) "x_groups:", ( dfft%x_groups(i,1), i = 1, dfft%x_loop_size(1) )
-     write(x_remformat,'(A5,I2,A5)') "(A15,", dfft%x_loop_size(2), "(I3))"
-     IF( dfft%y_rem1 ) write(6,x_remformat) "x_yrem_groups:", ( dfft%x_groups(i,2), i = 1, dfft%x_loop_size(2) )
-     write(x_format,'(A5,I2,A5)') "(A14,", dfft%x_loop_size(3), "(I3))"
-     IF( dfft%rem_size .ne. 0 ) write(6,x_format) "x_rem_groups:", ( dfft%x_groups(i,3), i = 1, dfft%x_loop_size(3) )
-     write(x_remformat,'(A5,I2,A5)') "(A19,", dfft%x_loop_size(4), "(I3))"
-     IF( dfft%y_rem2 ) write(6,x_remformat) "x_rem_yrem_groups:", ( dfft%x_groups(i,4), i = 1, dfft%x_loop_size(4) )
-     write(6,*) " "
-  END IF
-
-  dfft%y_rem1 = .false.
-  dfft%y_rem2 = .false.
-
-END SUBROUTINE
 
 SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
   IMPLICIT NONE
