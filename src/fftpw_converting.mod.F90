@@ -95,6 +95,7 @@ CONTAINS
     dfft%z_group_autosize = dfft%max_batch_size
 
     dfft%overlapp = cntl%overlapp_comm_comp
+    dfft%fft_tuning = cntl%fft_tune_batchsize
 
     dfft%z_set_size_save = 1
     dfft%y_set_size_save = 1

@@ -10,7 +10,6 @@ MODULE autotune_utils
                                              fft_tune_max_it
   USE fftprp_utils,                    ONLY: autotune_fftbatchsize
   USE fftpw_base,                      ONLY: dfft
-  USE fftpw_make_maps,                 ONLY: GIMME_GROUP_SIZES
   USE fftpw_param,                     ONLY: DP
   USE mp_interface,                    ONLY: mp_bcast
   USE system,                          ONLY: cnti, cntl

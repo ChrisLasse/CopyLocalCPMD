@@ -144,6 +144,7 @@ MODULE fftpw_types
 !    LOGICAL :: timings = .true.
 !    LOGICAL :: timings2 = .false.
     LOGICAL :: VPSI_4S = .true.
+    LOGICAL :: fft_tuning
 
     LOGICAL :: do_comm
     INTEGER, ALLOCATABLE :: comm_sendrecv(:)
