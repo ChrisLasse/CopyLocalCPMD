@@ -17,8 +17,7 @@ MODULE vofrhob_utils
   USE extpotmod,                       ONLY: extpot
   USE fft_maxfft,                      ONLY: maxfftn
   USE fftmain_utils,                   ONLY: fwfftn,&
-                                             invfftn,&
-                                             invfftu
+                                             invfftn
   USE fftnew_utils,                    ONLY: setfftn
   USE gcener_utils,                    ONLY: gcener,&
                                              gclsd

@@ -10,7 +10,9 @@ MODULE loadpa_utils
   USE fftpw_base,                      ONLY: dfft,&
                                              dfftp
   USE fftpw_converting,                ONLY: Create_PwFFT_datastructure,&
-                                             ConvertFFT_array
+                                             ConvertFFT_array,&
+                                             Prep_pwFFT_Wave,&
+                                             Prep_pwFFT_Rho
   USE fftpw_param,                     ONLY: DP
   USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE geq0mod,                         ONLY: geq0
@@ -240,18 +242,21 @@ CONTAINS
     ncpw%ngw=MIN(ncpw%ngw,spar%ngws)
     ncpw%ngw=MAX(ncpw%ngw,100)
 
+    dfftp%what = 1
+    dfft%what  = 2
 
     CALL Create_PwFFT_datastructure( dfft, "wave" )
 
     CALL Create_PwFFT_datastructure( dfftp, "rho" )
 
-    dfftp%what = 1
-    dfft%what  = 2
 
 !    ixray = dfft%pw_ixray
 !    ihray = dfft%pw_ihray
     ncpw%nhg = dfft%ngm
     ncpw%ngw = dfft%ngw
+
+    CALL Prep_pwFFT_Wave( dfft )
+    CALL Prep_pwFFT_Rho( dfftp )
 
     ALLOCATE(hg(ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&

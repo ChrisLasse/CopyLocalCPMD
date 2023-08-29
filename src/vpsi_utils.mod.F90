@@ -56,6 +56,7 @@ MODULE vpsi_utils
                                              yf,&
                                              locks_inv,&
                                              locks_fw
+  USE fftpw_converting,                ONLY: Make_inv_yzCOM_Maps
   USE fftmain_utils,                   ONLY: fwfftn,&
                                              invfftn,&
                                              fwfftn_batch,&
@@ -79,10 +80,7 @@ MODULE vpsi_utils
   USE fftpw_batching,                  ONLY: locks_omp,&
                                              Prepare_Psi,&
                                              Accumulate_Psi
-  USE fftpw_make_maps,                 ONLY: Prep_pwFFT_Maps,&
-                                             Set_pwFFT_Vals,&
-                                             MapVals_CleanUp,&
-                                             Prep_fft_com,&
+  USE fftpw_make_maps,                 ONLY: Prep_fft_com,&
                                              Make_Manual_Maps
   USE fftpw_param,                     ONLY: DP
   USE fftpw_types,                     ONLY: create_shared_memory_window_2d,&
@@ -1882,6 +1880,13 @@ CONTAINS
     INTEGER                                  :: rem, i1, j1
     INTEGER(INT64) :: time(2)
 
+#ifdef _USE_SCRATCHLIBRARY
+    COMPLEX(DP), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux_array(:,:)
+#else
+    COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux_array(:,:)
+#endif
+    INTEGER(int_8) :: il_aux_array(2)
+
     LOGICAL, SAVE :: first = .true.
     INTEGER, SAVE :: nbnd, nbnd_source
     INTEGER :: batch_size
@@ -2106,14 +2111,18 @@ CONTAINS
        dfft%remember_buffer_vpsi = buffer_size
        CALL Clean_up_shared( dfft, 1 ) 
 
-       CALL Set_pwFFT_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size, dfft%ir1w, dfft%nsw )
-
-       dfft%rem_size = fft_residual
-
-       CALL Prep_pwFFT_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
+       IF( ALLOCATED( dfft%map_acinv ) )        DEALLOCATE( dfft%map_acinv )                     
+       ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * batch_size ) )         
+       CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, batch_size, dfft%ir1w, dfft%nsw, dfft%zero_acinv_start, dfft%zero_acinv_end ) 
+      
+       IF( ALLOCATED( dfft%map_acinv_rem ) )    DEALLOCATE( dfft%map_acinv_rem )                 
+       IF( fft_residual .ne. 0 ) THEN
+          ALLOCATE( dfft%map_acinv_rem( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * fft_residual ) )
+          CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_rem, fft_residual, dfft%ir1w, dfft%nsw )                
+       END IF   
   
        dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
-       sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
+       sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_residual
        dfft%sendsize_save = dfft%sendsize
      
        CALL create_shared_memory_window_2d( comm_send, 1, dfft, dfft%sendsize*dfft%nodes_numb, buffer_size ) 
@@ -2145,11 +2154,11 @@ CONTAINS
        dfft%eff_nthreads = parai%ncpus
        IF( cntl%overlapp_comm_comp .and. dfft%nthreads .gt. 1 .and. dfft%do_comm ) dfft%eff_nthreads = dfft%eff_nthreads - 1
 
-       CALL Make_Manual_Maps( dfft, batch_size, dfft%rem_size ) 
+       CALL Make_Manual_Maps( dfft, batch_size, fft_residual ) 
   
     END IF
 
-    sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
+    sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_residual
     counter = 0
   
     locks_calc_inv = .true.
@@ -2181,6 +2190,19 @@ CONTAINS
 
 
     CALL MPI_BARRIER(dfft%comm, ierr)
+
+    il_aux_array(1) = dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2
+    il_aux_array(2) = dfft%max_batch_size
+
+#ifdef _USE_SCRATCHLIBRARY
+    CALL request_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
+         __LINE__,__FILE__)
+#else
+    ALLOCATE(aux_array(il_aux_array(1),il_aux_array(2)),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
+         __LINE__,__FILE__)
+#endif
 
 !    write(6,*) "WITHIN VPSI"
 
@@ -2216,7 +2238,7 @@ CONTAINS
                 IF(bsize.NE.0)THEN
                    counter(1) = counter(1) + 1
                    ! Loop over the electronic states of this batch
-                   CALL Prepare_Psi( dfft, c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), dfft%aux_array, remswitch, mythread, dfft%nsw )
+                   CALL Prepare_Psi( dfft, c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), aux_array, remswitch, mythread, dfft%nsw )
                    ! ==--------------------------------------------------------------==
                    ! ==  Fourier transform the wave functions to real space.         ==
                    ! ==  In the array PSI was used also the fact that the wave       ==
@@ -2232,14 +2254,12 @@ CONTAINS
                    ! ==  to swap                                                     ==
                    ! ==--------------------------------------------------------------==
                    swap=mod(ibatch,int_mod)+1
-
-                   CALL invfft_batch( dfft, 1, bsize, remswitch, mythread, counter(1), swap, first_dim3, dfft%aux_array, &
-                                   c0( :, 1+(counter(1)-1)*batch_size*2 : bsize*2+(counter(1)-1)*batch_size*2 ), comm_send, comm_recv ) 
+                   CALL invfft_batch( dfft, 1, bsize, remswitch, mythread, counter(1), swap, first_dim3, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
                    i_start1=i_start1+bsize*njump
                 END IF
              END IF
           END IF
-          IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%do_comm) THEN ! .and. dfft%my_node_rank .eq. 0 ) THEN
+          IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%do_comm ) THEN ! .and. dfft%my_node_rank .eq. 0 ) THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              !communication phase
              IF(ibatch.LE.fft_numbatches+1)THEN
@@ -2284,8 +2304,8 @@ CONTAINS
                    swap=mod(ibatch-start_loop1,int_mod)+1
                    counter(3) = counter(3) + 1
                    CALL invfft_batch( dfft, 3, bsize, remswitch, mythread, counter(3), swap, first_dim1, &
-                                   rs_wave(:,1:1), comm_recv, dfft%aux_array( : , 1 : 1 ) )
-                   CALL invfft_batch( dfft, 4, bsize, remswitch, mythread, counter(3), swap, first_dim1, rs_wave(:,1:1) )
+                                      f_inout1=rs_wave(:,1:1), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
+                   CALL invfft_batch( dfft, 4, bsize, remswitch, mythread, counter(3), swap, first_dim1, f_inout1=rs_wave(:,1:1) )
                 END IF
              END IF
           END IF
@@ -2358,9 +2378,9 @@ CONTAINS
              ! ==------------------------------------------------------------==
                  counter(4) = counter(4) + 1
                  CALL fwfft_batch( dfft, 1, bsize, remswitch, mythread, counter(4), swap, first_dim1, &
-                                f_inout2=rs_wave, f_inout3=dfft%aux_array( : , 1 : 1 ) )
+                                f_inout2=rs_wave, f_inout3=aux_array( : , 1 : 1 ) )
                  CALL fwfft_batch( dfft, 2, bsize, remswitch, mythread, counter(4), swap, first_dim2, &
-                                f_inout4=dfft%aux_array, f_inout2=comm_send, f_inout3=comm_recv )
+                                f_inout2=aux_array, f_inout3=comm_send, f_inout4=comm_recv )
                 i_start2=i_start2+bsize*njump
              END IF
           END IF
@@ -2408,10 +2428,8 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop2,int_mod)+1
                 counter(6) = counter(6) + 1
-                CALL fwfft_batch( dfft, 4, bsize, remswitch, mythread, counter(6), swap, first_dim3, &
-                               dfft%aux_array, c0(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2 ), &
-                               c2(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2), comm_recv )
-                CALL Accumulate_Psi( dfft, dfft%aux_array, c2(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2), &
+                CALL fwfft_batch( dfft, 4, bsize, remswitch, mythread, counter(6), swap, first_dim3, f_inout2=comm_recv, f_inout3=aux_array )
+                CALL Accumulate_Psi( dfft, aux_array, c2(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2), &
                                      c0(:, 1+(counter(6)-1)*batch_size*2 : bsize*2+(counter(6)-1)*batch_size*2 ), mythread, bsize, counter(6), dfft%nsw )
                 i_start3=i_start3+bsize*njump
              END IF
@@ -2499,6 +2517,16 @@ CONTAINS
     END IF
 
     IF(cntl%fft_tune_batchsize) fft_time_total(fft_tune_num_it)=fft_time_total(fft_tune_num_it)+m_walltime()-temp_time
+
+#ifdef _USE_SCRATCHLIBRARY
+    CALL free_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
+         __LINE__,__FILE__)
+#else
+    DEALLOCATE(aux_array,STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
+         __LINE__,__FILE__)
+#endif
 
     DO i=1,2
        ! kk-mb === print local potential (start) ===

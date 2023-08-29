@@ -29,7 +29,10 @@ MODULE fftpw_converting
   PUBLIC :: ConvertFFT_array
   PUBLIC :: ConvertFFT_Coeffs
   PUBLIC :: ConvertFFT_v
-
+  PUBLIC :: Prep_pwFFT_Wave
+  PUBLIC :: Prep_pwFFT_Rho
+  PUBLIC :: Make_inv_yzCOM_Maps
+      
 CONTAINS
 
   SUBROUTINE Create_PwFFT_datastructure( dfft, which )
@@ -111,7 +114,6 @@ CONTAINS
     ALLOCATE( dfft%z_groups( dfft%max_batch_size, 2 ) )
     ALLOCATE( dfft%y_groups( dfft%max_batch_size, 2 ) )
     ALLOCATE( dfft%x_groups( dfft%max_batch_size, 4 ) )
-
        
     ALLOCATE( dfft%time_adding( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
@@ -143,6 +145,17 @@ CONTAINS
     CALL create_mpi_communicators( dfft )
 
     dfft%ngm_l  = ( dfft%ngl( dfft%mype + 1 ) + 1 ) / 2
+
+    dfft%nr3px = MAXVAL ( dfft%nr3p )
+    IF( dfft%what .eq. 1 ) THEN
+       dfft%my_nr1p = count ( dfft%ir1p > 0 )
+       dfft%small_chunks = dfft%nr3px * MAXVAL( dfft%nsp )
+    ELSE
+       dfft%my_nr1p = count ( dfft%ir1w > 0 )
+       dfft%small_chunks = dfft%nr3px * MAXVAL( dfft%nsw )
+    END IF
+    dfft%big_chunks = dfft%small_chunks * dfft%node_task_size * dfft%node_task_size
+    dfft%tscale = 1.0d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
 
     ALLOCATE( dfft%ngm_all( dfft%nproc ),STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
@@ -223,8 +236,366 @@ CONTAINS
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
 !    DEALLOCATE( g_pw_all )
-  
+
   END SUBROUTINE Create_PwFFT_datastructure
+
+  SUBROUTINE Prep_pwFFT_Wave( dfft )
+    IMPLICIT NONE
+  
+    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  
+    CHARACTER(*), PARAMETER :: procedureN = 'Prep_pwFFT_Maps'
+  
+    !Prepare_Psi
+    ALLOCATE( dfft%zero_prep_start( dfft%nsw( dfft%mype+1), 4 ) )
+    ALLOCATE( dfft%zero_prep_end( dfft%nsw( dfft%mype+1), 4 ) )
+    ALLOCATE( dfft%prep_map( 6, dfft%nsw( dfft%mype+1 ) ) )
+    CALL Make_PrepPsi_Maps( dfft%zero_prep_start, dfft%zero_prep_end, dfft%prep_map, dfft%nr3, dfft%nsw(dfft%mype+1), dfft%ngw, dfft%nl, dfft%nlm )
+
+    !Scatter_xy
+    ALLOCATE( dfft%map_scatter_inv( dfft%nnr ) )
+    ALLOCATE( dfft%map_scatter_fw ( dfft%nnr ) )
+    CALL Make_scatter_Map( dfft, dfft%map_scatter_inv, dfft%map_scatter_fw, dfft%nr1w, dfft%indw )
+
+    !INV_After_Com
+    ALLOCATE( dfft%zero_acinv_start( dfft%my_nr1p ) ) 
+    ALLOCATE( dfft%zero_acinv_end( dfft%my_nr1p ) ) 
+
+    !FW_Pre_Com
+    ALLOCATE( dfft%map_pcfw( dfft%nr3px * dfft%nproc3 * MAXVAL( dfft%nsw ) ) )
+    CALL Make_fw_yzCOM_Map( dfft, dfft%ir1w, dfft%nsw )
+  
+  END SUBROUTINE Prep_pwFFT_Wave
+
+  SUBROUTINE Prep_pwFFT_Rho( dfft )
+    IMPLICIT NONE
+  
+    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  
+    CHARACTER(*), PARAMETER :: procedureN = 'Prep_pwFFT_Maps'
+  
+    !Scatter_xy
+    ALLOCATE( dfft%map_scatter_inv( dfft%nnr ) )
+    ALLOCATE( dfft%map_scatter_fw ( dfft%nnr ) )
+    CALL Make_scatter_Map( dfft, dfft%map_scatter_inv, dfft%map_scatter_fw, dfft%nr1p, dfft%indp )
+
+    !INV_After_Com
+    ALLOCATE( dfft%zero_acinv_start( dfft%my_nr1p ) ) 
+    ALLOCATE( dfft%zero_acinv_end( dfft%my_nr1p ) ) 
+
+    !FW_Pre_Com
+    ALLOCATE( dfft%map_pcfw( dfft%nr3px * dfft%nproc3 * MAXVAL( dfft%nsp ) ) )
+    CALL Make_fw_yzCOM_Map( dfft, dfft%ir1p, dfft%nsp )
+
+    ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 ) )
+    CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, 1, dfft%ir1p, dfft%nsp, dfft%zero_acinv_start, dfft%zero_acinv_end )
+
+    dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsp ) * dfft%node_task_size * dfft%node_task_size
+  
+  END SUBROUTINE Prep_pwFFT_Rho
+
+  SUBROUTINE Make_PrepPsi_Maps( zero_start, zero_end, prep_map, nr3, my_nsw, ngms, nl, nlm )
+    IMPLICIT NONE
+  
+    INTEGER, INTENT(IN)  :: nr3, my_nsw, ngms
+    INTEGER, INTENT(IN)  :: nl( : )
+    INTEGER, OPTIONAL, INTENT(IN)  :: nlm( : )
+    INTEGER, INTENT(OUT) :: zero_start( :, : ), zero_end( :, : ), prep_map( :, : )
+  
+    LOGICAL :: l_map( nr3 * my_nsw )
+    LOGICAL :: l_map_m( nr3 * my_nsw )
+    LOGICAL :: l_map_z( nr3 * my_nsw )
+    INTEGER :: i, j
+    LOGICAL :: first
+  
+    !$omp parallel private( i )
+    !$omp do
+    DO i = 1, nr3 * my_nsw
+       l_map(i) = .false.
+       l_map_m(i) = .false.
+       l_map_z(i) = .false.
+    ENDDO
+    !$omp end do
+    !$omp do
+    DO i = 1, ngms
+       l_map( nl(i) ) = .true.
+       IF( present( nlm ) ) THEN
+          l_map_m( nlm(i) ) = .true.
+          l_map_z( nl(i) ) = .true.
+          l_map_z( nlm(i) ) = .true.
+       END IF
+    ENDDO
+    !$omp end do nowait
+    !$omp end parallel
+  
+    zero_start = 1
+    zero_end   = nr3
+    first = .true.
+  
+    !$omp parallel do private( i, first, j )
+    DO i = 1, my_nsw
+       first = .true.
+       DO j = 1, nr3
+  
+          IF( l_map( (i-1)*nr3 + j ) .eqv. .true. ) THEN
+             IF( first .eqv. .false. ) THEN
+                zero_end(i,1) = j-1
+                first = .true.
+             END IF
+          ELSE
+             IF( first .eqv. .true. ) THEN
+                zero_start(i,1) = j
+                first = .false.
+             END IF
+          END IF
+  
+       ENDDO 
+    ENDDO
+    !$omp end parallel do
+  
+    IF( present( nlm ) ) THEN
+     
+       !$omp parallel do private( i, first, j )
+       DO i = 1, my_nsw
+          first = .true.
+          DO j = 1, nr3
+     
+             IF( l_map_z( (i-1)*nr3 + j ) .eqv. .true. ) THEN
+                IF( first .eqv. .false. ) THEN
+                   zero_end(i,2) = j-1
+                   first = .true.
+                END IF
+             ELSE
+                IF( first .eqv. .true. ) THEN
+                   zero_start(i,2) = j
+                   first = .false.
+                END IF
+             END IF
+     
+          ENDDO 
+       ENDDO
+       !$omp end parallel do
+     
+       !$omp parallel do private( i, first, j )
+       DO i = 1, my_nsw
+          first = .true.
+          DO j = 1, nr3
+     
+             IF( l_map_m( (i-1)*nr3 + j ) .eqv. .true. ) THEN
+                IF( first .eqv. .false. ) THEN
+                   zero_end(i,3) = j-1
+                   first = .true.
+                END IF
+             ELSE
+                IF( first .eqv. .true. ) THEN
+                   zero_start(i,3) = j
+                   first = .false.
+                END IF
+             END IF
+     
+          ENDDO 
+       ENDDO
+       !$omp end parallel do
+  
+    END IF
+  
+    DO i = 1, my_nsw
+       zero_start( i, 4 ) = MAXVAL( zero_start( i, 1:3 ), 1 )
+       zero_end  ( i, 4 ) = MINVAL( zero_end  ( i, 1:3 ), 1 )
+    ENDDO
+  
+    DO i = 1, my_nsw
+  
+       prep_map( 1 , i ) = zero_start( i , 3 )
+       prep_map( 2 , i ) = zero_start( i , 1 )
+       prep_map( 3 , i ) = zero_start( i , 2 )
+       prep_map( 4 , i ) = zero_end  ( i , 2 )
+       prep_map( 5 , i ) = zero_end  ( i , 1 )
+       prep_map( 6 , i ) = zero_end  ( i , 3 )
+  
+    ENDDO
+  
+  END SUBROUTINE Make_PrepPsi_Maps
+
+  SUBROUTINE Make_scatter_Map( dfft, map_scatter_inv, map_scatter_fw, nr1s, inds )
+    IMPLICIT NONE
+  
+    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    INTEGER, INTENT(IN)  :: nr1s( dfft%nproc2 )
+    INTEGER, INTENT(IN)  :: inds( dfft%nr1 , dfft%nproc2 )
+    INTEGER, INTENT(OUT) :: map_scatter_inv(:), map_scatter_fw(:)
+  
+    INTEGER :: ncpx, sendsize, it, m3, i1, m1, icompact, iproc2, i, j, l
+    LOGICAL :: first
+  
+    dfft%nr1s = nr1s( 1 )
+    ncpx = MAXVAL( nr1s ) * dfft%my_nr3p       ! maximum number of Y columns to be disributed
+    sendsize = ncpx * MAXVAL( dfft%nr2p )       ! dimension of the scattered chunks (safe value)
+  
+    map_scatter_inv = 0
+  
+    !$omp parallel private(it,m3,i1,m1,icompact)
+    DO iproc2 = 1, dfft%nproc2
+       !$omp do 
+       DO i = 0, ncpx-1
+          IF(i>=nr1s(iproc2)*dfft%my_nr3p) CYCLE ! control i from 0 to nr1p_(iproc2)*desc%my_nr3p-1
+          it = ( iproc2 - 1 ) * sendsize + MAXVAL( dfft%nr2p ) * i
+          m3 = i/nr1s(iproc2)+1
+          i1 = mod(i,nr1s(iproc2))+1
+          m1 = inds(i1,iproc2)
+          icompact = m1 + (m3-1)*dfft%nr1*dfft%my_nr2p
+          DO j = 1, dfft%my_nr2p
+             map_scatter_inv( icompact ) = j + it
+             icompact = icompact + dfft%nr1
+          ENDDO
+       ENDDO
+       !$omp end do nowait
+    ENDDO
+    !$omp end parallel
+  
+    first = .true.
+    
+    do l = 1, dfft%nr1
+    
+       IF( map_scatter_inv( l ) .eqv. .true. ) THEN
+          IF( first .eqv. .false. ) THEN
+             dfft%zero_scatter_end = l-1
+             EXIT
+          END IF
+       ELSE
+          IF( first .eqv. .true. ) THEN
+             dfft%zero_scatter_start = l
+             first = .false.
+          END IF
+       END IF
+    
+    end do
+  
+    !$omp parallel do collapse(2) private(it,m3,i1,m1,icompact)
+    DO iproc2 = 1, dfft%nproc2
+       DO i = 0, ncpx-1
+          IF(i>=nr1s(iproc2)*dfft%my_nr3p) CYCLE ! control i from 0 to nr1p_(iproc2)*desc%my_nr3p-1
+          it = ( iproc2 - 1 ) * sendsize + MAXVAL( dfft%nr2p ) * i
+          m3 = i/nr1s(iproc2)+1
+          i1 = mod(i,nr1s(iproc2))+1
+          m1 = inds(i1,iproc2)
+          icompact = m1 + (m3-1)*dfft%nr1*dfft%my_nr2p
+          DO j = 1, dfft%my_nr2p
+             map_scatter_fw( j + it ) = icompact 
+             icompact = icompact + dfft%nr1
+          ENDDO
+       ENDDO
+    ENDDO
+    !$omp end parallel do
+  
+  END SUBROUTINE Make_scatter_Map
+
+  SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
+    IMPLICIT NONE
+  
+    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  
+    INTEGER, INTENT(IN)  :: ir1(:), ns(:)
+  
+    INTEGER :: iproc, i, k, it, mc, m1, m2, i1
+  
+    dfft%map_pcfw = 0
+  
+    DO iproc = 1, dfft%nproc
+       DO i = 1, ns( iproc )
+          it = ( iproc - 1 ) * dfft%small_chunks + dfft%nr3px * (i-1)
+          mc = dfft%ismap( i + dfft%iss( iproc ) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
+          m1 = mod(mc-1,dfft%nr1) + 1
+          m2 = (mc-1)/dfft%nr1 + 1
+          i1 = m2 + ( ir1( m1 ) - 1 ) * dfft%nr2
+          DO k = 1, dfft%my_nr3p
+             dfft%map_pcfw( k + it ) = i1
+             i1 = i1 + dfft%nr2 * dfft%my_nr1p
+          ENDDO
+       ENDDO
+    ENDDO
+  
+  END SUBROUTINE Make_fw_yzCOM_Map
+
+  SUBROUTINE Make_inv_yzCOM_Maps( dfft, map_acinv, batch_size, ir1, ns, zero_start, zero_end )
+    IMPLICIT NONE
+  
+    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    INTEGER, INTENT(IN)  :: batch_size
+    INTEGER, INTENT(OUT) :: map_acinv(:)
+    INTEGER, INTENT(IN)  :: ir1(:), ns(:)
+    INTEGER, OPTIONAL, INTENT(OUT) :: zero_start(:), zero_end(:)
+  
+    LOGICAL :: l_map( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 )
+    LOGICAL :: first
+    INTEGER :: ibatch, j, l, i, k
+    INTEGER :: iproc3, offset, it, mc, m1, m2, i1
+    INTEGER :: ierr
+  
+    l_map = .false.
+    map_acinv = 0
+    
+    !$omp parallel private( ibatch, j, l, iproc3, offset, i, it, mc, m1, m2, i1, k)
+    DO ibatch = 1, batch_size
+       DO j = 1, dfft%nodes_numb
+          DO l = 1, dfft%node_task_size
+             iproc3 = (j-1)*dfft%node_task_size + l
+             offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * dfft%big_chunks
+             !$omp do    
+             DO i = 1, ns( iproc3 )
+                it = offset + dfft%nr3px * (i-1) 
+                mc = dfft%ismap( i + dfft%iss(iproc3) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
+                m1 = mod ( mc-1, dfft%nr1 ) + 1
+                m2 = (mc-1)/dfft%nr1 + 1
+                i1 = m2 + ( ir1(m1) - 1 ) * dfft%nr2 + (ibatch-1)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
+                DO k = 1, dfft%my_nr3p
+                   IF( ibatch .eq. 1 ) l_map( i1 ) = .true.
+                   map_acinv( i1 ) = k + it
+                   i1 = i1 + dfft%nr2*dfft%my_nr1p
+                ENDDO
+             ENDDO
+             !$omp end do
+          ENDDO
+       ENDDO
+    ENDDO
+    !$omp end parallel
+  
+    IF( present( zero_start ) ) THEN
+     
+       zero_start = 0
+       zero_end = dfft%nr2
+       first = .true.
+       
+       IF( dfft%mype3 .eq. 0 ) THEN 
+          DO j = 1, dfft%my_nr1p
+             first = .true.
+             DO l = 1, dfft%nr2
+       
+                IF( l_map( (j-1)*dfft%nr2 + l ) .eqv. .true. ) THEN
+                   IF( first .eqv. .false. ) THEN
+                      zero_end( j ) = l-1
+                      first = .true.
+                   END IF
+                ELSE
+                   IF( first .eqv. .true. ) THEN
+                      zero_start( j ) = l
+                      first = .false.
+                   END IF
+                END IF
+       
+             ENDDO
+          ENDDO
+       END IF
+       IF( dfft%my_node_rank .eq. 0 .and. .not. dfft%single_node ) THEN
+          CALL MPI_BCAST( zero_start, dfft%my_nr1p, MPI_INTEGER, 0, dfft%inter_node_comm, ierr)
+          CALL MPI_BCAST( zero_end  , dfft%my_nr1p, MPI_INTEGER, 0, dfft%inter_node_comm, ierr)
+       END IF
+       CALL MPI_BCAST( zero_start, dfft%my_nr1p, MPI_INTEGER, 0, dfft%node_comm, ierr)
+       CALL MPI_BCAST( zero_end  , dfft%my_nr1p, MPI_INTEGER, 0, dfft%node_comm, ierr)
+  
+    END IF
+    
+  END SUBROUTINE Make_inv_yzCOM_Maps
 
   SUBROUTINE ConvertFFT_array( dfft, g_pw, g_cpmd, ng_cpmd, ng_pw )
     IMPLICIT NONE

@@ -98,11 +98,11 @@ SUBROUTINE Prepare_Psi( dfft, psi, aux, remswitch, mythread, ns )
 
 END SUBROUTINE Prepare_Psi
 
-SUBROUTINE fft_com( dfft, sendsize, nodes_numb, work_buffer )
+SUBROUTINE fft_com( dfft, sendsize, work_buffer )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN)                            :: sendsize, nodes_numb, work_buffer
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT)       :: dfft
+  INTEGER, INTENT(IN)                            :: sendsize, work_buffer
+  TYPE(PW_fft_type_descriptor), INTENT(INOUT)    :: dfft
 
   CHARACTER(*), PARAMETER :: procedureN = 'fft_com'
 

@@ -211,11 +211,7 @@ MODULE fftpw_types
 
     COMPLEX(DP), ALLOCATABLE :: temp_psic(:,:)
     COMPLEX(DP), ALLOCATABLE :: temp_aux(:,:)
-    COMPLEX(DP), ALLOCATABLE :: aux(:)
-    COMPLEX(DP), ALLOCATABLE :: aux2(:)
-    COMPLEX(DP), ALLOCATABLE :: aux_array(:,:)
     COMPLEX(DP), ALLOCATABLE :: wfn_keep(:,:)
-    COMPLEX(DP), ALLOCATABLE :: bench_aux(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_calc_inv(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_com_inv(:,:)
     LOGICAL, POINTER, CONTIGUOUS :: locks_calc_fw(:,:)
@@ -263,8 +259,7 @@ MODULE fftpw_types
     INTEGER, ALLOCATABLE :: zero_acinv_end(:)
     INTEGER, ALLOCATABLE :: map_acinv(:)
     INTEGER, ALLOCATABLE :: map_acinv_rem(:)
-    INTEGER, ALLOCATABLE :: map_acinv_one(:)
-    INTEGER, ALLOCATABLE :: map_acinv_rem_one(:)
+    INTEGER, ALLOCATABLE :: map_acinv_Single(:)
     INTEGER, ALLOCATABLE :: map_pcfw(:)
     INTEGER, ALLOCATABLE :: map_scatter_inv(:)
     INTEGER, ALLOCATABLE :: map_scatter_fw(:)
@@ -273,9 +268,6 @@ MODULE fftpw_types
 
     LOGICAL :: wave = .false.
     LOGICAL :: vpsi = .false.
-    INTEGER, ALLOCATABLE :: buffer_sequence(:)
-    LOGICAL, ALLOCATABLE :: first_loading(:)
-    LOGICAL, ALLOCATABLE :: first_step(:)
     LOGICAL :: rem
     LOGICAL :: writ
     LOGICAL :: optimized = .true.
