@@ -10,8 +10,7 @@ MODULE atrho_utils
   USE dotp_utils,                      ONLY: dotp
   USE error_handling,                  ONLY: stopgm
   USE fftpw_base,                      ONLY: dfft
-  USE fftmain_utils,                   ONLY: invfftn,&
-                                             invfftu
+  USE fftmain_utils,                   ONLY: invfftn
   USE fftnew_utils,                    ONLY: setfftn
   USE fitpack_utils,                   ONLY: curv1,&
                                              curv2

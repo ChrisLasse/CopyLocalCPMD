@@ -8,8 +8,7 @@ MODULE vofrhoa_utils
   USE elct,                            ONLY: crge
   USE ener,                            ONLY: ener_com
   USE error_handling,                  ONLY: stopgm
-  USE fftmain_utils,                   ONLY: fwfftn,&
-                                             fwfftu
+  USE fftmain_utils,                   ONLY: fwfftn
   USE htrstr_utils,                    ONLY: htrstr
   USE kinds,                           ONLY: real_8,&
                                              int_8

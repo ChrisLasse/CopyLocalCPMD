@@ -7,509 +7,120 @@ MODULE fftpw_make_maps
                                             fft_numbatches
   USE fftpw_param
   USE fftpw_types,                    ONLY: PW_fft_type_descriptor
-  USE timer,                           ONLY: tihalt,&
-                                             tiset
+  USE timer,                          ONLY: tihalt,&
+                                            tiset
   IMPLICIT NONE
 
   PRIVATE
   
-  PUBLIC :: Prep_pwFFT_Maps
-  PUBLIC :: Set_pwFFT_Vals
-  PUBLIC :: MapVals_CleanUp
+  PUBLIC :: Prep_single_fft_com
   PUBLIC :: Prep_fft_com
   PUBLIC :: Make_Manual_Maps
 
 CONTAINS
 
-SUBROUTINE Set_pwFFT_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
+SUBROUTINE Prep_single_fft_com( comm_send, comm_recv, sendsize, comm, nodes_numb, mype, my_node, my_node_rank, node_task_size, send_handle, recv_handle, comm_sendrecv, do_comm )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN)  :: batch_size, nbnd, num_buff
-  INTEGER, INTENT(OUT) :: rem_size
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN)                                 :: sendsize, nodes_numb, mype, my_node, my_node_rank, node_task_size
+  TYPE(MPI_COMM), INTENT(IN)                          :: comm
+  COMPLEX(DP), INTENT(IN)                             :: comm_send( : )
+  COMPLEX(DP), INTENT(INOUT)                          :: comm_recv( : )
+  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)     :: send_handle( : , : )
+  TYPE( MPI_REQUEST ), ALLOCATABLE, INTENT(INOUT)     :: recv_handle( : , : )
+  INTEGER, ALLOCATABLE, INTENT(OUT)                   :: comm_sendrecv( : )
+  LOGICAL, INTENT(OUT)                                :: do_comm
 
-  INTEGER, INTENT(IN)  :: ir1(:), ns(:)
-  CHARACTER(*), PARAMETER :: procedureN = 'Set_pwFFT_Vals'
+  INTEGER, ALLOCATABLE :: comm_info_send(:,:), comm_info_recv(:,:)
 
-  INTEGER, SAVE :: last_batch  = 0
-  INTEGER, SAVE :: last_buffer = 0
-  INTEGER :: i, j, k, l, f, isub
+  INTEGER :: i, j, k, l, m, n, p
+  INTEGER :: ierr, eff_nodes, rem, origin_node, target_node
+  INTEGER :: howmany_sending( node_task_size, nodes_numb ) , howmany_receiving( node_task_size, nodes_numb )
+  LOGICAL :: com_done( nodes_numb )
 
-  CALL tiset(procedureN,isub)
+  eff_nodes = nodes_numb - 1
 
-  IF( dfft%make_first ) THEN
-
-     dfft%make_first = .false.
-     dfft%nr3px = MAXVAL ( dfft%nr3p )
-     dfft%my_nr1p = count ( ir1 > 0 )
-     dfft%small_chunks = dfft%nr3px * MAXVAL( ns )
-     dfft%big_chunks = dfft%small_chunks * dfft%node_task_size * dfft%node_task_size
-   
-     dfft%tscale = 1.0d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
-
-     ALLOCATE( dfft%aux( dfft%nnr ) )
-     ALLOCATE( dfft%aux2( dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 * dfft%max_batch_size ) ) 
-     ALLOCATE( dfft%aux_array( dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2 , dfft%max_batch_size ) ) 
-
-  END IF
-
-  IF( last_buffer .ne. num_buff .and. dfft%wave ) THEN
-
-     last_buffer = num_buff
-  
-     IF( ALLOCATED( dfft%first_step ) )       DEALLOCATE( dfft%first_step )
-     IF( ALLOCATED( dfft%first_loading ) )    DEALLOCATE( dfft%first_loading )
-     IF( ALLOCATED( dfft%buffer_sequence ) )  DEALLOCATE( dfft%buffer_sequence )
-
-     ALLOCATE( dfft%first_step( num_buff ) )
-     ALLOCATE( dfft%first_loading( num_buff ) )
-     ALLOCATE( dfft%buffer_sequence( num_buff ) )
-     DO i = 1, num_buff
-        dfft%buffer_sequence( i ) = i
-     END DO
-     IF( num_buff .gt. 1 ) THEN
-        dfft%buffer_sequence( 1 ) = 2
-        dfft%buffer_sequence( 2 ) = 1
-     END IF
-
-  END IF
-
-  IF( last_batch .ne. batch_size .and. dfft%wave ) THEN
-
-     last_batch = batch_size
-
-     IF( ALLOCATED( dfft%bench_aux ) )        DEALLOCATE( dfft%bench_aux )
-     ALLOCATE( dfft%bench_aux( dfft%my_nr3p * dfft%nr2 * dfft%nr1, batch_size ) )
-
-  END IF
-
-  dfft%first_step = .true.
-  rem_size = mod( (nbnd+1)/2, batch_size )
-
-  CALL tihalt(procedureN,isub)
-
-END SUBROUTINE Set_pwFFT_Vals
-
-SUBROUTINE Prep_pwFFT_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
-  IMPLICIT NONE
-
-  INTEGER, INTENT(IN)  :: ngms, batch_size, rem_size
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-
-  INTEGER, INTENT(IN)  :: ir1(:), ns(:)
-
-  INTEGER, SAVE :: last_batch = 0
-  LOGICAL, SAVE :: one_done = .false.
-  CHARACTER(*), PARAMETER :: procedureN = 'Prep_pwFFT_Maps'
-  INTEGER :: isub
-
-  CALL tiset(procedureN,isub)
-
-  IF( .not. allocated( dfft%zero_prep_start ) ) THEN
-
-     !Prepare_Psi
-     ALLOCATE( dfft%zero_prep_start( ns( dfft%mype+1), 4 ) )
-     ALLOCATE( dfft%zero_prep_end( ns( dfft%mype+1), 4 ) )
-     ALLOCATE( dfft%prep_map( 6, ns( dfft%mype+1 ) ) )
-     CALL Make_PrepPsi_Maps( dfft%zero_prep_start, dfft%zero_prep_end, dfft%prep_map, dfft%nr3, ns(dfft%mype+1), ngms, dfft%nl, dfft%nlm )
-   
-     !INV_After_Com
-     ALLOCATE( dfft%zero_acinv_start( dfft%my_nr1p ) ) 
-     ALLOCATE( dfft%zero_acinv_end( dfft%my_nr1p ) ) 
-   
-     !Scatter_xy
-     ALLOCATE( dfft%map_scatter_inv( dfft%nnr ) )
-     ALLOCATE( dfft%map_scatter_fw ( dfft%nnr ) )
-     IF( dfft%what .eq. 1 ) THEN 
-        CALL Make_scatter_Map( dfft, dfft%nr1p, dfft%indp )
-     ELSE
-        CALL Make_scatter_Map( dfft, dfft%nr1w, dfft%indw )
-     END IF 
-
-     !FW_Pre_Com
-     ALLOCATE( dfft%map_pcfw( dfft%nr3px * dfft%nproc3 * MAXVAL( ns ) ) )
-     CALL Make_fw_yzCOM_Map( dfft, ir1, ns )
-
-  END IF
-
-  IF( .not. one_done .and. batch_size .eq. 1 ) THEN
-
-     ALLOCATE( dfft%map_acinv_one( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * batch_size ) )
-     ALLOCATE( dfft%map_acinv_rem_one( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * rem_size ) )
-     CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_one, dfft%map_acinv_rem_one, batch_size, rem_size, ir1, ns )
-     one_done = .true.
-
-  END IF
-
-  IF( last_batch .ne. batch_size .and. dfft%wave ) THEN
-
-     last_batch = batch_size
-
-     IF( ALLOCATED( dfft%map_acinv ) )        DEALLOCATE( dfft%map_acinv )
-     IF( ALLOCATED( dfft%map_acinv_rem ) )    DEALLOCATE( dfft%map_acinv_rem )
-     ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * batch_size ) )
-     ALLOCATE( dfft%map_acinv_rem( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * rem_size ) )
-     CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, dfft%map_acinv_rem, batch_size, rem_size, ir1, ns )
-
-  END IF
-
-  CALL tihalt(procedureN,isub)
-
-END SUBROUTINE Prep_pwFFT_Maps
-
-
-SUBROUTINE Make_PrepPsi_Maps( zero_start, zero_end, prep_map, nr3, my_nsw, ngms, nl, nlm )
-  IMPLICIT NONE
-
-  INTEGER, INTENT(IN)  :: nr3, my_nsw, ngms
-  INTEGER, INTENT(IN)  :: nl( : )
-  INTEGER, OPTIONAL, INTENT(IN)  :: nlm( : )
-  INTEGER, INTENT(OUT) :: zero_start( :, : ), zero_end( :, : ), prep_map( :, : )
-
-  LOGICAL :: l_map( nr3 * my_nsw )
-  LOGICAL :: l_map_m( nr3 * my_nsw )
-  LOGICAL :: l_map_z( nr3 * my_nsw )
-  INTEGER :: i, j
-  LOGICAL :: first
-
-  !$omp parallel private( i )
-  !$omp do
-  DO i = 1, nr3 * my_nsw
-     l_map(i) = .false.
-     l_map_m(i) = .false.
-     l_map_z(i) = .false.
-  ENDDO
-  !$omp end do
-  !$omp do
-  DO i = 1, ngms
-     l_map( nl(i) ) = .true.
-     IF( present( nlm ) ) THEN
-        l_map_m( nlm(i) ) = .true.
-        l_map_z( nl(i) ) = .true.
-        l_map_z( nlm(i) ) = .true.
-     END IF
-  ENDDO
-  !$omp end do nowait
-  !$omp end parallel
-
-  zero_start = 1
-  zero_end   = nr3
-  first = .true.
-
-  !$omp parallel do private( i, first, j )
-  DO i = 1, my_nsw
-     first = .true.
-     DO j = 1, nr3
-
-        IF( l_map( (i-1)*nr3 + j ) .eqv. .true. ) THEN
-           IF( first .eqv. .false. ) THEN
-              zero_end(i,1) = j-1
-              first = .true.
-           END IF
-        ELSE
-           IF( first .eqv. .true. ) THEN
-              zero_start(i,1) = j
-              first = .false.
-           END IF
-        END IF
-
-     ENDDO 
-  ENDDO
-  !$omp end parallel do
-
-  IF( present( nlm ) ) THEN
-   
-     !$omp parallel do private( i, first, j )
-     DO i = 1, my_nsw
-        first = .true.
-        DO j = 1, nr3
-   
-           IF( l_map_z( (i-1)*nr3 + j ) .eqv. .true. ) THEN
-              IF( first .eqv. .false. ) THEN
-                 zero_end(i,2) = j-1
-                 first = .true.
-              END IF
-           ELSE
-              IF( first .eqv. .true. ) THEN
-                 zero_start(i,2) = j
-                 first = .false.
-              END IF
-           END IF
-   
-        ENDDO 
-     ENDDO
-     !$omp end parallel do
-   
-     !$omp parallel do private( i, first, j )
-     DO i = 1, my_nsw
-        first = .true.
-        DO j = 1, nr3
-   
-           IF( l_map_m( (i-1)*nr3 + j ) .eqv. .true. ) THEN
-              IF( first .eqv. .false. ) THEN
-                 zero_end(i,3) = j-1
-                 first = .true.
-              END IF
-           ELSE
-              IF( first .eqv. .true. ) THEN
-                 zero_start(i,3) = j
-                 first = .false.
-              END IF
-           END IF
-   
-        ENDDO 
-     ENDDO
-     !$omp end parallel do
-
-  END IF
-
-  DO i = 1, my_nsw
-     zero_start( i, 4 ) = MAXVAL( zero_start( i, 1:3 ), 1 )
-     zero_end  ( i, 4 ) = MINVAL( zero_end  ( i, 1:3 ), 1 )
+  howmany_sending   = eff_nodes / node_task_size
+  howmany_receiving = eff_nodes / node_task_size
+  rem = mod( eff_nodes, node_task_size )
+  DO i = 1, rem * 2
+     k = mod( i-1, node_task_size ) + 1
+     IF( i .le. rem ) howmany_sending( k , : )   = howmany_sending( k , : )   + 1
+     IF( i .gt. rem ) howmany_receiving( k , : ) = howmany_receiving( k , : ) + 1
   ENDDO
 
-  DO i = 1, my_nsw
+  ALLOCATE( comm_info_send( howmany_sending( 1 , 1 ), node_task_size*nodes_numb ) )
+  ALLOCATE( comm_info_recv( howmany_sending( 1 , 1 ), node_task_size*nodes_numb ) )
+  ALLOCATE( comm_sendrecv( 2 ) )
+  comm_info_send = 0
+  comm_info_recv = 0
+  comm_sendrecv(1) = howmany_sending  ( my_node_rank+1 , my_node+1 )
+  comm_sendrecv(2) = howmany_receiving( my_node_rank+1 , my_node+1 )
 
-     prep_map( 1 , i ) = zero_start( i , 3 )
-     prep_map( 2 , i ) = zero_start( i , 1 )
-     prep_map( 3 , i ) = zero_start( i , 2 )
-     prep_map( 4 , i ) = zero_end  ( i , 2 )
-     prep_map( 5 , i ) = zero_end  ( i , 1 )
-     prep_map( 6 , i ) = zero_end  ( i , 3 )
+  do_comm = .true.
+  IF( comm_sendrecv(1) .eq. 0 .and. comm_sendrecv(2) .eq. 0 ) do_comm = .false.
 
-  ENDDO
+  DO i = 1, nodes_numb
 
-END SUBROUTINE Make_PrepPsi_Maps
+     com_done = .false.
 
-SUBROUTINE Make_inv_yzCOM_Maps( dfft, map_acinv, map_acinv_rem, batch_size, rem_size, ir1, ns )
-  IMPLICIT NONE
+     DO k = 1, node_task_size 
 
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  INTEGER, INTENT(IN)  :: batch_size, rem_size
-  INTEGER, INTENT(OUT) :: map_acinv(:), map_acinv_rem(:)
+s_loop: DO l = 1, howmany_sending( k, i )
 
-  INTEGER, INTENT(IN)  :: ir1(:), ns(:)
+           DO m = 1, nodes_numb
+              IF( m .eq. i ) CYCLE
 
-  LOGICAL :: l_map( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 )
-  LOGICAL :: first
-  INTEGER :: ibatch, j, l, i, k
-  INTEGER :: iproc3, offset, it, mc, m1, m2, i1
-  INTEGER :: ierr
+              DO n = 1, node_task_size 
 
-  !FOR BATCH_SIZE
-  
-  l_map = .false.
-  dfft%map_acinv = 0
-  
-  !$omp parallel private( ibatch, j, l, iproc3, offset, i, it, mc, m1, m2, i1, k)
-  DO ibatch = 1, batch_size
-     DO j = 1, dfft%nodes_numb
-        DO l = 1, dfft%node_task_size
-           iproc3 = (j-1)*dfft%node_task_size + l
-           offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * dfft%big_chunks
-           !$omp do    
-           DO i = 1, ns( iproc3 )
-              it = offset + dfft%nr3px * (i-1) 
-              mc = dfft%ismap( i + dfft%iss(iproc3) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
-              m1 = mod ( mc-1, dfft%nr1 ) + 1
-              m2 = (mc-1)/dfft%nr1 + 1
-              i1 = m2 + ( ir1(m1) - 1 ) * dfft%nr2 + (ibatch-1)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
-              DO k = 1, dfft%my_nr3p
-                 IF( ibatch .eq. 1 ) l_map( i1 ) = .true.
-                 map_acinv( i1 ) = k + it
-                 i1 = i1 + dfft%nr2*dfft%my_nr1p
+                 IF( .not. com_done( m ) .and. howmany_receiving( n , m ) .ne. 0 ) THEN
+                    com_done( m ) = .true.
+                    howmany_receiving( n , m ) = howmany_receiving( n , m ) - 1
+                    comm_info_send( l , k + (i-1)*node_task_size ) = n + (m-1)*node_task_size
+                    DO p = 1, howmany_sending( 1, 1 )
+                       IF( comm_info_recv( p , n + (m-1)*node_task_size ) .eq. 0 ) THEN
+                          comm_info_recv( p , n + (m-1)*node_task_size ) = k + (i-1)*node_task_size
+                          EXIT
+                       END IF
+                    ENDDO
+                    CYCLE s_loop
+                 END IF 
+
               ENDDO
+
            ENDDO
-           !$omp end do
-        ENDDO
+
+        ENDDO s_loop
+
      ENDDO
+
   ENDDO
-  !$omp end parallel
   
+  IF( ALLOCATED( send_handle ) )       DEALLOCATE( send_handle )
+  IF( ALLOCATED( recv_handle ) )       DEALLOCATE( recv_handle )
   
-  !FOR REM_SIZE
+  ALLOCATE( send_handle    ( comm_sendrecv(1), 1 ) )
+  ALLOCATE( recv_handle    ( comm_sendrecv(2), 1 ) )
   
-  dfft%map_acinv_rem = 0
-  
-  !$omp parallel private( ibatch, j, l, iproc3, offset, i, it, mc, m1, m2, i1, k)
-  DO ibatch = 1, rem_size
-     DO j = 1, dfft%nodes_numb
-        DO l = 1, dfft%node_task_size
-           iproc3 = (j-1)*dfft%node_task_size + l
-           offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*rem_size + (ibatch-1) ) * dfft%big_chunks
-           !$omp do    
-           DO i = 1, ns( iproc3 )
-              it = offset + dfft%nr3px * (i-1) 
-              mc = dfft%ismap( i + dfft%iss(iproc3) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
-              m1 = mod ( mc-1, dfft%nr1 ) + 1
-              m2 = (mc-1)/dfft%nr1 + 1
-              i1 = m2 + ( ir1(m1) - 1 ) * dfft%nr2 + (ibatch-1)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
-              DO k = 1, dfft%my_nr3p
-                 map_acinv_rem( i1 ) = k + it
-                 i1 = i1 + dfft%nr2*dfft%my_nr1p
-              ENDDO
-           ENDDO
-           !$omp end do
-        ENDDO
-     ENDDO
-  ENDDO
-  !$omp end parallel
-  
-  dfft%zero_acinv_start = 0
-  dfft%zero_acinv_end = dfft%nr2
-  first = .true.
-  
-  IF( dfft%mype3 .eq. 0 ) THEN 
-     DO j = 1, dfft%my_nr1p
-        first = .true.
-        DO l = 1, dfft%nr2
-  
-           IF( l_map( (j-1)*dfft%nr2 + l ) .eqv. .true. ) THEN
-              IF( first .eqv. .false. ) THEN
-                 dfft%zero_acinv_end( j ) = l-1
-                 first = .true.
-              END IF
-           ELSE
-              IF( first .eqv. .true. ) THEN
-                 dfft%zero_acinv_start( j ) = l
-                 first = .false.
-              END IF
-           END IF
-  
-        ENDDO
-     ENDDO
-  END IF
-  IF( dfft%my_node_rank .eq. 0 .and. .not. dfft%single_node ) THEN
-     CALL MPI_BCAST( dfft%zero_acinv_start, dfft%my_nr1p, MPI_INTEGER, 0, dfft%inter_node_comm, ierr)
-     CALL MPI_BCAST( dfft%zero_acinv_end  , dfft%my_nr1p, MPI_INTEGER, 0, dfft%inter_node_comm, ierr)
-  END IF
-  CALL MPI_BCAST( dfft%zero_acinv_start, dfft%my_nr1p, MPI_INTEGER, 0, dfft%node_comm, ierr)
-  CALL MPI_BCAST( dfft%zero_acinv_end  , dfft%my_nr1p, MPI_INTEGER, 0, dfft%node_comm, ierr)
-  
-END SUBROUTINE Make_inv_yzCOM_Maps
+  DO j = 1, comm_sendrecv( 1 ) !INITIALIZE SENDING AND RECEIVING
 
-SUBROUTINE Make_scatter_Map( dfft, nr1s, inds )
-  IMPLICIT NONE
+     target_node = (comm_info_send(j,mype+1)-1) / node_task_size
 
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  INTEGER, INTENT(IN)  :: nr1s( dfft%nproc2 )
-  INTEGER, INTENT(IN)  :: inds( dfft%nr1 , dfft%nproc2 )
+     CALL MPI_SEND_INIT( comm_send( 1 + target_node*sendsize ), sendsize, MPI_DOUBLE_COMPLEX, comm_info_send( j , mype+1 ) - 1, &
+                         mype, comm, send_handle( j , 1 ), ierr )
 
-  INTEGER :: ncpx, sendsize, it, m3, i1, m1, icompact, iproc2, i, j, l
-  LOGICAL :: first
+  ENDDO        
 
-  dfft%nr1s = nr1s( 1 )
-  ncpx = MAXVAL( nr1s ) * dfft%my_nr3p       ! maximum number of Y columns to be disributed
-  sendsize = ncpx * MAXVAL( dfft%nr2p )       ! dimension of the scattered chunks (safe value)
+  DO j = 1, comm_sendrecv( 2 )
 
-  dfft%map_scatter_inv = 0
+     origin_node = (comm_info_recv(j,mype+1)-1) / node_task_size
 
-  !$omp parallel private(it,m3,i1,m1,icompact)
-  DO iproc2 = 1, dfft%nproc2
-     !$omp do 
-     DO i = 0, ncpx-1
-        IF(i>=nr1s(iproc2)*dfft%my_nr3p) CYCLE ! control i from 0 to nr1p_(iproc2)*desc%my_nr3p-1
-        it = ( iproc2 - 1 ) * sendsize + MAXVAL( dfft%nr2p ) * i
-        m3 = i/nr1s(iproc2)+1
-        i1 = mod(i,nr1s(iproc2))+1
-        m1 = inds(i1,iproc2)
-        icompact = m1 + (m3-1)*dfft%nr1*dfft%my_nr2p
-        DO j = 1, dfft%my_nr2p
-           dfft%map_scatter_inv( icompact ) = j + it
-           icompact = icompact + dfft%nr1
-        ENDDO
-     ENDDO
-     !$omp end do nowait
-  ENDDO
-  !$omp end parallel
+     CALL MPI_RECV_INIT( comm_recv( 1 + origin_node*sendsize ), sendsize, MPI_DOUBLE_COMPLEX, comm_info_recv( j , mype+1 ) - 1, &
+                         MPI_ANY_TAG, comm, recv_handle( j , 1 ), ierr )
 
-  first = .true.
-  
-  do l = 1, dfft%nr1
-  
-     IF( dfft%map_scatter_inv( l ) .eqv. .true. ) THEN
-        IF( first .eqv. .false. ) THEN
-           dfft%zero_scatter_end = l-1
-           EXIT
-        END IF
-     ELSE
-        IF( first .eqv. .true. ) THEN
-           dfft%zero_scatter_start = l
-           first = .false.
-        END IF
-     END IF
-  
-  end do
+  ENDDO        
 
-  !$omp parallel do collapse(2) private(it,m3,i1,m1,icompact)
-  DO iproc2 = 1, dfft%nproc2
-     DO i = 0, ncpx-1
-        IF(i>=nr1s(iproc2)*dfft%my_nr3p) CYCLE ! control i from 0 to nr1p_(iproc2)*desc%my_nr3p-1
-        it = ( iproc2 - 1 ) * sendsize + MAXVAL( dfft%nr2p ) * i
-        m3 = i/nr1s(iproc2)+1
-        i1 = mod(i,nr1s(iproc2))+1
-        m1 = inds(i1,iproc2)
-        icompact = m1 + (m3-1)*dfft%nr1*dfft%my_nr2p
-        DO j = 1, dfft%my_nr2p
-           dfft%map_scatter_fw( j + it ) = icompact 
-           icompact = icompact + dfft%nr1
-        ENDDO
-     ENDDO
-  ENDDO
-  !$omp end parallel do
-
-END SUBROUTINE Make_scatter_Map
-
-SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
-  IMPLICIT NONE
-
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-
-  INTEGER, INTENT(IN)  :: ir1(:), ns(:)
-
-  INTEGER :: iproc, i, k, it, mc, m1, m2, i1
-
-  dfft%map_pcfw = 0
-
-  DO iproc = 1, dfft%nproc
-     DO i = 1, ns( iproc )
-        it = ( iproc - 1 ) * dfft%small_chunks + dfft%nr3px * (i-1)
-        mc = dfft%ismap( i + dfft%iss( iproc ) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
-        m1 = mod(mc-1,dfft%nr1) + 1
-        m2 = (mc-1)/dfft%nr1 + 1
-        i1 = m2 + ( ir1( m1 ) - 1 ) * dfft%nr2
-        DO k = 1, dfft%my_nr3p
-           dfft%map_pcfw( k + it ) = i1
-           i1 = i1 + dfft%nr2 * dfft%my_nr1p
-        ENDDO
-     ENDDO
-  ENDDO
-
-END SUBROUTINE Make_fw_yzCOM_Map
-
-SUBROUTINE MapVals_CleanUp( dfft )
-  IMPLICIT NONE
-
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-
-  dfft%make_first = .true.
-  IF( ALLOCATED( dfft%aux ) )              DEALLOCATE( dfft%aux )
-  IF( ALLOCATED( dfft%aux2 ) )             DEALLOCATE( dfft%aux2 )
-  IF( ALLOCATED( dfft%bench_aux ) )        DEALLOCATE( dfft%bench_aux )
-  IF( ALLOCATED( dfft%first_step ) )       DEALLOCATE( dfft%first_step )
-  IF( ALLOCATED( dfft%first_loading ) )    DEALLOCATE( dfft%first_loading )
-  IF( ALLOCATED( dfft%buffer_sequence ) )  DEALLOCATE( dfft%buffer_sequence )
-  IF( ALLOCATED( dfft%zero_prep_start ) )  DEALLOCATE( dfft%zero_prep_start )
-  IF( ALLOCATED( dfft%zero_prep_end ) )    DEALLOCATE( dfft%zero_prep_end )
-  IF( ALLOCATED( dfft%map_acinv ) )        DEALLOCATE( dfft%map_acinv )
-  IF( ALLOCATED( dfft%map_acinv_rem ) )    DEALLOCATE( dfft%map_acinv_rem )
-  IF( ALLOCATED( dfft%zero_acinv_start ) ) DEALLOCATE( dfft%zero_acinv_start )
-  IF( ALLOCATED( dfft%zero_acinv_end ) )   DEALLOCATE( dfft%zero_acinv_end )
-  IF( ALLOCATED( dfft%map_pcfw ) )         DEALLOCATE( dfft%map_pcfw )
-  IF( ALLOCATED( dfft%map_scatter_inv ) )  DEALLOCATE( dfft%map_scatter_inv )
-  IF( ALLOCATED( dfft%map_scatter_fw ) )   DEALLOCATE( dfft%map_scatter_fw )
-
-END SUBROUTINE MapVals_CleanUp
+END SUBROUTINE Prep_single_fft_com
 
 SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, comm, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size, send_handle, recv_handle, send_handle_rem, recv_handle_rem, comm_sendrecv, do_comm )
   IMPLICIT NONE
