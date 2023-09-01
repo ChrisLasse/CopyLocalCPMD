@@ -287,9 +287,14 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   INTEGER, INTENT(IN) :: batch_size, rem_size
 
-  INTEGER :: i, j, overlap_cor
+  INTEGER :: i, j, overlap_cor, eff_nthreads
 
-  overlap_cor = dfft%nthreads - dfft%eff_nthreads
+  IF( dfft%overlapp .and. dfft%nthreads .gt. 1 .and. dfft%do_comm ) THEN
+     eff_nthreads = dfft%nthreads - 1
+  ELSE
+     eff_nthreads = dfft%nthreads
+  END IF
+  overlap_cor = dfft%nthreads - eff_nthreads
 
 ! z things
 
@@ -304,9 +309,9 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
   DO j = 1, dfft%node_task_size * dfft%nodes_numb
 
      DO i = 1+overlap_cor, dfft%nthreads
-        dfft%thread_z_sticks( i, 1, j ) = ( dfft%nsw( j ) * batch_size ) / dfft%eff_nthreads
+        dfft%thread_z_sticks( i, 1, j ) = ( dfft%nsw( j ) * batch_size ) / eff_nthreads
      ENDDO
-     DO i = 1+overlap_cor, mod( dfft%nsw( j ) * batch_size, dfft%eff_nthreads ) + overlap_cor
+     DO i = 1+overlap_cor, mod( dfft%nsw( j ) * batch_size, eff_nthreads ) + overlap_cor
         dfft%thread_z_sticks( i, 1, j ) = dfft%thread_z_sticks( i, 1, j ) + 1
      ENDDO
    
@@ -320,9 +325,9 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
    
      IF( rem_size .ne. 0 ) THEN
         DO i = 1+overlap_cor, dfft%nthreads
-           dfft%thread_z_sticks( i, 2, j ) = ( dfft%nsw( j ) * rem_size ) / dfft%eff_nthreads
+           dfft%thread_z_sticks( i, 2, j ) = ( dfft%nsw( j ) * rem_size ) / eff_nthreads
         ENDDO
-        DO i = 1+overlap_cor, mod( dfft%nsw( j ) * rem_size, dfft%eff_nthreads ) + overlap_cor
+        DO i = 1+overlap_cor, mod( dfft%nsw( j ) * rem_size, eff_nthreads ) + overlap_cor
            dfft%thread_z_sticks( i, 2, j ) = dfft%thread_z_sticks( i, 2, j ) + 1
         ENDDO
       
@@ -348,9 +353,9 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
   ALLOCATE( dfft%thread_y_end( dfft%nthreads, 2 ) )
 
   DO i = 1+overlap_cor, dfft%nthreads
-     dfft%thread_y_sticks( i, 1 ) = ( dfft%my_nr1p * dfft%my_nr3p * batch_size ) / dfft%eff_nthreads
+     dfft%thread_y_sticks( i, 1 ) = ( dfft%my_nr1p * dfft%my_nr3p * batch_size ) / eff_nthreads
   ENDDO
-  DO i = 1+overlap_cor, mod( dfft%my_nr1p * dfft%my_nr3p * batch_size, dfft%eff_nthreads ) + overlap_cor
+  DO i = 1+overlap_cor, mod( dfft%my_nr1p * dfft%my_nr3p * batch_size, eff_nthreads ) + overlap_cor
      dfft%thread_y_sticks( i, 1 ) = dfft%thread_y_sticks( i, 1 ) + 1
   ENDDO
 
@@ -364,9 +369,9 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
 
   IF( rem_size .ne. 0 ) THEN
      DO i = 1+overlap_cor, dfft%nthreads
-        dfft%thread_y_sticks( i, 2 ) = ( dfft%my_nr1p * dfft%my_nr3p * rem_size ) / dfft%eff_nthreads
+        dfft%thread_y_sticks( i, 2 ) = ( dfft%my_nr1p * dfft%my_nr3p * rem_size ) / eff_nthreads
      ENDDO
-     DO i = 1+overlap_cor, mod( dfft%my_nr1p * dfft%my_nr3p * rem_size, dfft%eff_nthreads ) + overlap_cor
+     DO i = 1+overlap_cor, mod( dfft%my_nr1p * dfft%my_nr3p * rem_size, eff_nthreads ) + overlap_cor
         dfft%thread_y_sticks( i, 2 ) = dfft%thread_y_sticks( i, 2 ) + 1
      ENDDO
    
@@ -390,9 +395,9 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
   ALLOCATE( dfft%thread_x_end( dfft%nthreads, 2 ) )
 
   DO i = 1+overlap_cor, dfft%nthreads
-     dfft%thread_x_sticks( i, 1 ) = ( dfft%my_nr3p * dfft%my_nr2p * batch_size ) / dfft%eff_nthreads
+     dfft%thread_x_sticks( i, 1 ) = ( dfft%my_nr3p * dfft%my_nr2p * batch_size ) / eff_nthreads
   ENDDO
-  DO i = 1+overlap_cor, mod( dfft%my_nr3p * dfft%my_nr2p * batch_size, dfft%eff_nthreads ) + overlap_cor
+  DO i = 1+overlap_cor, mod( dfft%my_nr3p * dfft%my_nr2p * batch_size, eff_nthreads ) + overlap_cor
      dfft%thread_x_sticks( i, 1 ) = dfft%thread_x_sticks( i, 1 ) + 1
   ENDDO
 
@@ -406,9 +411,9 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
 
   IF( rem_size .ne. 0 ) THEN
      DO i = 1+overlap_cor, dfft%nthreads
-        dfft%thread_x_sticks( i, 2 ) = ( dfft%my_nr3p * dfft%my_nr2p * rem_size ) / dfft%eff_nthreads
+        dfft%thread_x_sticks( i, 2 ) = ( dfft%my_nr3p * dfft%my_nr2p * rem_size ) / eff_nthreads
      ENDDO
-     DO i = 1+overlap_cor, mod( dfft%my_nr3p * dfft%my_nr2p * rem_size, dfft%eff_nthreads ) + overlap_cor
+     DO i = 1+overlap_cor, mod( dfft%my_nr3p * dfft%my_nr2p * rem_size, eff_nthreads ) + overlap_cor
         dfft%thread_x_sticks( i, 2 ) = dfft%thread_x_sticks( i, 2 ) + 1
      ENDDO
    
@@ -432,9 +437,9 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
   ALLOCATE( dfft%thread_ngms_end( dfft%nthreads ) )
 
   DO i = 1+overlap_cor, dfft%nthreads
-     dfft%thread_ngms( i ) = ( dfft%ngms ) / dfft%eff_nthreads
+     dfft%thread_ngms( i ) = ( dfft%ngw ) / eff_nthreads
   ENDDO
-  DO i = 1+overlap_cor, mod( dfft%ngms, dfft%eff_nthreads ) + overlap_cor
+  DO i = 1+overlap_cor, mod( dfft%ngw, eff_nthreads ) + overlap_cor
      dfft%thread_ngms( i ) = dfft%thread_ngms( i ) + 1
   ENDDO
 
@@ -457,9 +462,9 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
   ALLOCATE( dfft%thread_rspace_end( dfft%nthreads ) )
 
   DO i = 1+overlap_cor, dfft%nthreads
-     dfft%thread_rspace( i ) = ( dfft%my_nr3p * dfft%nr2 * dfft%nr1 ) / dfft%eff_nthreads
+     dfft%thread_rspace( i ) = ( dfft%my_nr3p * dfft%nr2 * dfft%nr1 ) / eff_nthreads
   ENDDO
-  DO i = 1+overlap_cor, mod( dfft%my_nr3p * dfft%nr2 * dfft%nr1, dfft%eff_nthreads ) + overlap_cor
+  DO i = 1+overlap_cor, mod( dfft%my_nr3p * dfft%nr2 * dfft%nr1, eff_nthreads ) + overlap_cor
      dfft%thread_rspace( i ) = dfft%thread_rspace( i ) + 1
   ENDDO
 
@@ -471,7 +476,6 @@ SUBROUTINE Make_Manual_Maps( dfft, batch_size, rem_size )
      dfft%thread_rspace_end( i ) = dfft%thread_rspace_start( i ) + dfft%thread_rspace( i ) - 1
   ENDDO
   
-
 END SUBROUTINE Make_Manual_Maps
 
 !=----------------------------------------------------------------------=

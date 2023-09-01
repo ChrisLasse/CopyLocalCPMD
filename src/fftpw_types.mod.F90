@@ -240,10 +240,7 @@ MODULE fftpw_types
     INTEGER :: my_node_rank = 0
     INTEGER :: my_inter_node_rank = 0
     INTEGER :: my_node = 0
-    INTEGER :: remember_batch_vpsi  = 0
-    INTEGER :: remember_buffer_vpsi = 0
-    INTEGER :: remember_batch_rho  = 0
-    INTEGER :: remember_buffer_rho = 0
+    INTEGER :: remember_batch = 0
     INTEGER :: nr3px
     INTEGER :: nr1s
     INTEGER :: my_nr1p
