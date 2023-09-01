@@ -100,6 +100,8 @@ CONTAINS
     dfft%overlapp = cntl%overlapp_comm_comp
     dfft%fft_tuning = cntl%fft_tune_batchsize
 
+    dfft%nthreads = parai%ncpus
+
     dfft%z_set_size_save = 1
     dfft%y_set_size_save = 1
     dfft%scatter_set_size_save = 1
@@ -289,8 +291,6 @@ CONTAINS
 
     ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 ) )
     CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, 1, dfft%ir1p, dfft%nsp, dfft%zero_acinv_start, dfft%zero_acinv_end )
-
-    dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsp ) * dfft%node_task_size * dfft%node_task_size
   
   END SUBROUTINE Prep_pwFFT_Rho
 
