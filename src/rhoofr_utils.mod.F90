@@ -1562,7 +1562,7 @@ CONTAINS
 
     !$ locks_inv=.TRUE.
     !$OMP parallel num_threads( dfft%nthreads ) &
-    !$omp private(mythread,ibatch,bsize,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2) &
+    !$omp private(mythread,ibatch,bsize,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
 
@@ -1676,7 +1676,6 @@ CONTAINS
                    END IF
                 END DO
                 CALL build_density_sum_Man( dfft, coef3, coef4, psi_work( : , start : ending ), rhoe, bsize, mythread, ispin, clsd%nlsd )
-                write(6,*) coef3, coef4, bsize, mythread, ispin, clsd%nlsd, ibatch
 !                CALL build_density_sum_batch(coef3,coef4,wfn_r1,rhoe_p,&
 !                     fpar%kr1*fpar%kr2s,bsize,fpar%kr3s,ispin,clsd%nlsd)
 !                !some extra loop in case of lse
