@@ -63,6 +63,9 @@ MODULE mp_interface
   PUBLIC :: mp_win_sync
   PUBLIC :: mp_win_lock_all_shared
   PUBLIC :: mp_win_unlock_all_shared
+  PUBLIC :: mp_startall
+  PUBLIC :: mp_waitall
+  PUBLIC :: mp_win_alloc_shared_mem_central
   !
   ! interfaces
   !
@@ -1302,6 +1305,84 @@ CONTAINS
     CALL mp_win_alloc_shared_mem('d',1,1,baseptr,nproc,mypos,comm)
 #endif
   END SUBROUTINE mp_win_dealloc_shared_mem
+
+  SUBROUTINE mp_startall( howmany, handles )
+    ! ==--------------------------------------------------------------==
+    ! == Wrapper for MPI_STARTALL                                     ==
+    ! ==--------------------------------------------------------------==
+    ! Author: Christian Ritterhoff, FAU Erlangen Nuernberg, Sep 2023
+    INTEGER, INTENT(IN)                    :: howmany
+    TYPE( MPI_REQUEST ), INTENT(INOUT)     :: handles(:)
+    CHARACTER(*),PARAMETER::procedureN='mp_startall'
+    
+    INTEGER :: ierr
+
+    CALL MPI_STARTALL( howmany, handles, ierr )
+    CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+
+  END SUBROUTINE mp_startall
+
+  SUBROUTINE mp_waitall( howmany, handles )
+    ! ==--------------------------------------------------------------==
+    ! == Wrapper for MPI_STARTALL                                     ==
+    ! ==--------------------------------------------------------------==
+    ! Author: Christian Ritterhoff, FAU Erlangen Nuernberg, Sep 2023
+    INTEGER, INTENT(IN)                    :: howmany
+    TYPE( MPI_REQUEST ), INTENT(INOUT)     :: handles(:)
+    CHARACTER(*),PARAMETER::procedureN='mp_waitall'
+    
+    INTEGER :: ierr
+
+    CALL MPI_WAITALL( howmany, handles, MPI_STATUSES_IGNORE, ierr )
+    CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+
+  END SUBROUTINE mp_waitall
+
+  SUBROUTINE mp_win_alloc_shared_mem_central( type, baseptr, window_number, winsize, me, task_count, comm, mpi_window )
+    IMPLICIT NONE
+  
+    CHARACTER(1), INTENT(IN)                         :: type
+    TYPE(C_PTR), INTENT(OUT)                         :: baseptr( : )
+    INTEGER, INTENT(IN)                              :: winsize, me, task_count, window_number
+    TYPE(MPI_WIN), INTENT(INOUT)                     :: mpi_window(:)
+#ifdef __PARALLEL
+    type(MPI_COMM),INTENT(IN) :: comm
+#else
+    INTEGER,INTENT(IN) :: comm
+#endif
+
+    INTEGER :: displ, ierr
+    INTEGER(KIND=MPI_ADDRESS_KIND) :: windowsize
+    CHARACTER(*), PARAMETER                  :: procedureN = 'mp_win_alloc_shared_mem_central'
+    LOGICAL, SAVE :: existing( 99 ) = .false.
+
+    IF( existing( window_number ) ) THEN
+       CALL MPI_WIN_FREE( mpi_window( window_number ) , ierr )
+       CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+    ELSE
+       existing( window_number ) = .true.
+    END IF
+ 
+    IF( type .eq. 'C' .or. type .eq. 'c' ) THEN
+       CALL MPI_TYPE_SIZE( mpi_double_complex, displ, ierr)
+    ELSE IF( type .eq. 'L' .or. type .eq. 'l' ) THEN
+       CALL MPI_TYPE_SIZE( mpi_logical, displ, ierr)
+    END IF
+    CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+    IF ( me .eq. 0 ) then
+       windowsize = winsize * displ
+    ELSE
+       windowsize = 0
+    END IF
+  
+    CALL MPI_WIN_ALLOCATE_SHARED( windowsize , displ, MPI_INFO_NULL, comm, baseptr(me+1), mpi_window( window_number ), ierr )
+    CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+  
+    IF ( me .ne. 0 ) then
+       CALL MPI_WIN_SHARED_QUERY( mpi_window( window_number ), 0, windowsize, displ, baseptr(1), ierr)
+    END IF
+  
+  END SUBROUTINE mp_win_alloc_shared_mem_central
 
   !
   ! include file for the interfaces

@@ -6,6 +6,8 @@ MODULE fftpw_batching
   USE fftpw_param
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
   USE kinds,                                    ONLY: real_8
+  USE mp_interface,                             ONLY: mp_startall,&
+                                                      mp_waitall
   USE system,                                   ONLY: parm
   USE timer,                           ONLY: tihalt,&
                                              tiset
@@ -117,19 +119,19 @@ SUBROUTINE fft_com( dfft, remswitch, work_buffer )
 
   IF( remswitch .eq. 1 ) THEN
   
-     CALL MPI_STARTALL( dfft%comm_sendrecv(1), dfft%send_handle(:,work_buffer) )
-     CALL MPI_STARTALL( dfft%comm_sendrecv(2), dfft%recv_handle(:,work_buffer) )
+     CALL MP_STARTALL( dfft%comm_sendrecv(1), dfft%send_handle(:,work_buffer) )
+     CALL MP_STARTALL( dfft%comm_sendrecv(2), dfft%recv_handle(:,work_buffer) )
   
-     CALL MPI_WAITALL( dfft%comm_sendrecv(1), dfft%send_handle(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
-     CALL MPI_WAITALL( dfft%comm_sendrecv(2), dfft%recv_handle(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
+     CALL MP_WAITALL( dfft%comm_sendrecv(1), dfft%send_handle(:,work_buffer) )
+     CALL MP_WAITALL( dfft%comm_sendrecv(2), dfft%recv_handle(:,work_buffer) )
   
   ELSE
   
-     CALL MPI_STARTALL( dfft%comm_sendrecv(1), dfft%send_handle_rem(:,work_buffer) )
-     CALL MPI_STARTALL( dfft%comm_sendrecv(2), dfft%recv_handle_rem(:,work_buffer) )
+     CALL MP_STARTALL( dfft%comm_sendrecv(1), dfft%send_handle_rem(:,work_buffer) )
+     CALL MP_STARTALL( dfft%comm_sendrecv(2), dfft%recv_handle_rem(:,work_buffer) )
   
-     CALL MPI_WAITALL( dfft%comm_sendrecv(1), dfft%send_handle_rem(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
-     CALL MPI_WAITALL( dfft%comm_sendrecv(2), dfft%recv_handle_rem(:,work_buffer), MPI_STATUSES_IGNORE, ierr )
+     CALL MP_WAITALL( dfft%comm_sendrecv(1), dfft%send_handle_rem(:,work_buffer) )
+     CALL MP_WAITALL( dfft%comm_sendrecv(2), dfft%recv_handle_rem(:,work_buffer) )
   
   END IF
 

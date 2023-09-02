@@ -85,10 +85,6 @@ MODULE rhoofr_utils
   USE fftpw_make_maps,                 ONLY: Prep_fft_com,&
                                              Make_Manual_Maps
   USE fftpw_param,                     ONLY: DP
-  USE fftpw_types,                     ONLY: create_shared_memory_window_2d,&
-                                             create_shared_locks_2d,&
-                                             create_shared_locks_1d,&
-                                             Clean_up_shared
   USE geq0mod,                         ONLY: geq0
   USE ions,                            ONLY: ions0,&
                                              ions1
