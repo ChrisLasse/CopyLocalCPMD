@@ -59,8 +59,7 @@ MODULE fftmain_utils
   USE fftpw_converting,                ONLY: ConvertFFT_Coeffs
   USE fftpw_make_maps,                 ONLY: Prep_single_fft_com
   USE fftpw_param
-  USE fftpw_types,                     ONLY: PW_fft_type_descriptor,&
-                                             create_shared_memory_window_1d
+  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE fftpw_batchingSingle
   USE fftpw_batching
   USE kinds,                           ONLY: real_8,&
@@ -71,6 +70,7 @@ MODULE fftmain_utils
                                              mltfft_essl,&
                                              mltfft_fftw,&
                                              mltfft_hp
+  USE mp_interface,                    ONLY: mp_win_alloc_shared_mem_central
   USE parac,                           ONLY: parai
   USE system,                          ONLY: cntl,&
                                              fpar,&
@@ -1185,6 +1185,8 @@ CONTAINS
     CHARACTER(*), PARAMETER                  :: procedureN = 'fftpw'
     LOGICAL, SAVE :: first = .true.
     INTEGER, SAVE :: sendsize
+    TYPE(C_PTR) :: baseptr( dfft%node_task_size )
+    INTEGER :: arrayshape(1)
 
     CALL tiset(procedureN,isub)
 
@@ -1204,9 +1206,13 @@ CONTAINS
        first = .false.
 
        sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsp ) * dfft%node_task_size * dfft%node_task_size
-     
-       CALL create_shared_memory_window_1d( shared1, 80, dfft, sendsize*dfft%nodes_numb ) 
-       CALL create_shared_memory_window_1d( shared2, 81, dfft, sendsize*dfft%nodes_numb ) 
+
+       CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 1, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+       arrayshape(1) = sendsize*dfft%nodes_numb
+       CALL C_F_POINTER( baseptr(1), shared1, arrayshape )
+       CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 2, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+       arrayshape(1) = sendsize*dfft%nodes_numb
+       CALL C_F_POINTER( baseptr(1), shared2, arrayshape )
 
        CALL Prep_single_fft_com( shared1, shared2, sendsize, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, dfft%node_task_size, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm )
 

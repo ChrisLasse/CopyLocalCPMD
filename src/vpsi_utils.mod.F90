@@ -82,10 +82,6 @@ MODULE vpsi_utils
   USE fftpw_make_maps,                 ONLY: Prep_fft_com,&
                                              Make_Manual_Maps
   USE fftpw_param,                     ONLY: DP
-  USE fftpw_types,                     ONLY: create_shared_memory_window_2d,&
-                                             create_shared_locks_2d,&
-                                             create_shared_locks_1d,&
-                                             Clean_up_shared
   USE geq0mod,                         ONLY: geq0
   USE kinds,                           ONLY: real_8,&
                                              int_8
@@ -99,7 +95,8 @@ MODULE vpsi_utils
   USE mp_interface,                    ONLY: mp_comm_dup,&
                                              mp_comm_free,&
                                              mp_comm_null,&
-                                             mp_bcast
+                                             mp_bcast,&
+                                             mp_win_alloc_shared_mem_central
   USE parac,                           ONLY: parai
   USE part_1d,                         ONLY: part_1d_get_el_in_blk,&
                                              part_1d_nbr_el_in_blk
@@ -2667,13 +2664,14 @@ CONTAINS
     INTEGER, INTENT(OUT) :: sendsize, sendsize_rem
   
     INTEGER :: int_mod
+    TYPE(C_PTR) :: baseptr( dfft%node_task_size )
+    INTEGER :: arrayshape(2)
   
     int_mod = 3
     IF( dfft%rsactive ) int_mod = 2
     IF( .not. ( dfft%overlapp .and. fft_numbatches .gt. 1 ) ) int_mod = 1
   
     dfft%batch_size_save = fft_batchsize
-    CALL Clean_up_shared( dfft, 1 ) 
   
     IF( ALLOCATED( dfft%map_acinv ) )        DEALLOCATE( dfft%map_acinv )                     
     ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * fft_batchsize ) )
@@ -2688,22 +2686,55 @@ CONTAINS
     sendsize     = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_batchsize
     sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_residual
     
-    CALL create_shared_memory_window_2d( comm_send, 1, dfft, sendsize*dfft%nodes_numb, int_mod ) 
-    CALL create_shared_memory_window_2d( comm_recv, 2, dfft, sendsize*dfft%nodes_numb, int_mod ) 
+!    CALL create_shared_memory_window_2d( comm_send, 1, dfft, sendsize*dfft%nodes_numb, int_mod ) 
+
+    CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 3, sendsize*dfft%nodes_numb*int_mod, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    arrayshape(1) = sendsize*dfft%nodes_numb
+    arrayshape(2) = int_mod
+    CALL C_F_POINTER( baseptr(1), comm_send, arrayshape )
+
+    CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 4, sendsize*dfft%nodes_numb*int_mod, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    arrayshape(1) = sendsize*dfft%nodes_numb
+    arrayshape(2) = int_mod
+    CALL C_F_POINTER( baseptr(1), comm_recv, arrayshape )
     
     CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
                        dfft%node_task_size, int_mod, dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem, dfft%comm_sendrecv, dfft%do_comm )
    
-    CALL create_shared_locks_2d( locks_calc_inv, 20, dfft, dfft%node_task_size, ( nstate / fft_batchsize ) + 1 )
-    CALL create_shared_locks_2d( locks_calc_fw,  21, dfft, dfft%node_task_size, ( nstate / fft_batchsize ) + 1 )
-    CALL create_shared_locks_2d( locks_com_inv,  50, dfft, dfft%node_task_size, ( nstate / fft_batchsize ) + 1 )
-    CALL create_shared_locks_2d( locks_com_fw,   51, dfft, dfft%node_task_size, ( nstate / fft_batchsize ) + 1 )
-    
-    CALL create_shared_locks_2d( locks_calc_1  , 22, dfft, dfft%node_task_size, nstate + fft_batchsize + (int_mod-1)*fft_batchsize )
-    CALL create_shared_locks_2d( locks_calc_2  , 23, dfft, dfft%node_task_size, nstate + fft_batchsize + (int_mod-1)*fft_batchsize )
-  
-    CALL create_shared_locks_2d( locks_sing_1  , 24, dfft, dfft%node_task_size, fft_numbatches+3 )
-    CALL create_shared_locks_2d( locks_sing_2  , 25, dfft, dfft%node_task_size, fft_numbatches+3 )
+    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 5, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    arrayshape(1) = dfft%node_task_size
+    arrayshape(2) = ( nstate / fft_batchsize ) + 1
+    CALL C_F_POINTER( baseptr(1), locks_calc_inv, arrayshape )
+    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 6, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    arrayshape(1) = dfft%node_task_size
+    arrayshape(2) = ( nstate / fft_batchsize ) + 1
+    CALL C_F_POINTER( baseptr(1), locks_calc_fw, arrayshape )
+    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 7, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    arrayshape(1) = dfft%node_task_size
+    arrayshape(2) = ( nstate / fft_batchsize ) + 1
+    CALL C_F_POINTER( baseptr(1), locks_com_inv, arrayshape )
+    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 8, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    arrayshape(1) = dfft%node_task_size
+    arrayshape(2) = ( nstate / fft_batchsize ) + 1
+    CALL C_F_POINTER( baseptr(1), locks_com_fw, arrayshape )
+
+    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 9, dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    arrayshape(1) = dfft%node_task_size
+    arrayshape(2) = nstate + fft_batchsize + (int_mod-1)*fft_batchsize
+    CALL C_F_POINTER( baseptr(1), locks_calc_1, arrayshape )
+    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 10, dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    arrayshape(1) = dfft%node_task_size
+    arrayshape(2) = nstate + fft_batchsize + (int_mod-1)*fft_batchsize
+    CALL C_F_POINTER( baseptr(1), locks_calc_2, arrayshape )
+
+    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 11, dfft%node_task_size * ( fft_numbatches + 3 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    arrayshape(1) = dfft%node_task_size
+    arrayshape(2) = fft_numbatches + 3
+    CALL C_F_POINTER( baseptr(1), locks_sing_1, arrayshape )
+    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 12, dfft%node_task_size * ( fft_numbatches + 3 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    arrayshape(1) = dfft%node_task_size
+    arrayshape(2) = fft_numbatches + 3
+    CALL C_F_POINTER( baseptr(1), locks_sing_2, arrayshape )
   
     IF( allocated( locks_omp ) ) DEALLOCATE( locks_omp )
     ALLOCATE( locks_omp( dfft%nthreads, fft_numbatches+3, 20 ) )
