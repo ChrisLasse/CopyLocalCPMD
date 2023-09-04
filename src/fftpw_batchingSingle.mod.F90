@@ -117,11 +117,11 @@ SUBROUTINE fft_com_single( dfft, sendsize, nodes_numb )
   !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 1 ), ierr )
   !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
 
-  CALL MPI_STARTALL( dfft%comm_sendrecv(1), dfft%send_handle(:,1) )
-  CALL MPI_STARTALL( dfft%comm_sendrecv(2), dfft%recv_handle(:,1) )
+  CALL MP_STARTALL( dfft%comm_sendrecv(1), dfft%send_handle(:,1) )
+  CALL MP_STARTALL( dfft%comm_sendrecv(2), dfft%recv_handle(:,1) )
   
-  CALL MPI_WAITALL( dfft%comm_sendrecv(1), dfft%send_handle(:,1), MPI_STATUSES_IGNORE, ierr )
-  CALL MPI_WAITALL( dfft%comm_sendrecv(2), dfft%recv_handle(:,1), MPI_STATUSES_IGNORE, ierr )
+  CALL MP_WAITALL( dfft%comm_sendrecv(1), dfft%send_handle(:,1) )
+  CALL MP_WAITALL( dfft%comm_sendrecv(2), dfft%recv_handle(:,1) )
 
   !CALL mpi_win_unlock_all( dfft%mpi_window( 2 ), ierr )
   !CALL mpi_win_unlock_all( dfft%mpi_window( 1 ), ierr )

@@ -75,6 +75,8 @@ MODULE mp_interface
   PUBLIC :: mp_startall
   PUBLIC :: mp_waitall
   PUBLIC :: mp_win_alloc_shared_mem_central
+  PUBLIC :: mp_send_init_COMPLEX
+  PUBLIC :: mp_recv_init_COMPLEX
   !
   ! interfaces
   !
@@ -1343,6 +1345,7 @@ CONTAINS
   END SUBROUTINE mp_win_dealloc_shared_mem
 
   SUBROUTINE mp_startall( howmany, handles )
+    IMPLICIT NONE
     ! ==--------------------------------------------------------------==
     ! == Wrapper for MPI_STARTALL                                     ==
     ! ==--------------------------------------------------------------==
@@ -1359,6 +1362,7 @@ CONTAINS
   END SUBROUTINE mp_startall
 
   SUBROUTINE mp_waitall( howmany, handles )
+    IMPLICIT NONE
     ! ==--------------------------------------------------------------==
     ! == Wrapper for MPI_STARTALL                                     ==
     ! ==--------------------------------------------------------------==
@@ -1376,6 +1380,15 @@ CONTAINS
 
   SUBROUTINE mp_win_alloc_shared_mem_central( type, baseptr, window_number, winsize, me, task_count, comm, mpi_window )
     IMPLICIT NONE
+    ! ==--------------------------------------------------------------==
+    ! == Return baseptr to shared memory window                       ==
+    ! == Currently they are used for the communication between tasks  ==
+    ! == on a single node within the FFT procedure                    ==
+    ! == In difference to mp_win_alloc_shared_mem is the shared       ==
+    ! == memory window entirely allocated on/by the 0th task          ==
+    ! == For all tasks baseptr points to the beginning of the array   ==
+    ! ==--------------------------------------------------------------==
+    ! Author: Christian Ritterhoff, FAU Erlangen Nuernberg, Sep 2023
   
     CHARACTER(1), INTENT(IN)                         :: type
     TYPE(C_PTR), INTENT(OUT)                         :: baseptr( : )
@@ -1416,9 +1429,48 @@ CONTAINS
   
     IF ( me .ne. 0 ) then
        CALL MPI_WIN_SHARED_QUERY( mpi_window( window_number ), 0, windowsize, displ, baseptr(1), ierr)
+       CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
     END IF
   
   END SUBROUTINE mp_win_alloc_shared_mem_central
+
+  SUBROUTINE mp_send_init_COMPLEX( send_array, location, sendsize, towhere, me, comm, handle )
+    IMPLICIT NONE
+    ! ==--------------------------------------------------------------==
+    ! == Wrapper for MPI_SEND_INIT                                    ==
+    ! ==--------------------------------------------------------------==
+    ! Author: Christian Ritterhoff, FAU Erlangen Nuernberg, Sep 2023
+    COMPLEX(selected_real_kind(14,200)), INTENT(IN)                :: send_array( : )
+    TYPE(MPI_COMM), INTENT(IN)             :: comm
+    INTEGER, INTENT(IN)                    :: location, sendsize, towhere, me
+    TYPE( MPI_REQUEST ), INTENT(OUT)     :: handle
+    CHARACTER(*),PARAMETER::procedureN='mp_send_init_COMPLEX'
+    
+    INTEGER :: ierr
+
+    CALL MPI_SEND_INIT( send_array( 1 + location ), sendsize, MPI_DOUBLE_COMPLEX, towhere, me, comm, handle, ierr )
+    CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+
+  END SUBROUTINE mp_send_init_COMPLEX
+
+  SUBROUTINE mp_recv_init_COMPLEX( recv_array, location, sendsize, fromwhere, comm, handle )
+    IMPLICIT NONE
+    ! ==--------------------------------------------------------------==
+    ! == Wrapper for MPI_RECV_INIT                                    ==
+    ! ==--------------------------------------------------------------==
+    ! Author: Christian Ritterhoff, FAU Erlangen Nuernberg, Sep 2023
+    COMPLEX(selected_real_kind(14,200)), INTENT(IN)                :: recv_array( : )
+    TYPE(MPI_COMM), INTENT(IN)             :: comm
+    INTEGER, INTENT(IN)                    :: location, sendsize, fromwhere
+    TYPE( MPI_REQUEST ), INTENT(OUT)     :: handle
+    CHARACTER(*),PARAMETER::procedureN='mp_send_init_COMPLEX'
+    
+    INTEGER :: ierr
+
+    CALL MPI_RECV_INIT( recv_array( 1 + location ), sendsize, MPI_DOUBLE_COMPLEX, fromwhere, MPI_ANY_TAG, comm, handle, ierr )
+    CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+
+  END SUBROUTINE mp_recv_init_COMPLEX
 
   !
   ! include file for the interfaces

@@ -1950,7 +1950,7 @@ CONTAINS
       ir, is1, is2, isub, isub2, isub3, isub4, iwf, ixx, ixxs, iyy, izz, jj, &
       leadx, njump, nnrx, nostat, nrxyz1s, nrxyz2, start_loop2, &
       ist,states_fft,  bsize, ibatch, istate, ir1, first_state, end_loop2, &
-      i_start1, i_start2, i_start3, me_grp, n_grp, start_loop1, end_loop1,&
+      i_start2, me_grp, n_grp, start_loop1, end_loop1,&
       offset_state, nthreads, nested_threads, methread, count, swap, int_mod
     INTEGER(int_8)                           :: il_wfng(2), il_wfnr(2), il_wfnr1(1), il_xf(2)
     REAL(real_8)                             :: chksum, csmult, fi, fip1,&
@@ -2007,6 +2007,11 @@ CONTAINS
             'NO SLATER TS WITH ROSS, CAS22, PENALTY, ROOTHAAN',&
             __LINE__,__FILE__)
     ENDIF
+    IF(td_prop%td_extpot.AND.cntl%tlsd.AND.ispin.EQ.2) THEN
+       IF( dfft%mype ) &
+          CALL stopgm(procedureN,'TD_PROP NOT IMPLEMENTED IN THIS FFT VERSION',&
+               __LINE__,__FILE__)
+    END IF
 
 !    IF(td_prop%td_extpot) CALL reshape_inplace(extf, (/fpar%kr1*fpar%kr2s,fpar%kr3s/), &
 !         extf_p)
@@ -2015,45 +2020,22 @@ CONTAINS
 !    !vpotx(1:SIZE(vpotdg)) => vpotdg
 !    CALL reshape_inplace(vpot, (/fpar%nnr1*ispin/), vpotx)
 
+    IF( allocated( lspin ) ) DEALLOCATE( lspin )
     ALLOCATE(lspin(2,fft_batchsize),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate lspin', &
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
-
-    !$ ALLOCATE(locks_fw(fft_numbatches+1,2),STAT=ierr)
-    !$ IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate locks_fw', &
-    !$      __LINE__,__FILE__)
-    !$ ALLOCATE(locks_inv(fft_numbatches+1,2),STAT=ierr)
-    !$ IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate locks_inv', &
-    !$      __LINE__,__FILE__)
 
     !if overlapping comm/comp active:
     ! if rsactive we operate on two batches
     ! else we operate on 3 batches
     !else just one batch
     int_mod=3
-    il_wfng(1)=fpar%kr1s*msrays
-    il_wfng(2)=fft_batchsize
-
-    il_wfnr1(1)=fpar%kr1*fpar%kr2s*fpar%kr3s*fft_batchsize
-
-    il_wfnr(1)=fpar%kr1*fpar%kr2s*fpar%kr3s*fft_batchsize
-    IF(il_wfnr(1).EQ.0)il_wfnr(1)=fpar%kr2s*fpar%kr3s*fft_batchsize
-    il_wfnr(1)=il_wfnr(1)+MOD(il_wfnr(1),4)
-    il_wfnr(2)=1
-
-    il_xf(1)=fpar%nnr1*fft_batchsize
-    IF(il_xf(1).EQ.0) il_xf(1)=maxfft*fft_batchsize
-    il_xf(1)=il_xf(1)+MOD(il_xf(1),4)
-    il_xf(2)=3
     start_loop1=1
     end_loop1=fft_numbatches+2
     start_loop2=2
     end_loop2=fft_numbatches+3
 
     IF(rsactive)THEN
-       il_wfnr(2)=fft_numbatches
-       IF(fft_residual.GT.0) il_wfnr(2)=fft_numbatches+1
-       il_xf(2)=2
        int_mod=2
        start_loop1=0
        end_loop1=fft_numbatches+1
@@ -2062,53 +2044,18 @@ CONTAINS
     END IF
 
     IF(cntl%overlapp_comm_comp.AND.fft_numbatches.GT.1)THEN
-       nthreads=MIN(2,dfft%nodes_numb)
-       nested_threads=(MAX(parai%ncpus-1,1))
 #if !defined(_INTEL_MKL)
        CALL stopgm(procedureN, 'Overlapping communication and computation: Behavior of BLAS &
             routine inside parallel region not checked',&
             __LINE__,__FILE__)
 #endif
     ELSE
-       nthreads=1
-       nested_threads=parai%ncpus
        int_mod=1
-       il_xf(2)=1
        start_loop1=0
        start_loop2=0
        end_loop1=fft_numbatches+1
        end_loop2=fft_numbatches+1
     END IF
- 
-!#ifdef _USE_SCRATCHLIBRARY
-!    CALL request_scratch(il_xf,xf,procedureN//'_xf',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate xf', &
-!         __LINE__,__FILE__)
-!    CALL request_scratch(il_xf,yf,procedureN//'_yf',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate yf', &
-!         __LINE__,__FILE__)
-!    CALL request_scratch(il_wfng,wfn_g,'wfn_g',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_g', &
-!         __LINE__,__FILE__)
-!#endif
-!    IF(.NOT.rsactive)THEN
-!#ifdef _USE_SCRATCHLIBRARY
-!       CALL request_scratch(il_wfnr,wfn_r,'wfn_r',ierr)
-!#else
-!       ALLOCATE(wfn_r(il_wfnr(1),il_wfnr(2)),STAT=ierr)
-!#endif
-!       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
-!            __LINE__,__FILE__)
-!#if !defined _USE_SCRATCHLIBRARY
-!       ALLOCATE(wfn_g(il_wfng(1),il_wfng(2)),STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_g', &
-!            __LINE__,__FILE__)
-!#endif
-!    END IF
-    ! 
-
-    leadx = fpar%nnr1
-    nnrx  = llr1
 
     njump=2
     IF (tkpts%tkpnt) njump=1
@@ -2119,38 +2066,8 @@ CONTAINS
     ENDIF
     me_grp=parai%cp_inter_me
     n_grp=parai%cp_nogrp
-    i_start1=0
     i_start2=part_1d_get_el_in_blk(1,nostat,me_grp,n_grp)-1
-    i_start3=part_1d_get_el_in_blk(1,nostat,me_grp,n_grp)-1
-
-
-!    IF (cntl%cdft)THEN
-!       IF (.NOT.cdftlog%tcall)THEN
-!          csmult=cdftcom%cdft_v(1)
-!       ELSE
-!          csmult=cdftcom%cdft_v(1)+cdftcom%cdft_v(2)
-!       ENDIF
-!       !$omp parallel do private(IR)
-!       DO ir=1,fpar%nnr1
-!          vpotdg(ir,1,1)=vpotdg(ir,1,1)+csmult*wdiff(ir)
-!       ENDDO
-!       IF (.NOT.cdftlog%tcall)THEN
-!          IF (cdftlog%tspinc) THEN
-!             csmult=-cdftcom%cdft_v(1)
-!          ELSE
-!             csmult=cdftcom%cdft_v(1)
-!          ENDIF
-!       ELSE
-!          csmult=cdftcom%cdft_v(1)-cdftcom%cdft_v(2)
-!       ENDIF
-!       IF (cntl%tlsd.AND.ispin.EQ.2) THEN
-!          !$omp parallel do private(IR)
-!          DO ir=1,fpar%nnr1
-!             vpotdg(ir,2,1)=vpotdg(ir,2,1)+csmult*wdiff(ir)
-!          ENDDO
-!       ENDIF
-!    ENDIF
-!    CALL reshape_inplace(vpot, (/fpar%kr1*fpar%kr2s,fpar%kr3s,ispin/), vpotdg)
+    dfft%vpsi = .true.
 
     dfft%buffer_size_save = int_mod
 
@@ -2187,8 +2104,6 @@ CONTAINS
     locks_omp   = .true.
     IF( cntl%overlapp_comm_comp .and. dfft%do_comm ) locks_omp( 1, :, : ) = .false.
 
-    dfft%vpsi = .true.
-
     il_aux_array(1) = dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2
     il_aux_array(2) = fft_batchsize
     il_rs_array(1)  = dfft%nr1 * dfft%my_nr3p * dfft%nr2
@@ -2216,15 +2131,11 @@ CONTAINS
 
     CALL MPI_BARRIER(dfft%comm, ierr)
 
-!    write(6,*) "WITHIN VPSI"
-
     dfft%time_adding=0
     CALL SYSTEM_CLOCK( count_rate = cr )
     IF(.NOT.rsactive) rs_wave=>rs_array(:,1:1)
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
     CALL SYSTEM_CLOCK( time(1) )
-    !$ locks_inv = .TRUE.
-    !$ locks_fw = .TRUE.
     !$OMP parallel num_threads( dfft%nthreads ) &
     !$omp private(mythread,ibatch,bsize,count,ist,is1,is2,ir,offset_state,swap,remswitch,counter) &
     !$omp proc_bind(close)
@@ -2265,7 +2176,6 @@ CONTAINS
                    ! ==--------------------------------------------------------------==
                    swap=mod(ibatch,int_mod)+1
                    CALL invfft_batch( dfft, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
-                   i_start1=i_start1+bsize*njump
                 END IF
              END IF
           END IF
@@ -2317,7 +2227,6 @@ CONTAINS
                 END IF
              END IF
           END IF
-          ! At this point locks_inv(:,ibatch-1) are .FALSE.
        END IF
        ! ==------------------------------------------------------------==
        ! == Apply the potential (V), which acts in real space.         ==
@@ -2355,14 +2264,6 @@ CONTAINS
                    !njump states per single fft
                 END DO
                 CALL Apply_V( rs_wave(:,1:1), vpot, lspin, bsize, mythread )
-!!                IF(rsactive)THEN
-!!                   CALL mult_vpot_psi_rsactive(wfn_r(:,ibatch-1),wfn_r1,vpotdg,&
-!!                        fpar%kr1*fpar%kr2s,bsize,fpar%kr3s,lspin,clsd%nlsd)
-!!                ELSE
-!                IF(rsactive) wfn_r1=>wfn_r(:,ibatch-start_loop1)
-!                   CALL mult_vpot_psi(wfn_r1,vpotdg,&
-!                        fpar%kr1*fpar%kr2s,bsize,fpar%kr3s,lspin,clsd%nlsd)
-!                END IF
 !                IF (td_prop%td_extpot.AND.cntl%tlsd.AND.ispin.EQ.2) THEN
 !                   offset_state=i_start2
 !                   DO count=1,bsize
@@ -2387,7 +2288,7 @@ CONTAINS
                  counter(4) = counter(4) + 1
                  CALL fwfft_batch( dfft, 1, bsize, remswitch, mythread, counter(4), swap, f_inout1=rs_wave, f_inout2=aux_array( : , 1 : 1 ) )
                  CALL fwfft_batch( dfft, 2, bsize, remswitch, mythread, counter(4), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv )
-                i_start2=i_start2+bsize*njump
+                 i_start2=i_start2+bsize*njump
              END IF
           END IF
        END IF
@@ -2418,7 +2319,6 @@ CONTAINS
           !$  END DO
        END IF
        IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 .or. .not. dfft%do_comm ) THEN
-          !data related to ibatch-2
 !          IF(ibatch.GE.3.AND.ibatch.LE.fft_numbatches+3)THEN
           IF(ibatch.GT.start_loop2.AND.ibatch.LE.end_loop2)THEN
 !             IF(ibatch-2.LE.fft_numbatches)THEN
@@ -2435,7 +2335,6 @@ CONTAINS
                 CALL fwfft_batch( dfft, 4, bsize, remswitch, mythread, counter(6), swap, f_inout1=comm_recv, f_inout2=aux_array )
                 CALL calc_c2_pw( aux_array, c2(:, 1+(counter(6)-1)*fft_batchsize*2 : bsize*2+(counter(6)-1)*fft_batchsize*2), &
                                      c0(:, 1+(counter(6)-1)*fft_batchsize*2 : bsize*2+(counter(6)-1)*fft_batchsize*2 ), f, mythread, bsize, counter(6), njump, nostat )
-                i_start3=i_start3+bsize*njump
              END IF
           END IF
        END IF
@@ -2542,6 +2441,9 @@ CONTAINS
             __LINE__,__FILE__)
     END IF
 #endif
+    IF( allocated( lspin ) ) DEALLOCATE( lspin, STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate rs_array', &
+         __LINE__,__FILE__)
 
     DO i=1,2
        ! kk-mb === print local potential (start) ===
@@ -2579,7 +2481,7 @@ CONTAINS
                 lg_vpotx3b=.FALSE.
              ENDIF
           ENDIF
-          DO ir=1,nnrx
+          DO ir=1,llr1
              IF (vpotx(ir) .NE. 0) THEN
                 nrxyz2=nrxyz2+1
                 ixx=MOD(nrxyz2-1,parm%nr1)+1
@@ -2605,40 +2507,6 @@ CONTAINS
        CALL cp_grp_redist_array(C2,nkpt%ngwk,nstate)
        CALL tihalt(procedureN//'_grps_b',isub3)
     ENDIF
-
-!    !free wfn_g,and wfn_r
-!#ifdef _USE_SCRATCHLIBRARY
-!    CALL free_scratch(il_xf,yf,procedureN//'_yf',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate yf', &
-!         __LINE__,__FILE__)
-!    CALL free_scratch(il_xf,xf,procedureN//'_xf',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate xf', &
-!         __LINE__,__FILE__)
-!!    CALL free_scratch(il_wfnr,wfn_r,'wfn_r',ierr)
-!!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
-!!         __LINE__,__FILE__)
-!    CALL free_scratch(il_wfng,wfn_g,'wfn_g',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_g', &
-!         __LINE__,__FILE__)
-!#else
-!    IF(.NOT.rsactive)THEN
-!       DEALLOCATE(wfn_g,STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_g', &
-!            __LINE__,__FILE__)
-!       DEALLOCATE(wfn_r,STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
-!            __LINE__,__FILE__)
-!    END IF
-!#endif
-    !$ DEALLOCATE(locks_fw,STAT=ierr)
-    !$ IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate locks_fw', &
-    !$      __LINE__,__FILE__)
-    !$ DEALLOCATE(locks_inv,STAT=ierr)
-    !$ IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate locks_inv', &
-    !$      __LINE__,__FILE__)
-    DEALLOCATE(lspin,STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate lspin', &
-         __LINE__,__FILE__)
 
     IF (tkpts%tkpnt) CALL c_clean(c2,nstate,ikind)
     ! SPECIAL TERMS FOR LSE METHODS

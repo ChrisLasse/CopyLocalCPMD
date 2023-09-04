@@ -7,6 +7,7 @@ MODULE fftpw_types
   USE fftpw_stick_base,              ONLY: get_sticks,&
                                            sticks_map_allocate,&
                                            sticks_map
+  USE mpi_f08
   USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_PTR, C_F_POINTER
   USE iso_fortran_env
 
