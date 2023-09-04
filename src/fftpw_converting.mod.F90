@@ -13,13 +13,16 @@ MODULE fftpw_converting
                                            PW_fft_type_descriptor,&
                                            create_mpi_communicators
   USE gvec,                          ONLY: gvec_com
-  USE mp_interface,                  ONLY: mp_sum
+  USE mp_interface,                  ONLY: mp_sum,&
+                                           mp_bcast
   USE parac,                         ONLY: parai
   USE rswfmod,                       ONLY: rsactive
   USE system,                        ONLY: cntl,&
                                            spar,&
                                            ncpw 
   USE zeroing_utils,                 ONLY: zeroing
+
+  USE mpi_f08
 
   IMPLICIT NONE
   PRIVATE
@@ -587,11 +590,15 @@ CONTAINS
           ENDDO
        END IF
        IF( dfft%my_node_rank .eq. 0 .and. .not. dfft%single_node ) THEN
-          CALL MPI_BCAST( zero_start, dfft%my_nr1p, MPI_INTEGER, 0, dfft%inter_node_comm, ierr)
-          CALL MPI_BCAST( zero_end  , dfft%my_nr1p, MPI_INTEGER, 0, dfft%inter_node_comm, ierr)
+          CALL MP_BCAST( zero_start, dfft%my_nr1p, 0, dfft%inter_node_comm )
+!          CALL MP_BCAST( zero_start, dfft%my_nr1p, MPI_INTEGER, 0, dfft%inter_node_comm, ierr)
+!          CALL MP_BCAST( zero_end  , dfft%my_nr1p, MPI_INTEGER, 0, dfft%inter_node_comm, ierr)
+          CALL MP_BCAST( zero_end  , dfft%my_nr1p, 0, dfft%inter_node_comm )
        END IF
-       CALL MPI_BCAST( zero_start, dfft%my_nr1p, MPI_INTEGER, 0, dfft%node_comm, ierr)
-       CALL MPI_BCAST( zero_end  , dfft%my_nr1p, MPI_INTEGER, 0, dfft%node_comm, ierr)
+!       CALL MP_BCAST( zero_start, dfft%my_nr1p, MPI_INTEGER, 0, dfft%node_comm, ierr)
+!       CALL MP_BCAST( zero_end  , dfft%my_nr1p, MPI_INTEGER, 0, dfft%node_comm, ierr)
+       CALL MP_BCAST( zero_start, dfft%my_nr1p, 0, dfft%node_comm )
+       CALL MP_BCAST( zero_end  , dfft%my_nr1p, 0, dfft%node_comm )
   
     END IF
     

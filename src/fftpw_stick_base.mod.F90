@@ -4,6 +4,7 @@ MODULE fftpw_stick_base
 
    USE error_handling,                ONLY: stopgm
    USE fftpw_param
+   USE mpi_f08
 
    IMPLICIT NONE
    PRIVATE

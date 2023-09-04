@@ -15,6 +15,7 @@ MODULE fftpw_ggen
   !
    USE error_handling,                  ONLY: stopgm
    USE fftpw_param
+   USE mpi_f08
    USE fftpw_types,  ONLY : PW_fft_type_descriptor
    PRIVATE
    SAVE

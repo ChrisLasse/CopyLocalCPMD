@@ -1354,16 +1354,14 @@ CONTAINS
     INTEGER                                  :: i, ierr, ir, is1, is2, iwf, &
                                                 ibatch, isub, isub3, isub4, bsize, &
                                                 first_state, offset_state, i_start, i_end, &
-                                                i_start1, i_start2, i_start3,  me_grp, n_grp, &
-                                                nthreads, nested_threads, methread, count, &
+                                                i_start2, i_start3,  me_grp, n_grp, &
+                                                methread, count, &
                                                 swap,  int_mod, start_loop, end_loop
     INTEGER(int_8)                           :: il_wfng(2), il_wfnr(2), il_xf(2)
     REAL(real_8)                             :: chksum, ral, rbe, rsp, rsum, rsum1, &
                                                 rsum1abs, rsumv, rto, temp(4), inv_omega, temp_time
-    REAL(real_8), ALLOCATABLE                :: coef4(:), coef3(:)
-!    REAL(real_8)                            :: coef4(fft_batchsize), coef3(fft_batchsize)
-    INTEGER, ALLOCATABLE                     :: ispin(:,:)
-!    INTEGER                      :: ispin(2,fft_batchsize)
+    REAL(real_8), SAVE, ALLOCATABLE          :: coef4(:), coef3(:)
+    INTEGER, SAVE, ALLOCATABLE               :: ispin(:,:)
     LOGICAL, SAVE :: first = .true.
     INTEGER :: sendsize, sendsize_rem
     INTEGER :: start, ending
@@ -1389,6 +1387,12 @@ CONTAINS
     ELSE
        CALL tiset(procedureN,isub)
     END IF
+
+    IF( lspin2%tlse ) THEN
+       IF( dfft%mype .eq. 0 ) &
+          CALL stopgm(procedureN,'TLSE NOT IMPLEMENTED IN THIS FFT VERSION',&
+               __LINE__,__FILE__)
+    END IF
     ! ==--------------------------------------------------------------==
     CALL kin_energy(c0,nstate,rsum)
 
@@ -1410,40 +1414,8 @@ CONTAINS
 
     CALL reshape_inplace(rhoe, (/fpar%kr1*fpar%kr2s,fpar%kr3s,clsd%nlsd/), rhoe_p)
 
-
-    !$ ALLOCATE(locks_inv(fft_numbatches+1,2),STAT=ierr)
-    !$ IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-    !$      __LINE__,__FILE__)
-
-    ALLOCATE(coef3(fft_batchsize),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-    ALLOCATE(coef4(fft_batchsize),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-    ALLOCATE(ispin(2,fft_batchsize),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-
-    il_wfng(1)=fpar%kr1s*msrays
-    il_wfng(2)=fft_batchsize
-
-    il_wfnr(1)=fpar%kr1*fpar%kr2s*fpar%kr3s*fft_batchsize
-    IF(il_wfnr(1).EQ.0)il_wfnr(1)=fpar%kr2s*fpar%kr3s*fft_batchsize
-    il_wfnr(1)=il_wfnr(1)+MOD(il_wfnr(1),4)
-    il_wfnr(2)=1
-    IF(rsactive)THEN
-       il_wfnr(2)=fft_numbatches
-       IF(fft_residual.GT.0) il_wfnr(2)=fft_numbatches+1
-    END IF
-    il_xf(1)=fpar%nnr1*fft_batchsize
-    IF(il_xf(1).EQ.0) il_xf(1)=maxfft*fft_batchsize
-    il_xf(1)=il_xf(1)+MOD(il_xf(1),4)
-    il_xf(2)=2
-
     me_grp=parai%cp_inter_me
     n_grp=parai%cp_nogrp
-    i_start1=0
     i_start2=part_1d_get_el_in_blk(1,nstate,me_grp,n_grp)-1
     i_start3=part_1d_get_el_in_blk(1,nstate,me_grp,n_grp)-1
     inv_omega=1.0_real_8/parm%omega
@@ -1452,52 +1424,36 @@ CONTAINS
     end_loop=fft_numbatches+2
 
     IF(cntl%overlapp_comm_comp.AND.fft_numbatches.GT.1)THEN
-       nthreads=MIN(2,dfft%nodes_numb)
-       nested_threads=(MAX(parai%ncpus-1,1))
 #if !defined(_INTEL_MKL)
        CALL stopgm(procedureN, 'Overlapping communication and computation: Behavior of BLAS &
             routine inside parallel region not checked',&
             __LINE__,__FILE__)
 #endif
     ELSE
-       nthreads=1
-       nested_threads=parai%ncpus
        int_mod=1
        start_loop=0
        end_loop=fft_numbatches+1
-       il_xf(2)=1
     END IF
-
-!#ifdef _USE_SCRATCHLIBRARY
-!    CALL request_scratch(il_wfnr,wfn_r,'wfn_r',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
-!         __LINE__,__FILE__)
-!    CALL request_scratch(il_wfng,wfn_g,'wfn_g',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_g', &
-!         __LINE__,__FILE__)
-!    CALL request_scratch(il_xf,xf,procedureN//'_xf',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate xf', &
-!         __LINE__,__FILE__)
-!    CALL request_scratch(il_xf,yf,procedureN//'_yf',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate yf', &
-!         __LINE__,__FILE__)
-!#else
-!    IF(.NOT.rsactive.OR..NOT.ALLOCATED(wfn_r))THEN
-!       ALLOCATE(wfn_r(il_wfnr(1),il_wfnr(2)),STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
-!            __LINE__,__FILE__)
-!       ALLOCATE(wfn_g(il_wfng(1),il_wfng(2)),STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_g', &
-!            __LINE__,__FILE__)
-!    END IF
-!#endif
 
     dfft%buffer_size_save = int_mod
 
     IF( dfft%remember_batch .ne. fft_batchsize ) THEN
 
        dfft%remember_batch = fft_batchsize
-       CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem ) 
+       CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem )
+
+       IF( allocated( coef3 ) ) DEALLOCATE( coef3 )
+       ALLOCATE(coef3(fft_batchsize),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+            __LINE__,__FILE__)
+       IF( allocated( coef4 ) ) DEALLOCATE( coef4 )
+       ALLOCATE(coef4(fft_batchsize),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+            __LINE__,__FILE__)
+       IF( allocated( ispin ) ) DEALLOCATE( ispin )
+       ALLOCATE(ispin(2,fft_batchsize),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+            __LINE__,__FILE__)
   
     END IF
   
@@ -1553,10 +1509,8 @@ CONTAINS
     END IF
 
     ! 
-!    IF(.NOT.rsactive) wfn_r1=>wfn_r(:,1)
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
 
-    !$ locks_inv=.TRUE.
     !$OMP parallel num_threads( dfft%nthreads ) &
     !$omp private(mythread,ibatch,bsize,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending) &
     !$omp proc_bind(close)
@@ -1597,7 +1551,6 @@ CONTAINS
 !                ! ==--------------------------------------------------------------==
                 swap=mod(ibatch,int_mod)+1
                 CALL invfft_batch( dfft, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
-                i_start1=i_start1+bsize*2
              END IF
           END IF
        END IF
@@ -1672,8 +1625,7 @@ CONTAINS
                    END IF
                 END DO
                 CALL build_density_sum_Man( dfft, coef3, coef4, psi_work( : , start : ending ), rhoe, bsize, mythread, ispin, clsd%nlsd )
-!                CALL build_density_sum_batch(coef3,coef4,wfn_r1,rhoe_p,&
-!                     fpar%kr1*fpar%kr2s,bsize,fpar%kr3s,ispin,clsd%nlsd)
+
 !                !some extra loop in case of lse
 !                IF (lspin2%tlse) THEN
 !                   ispin=1
@@ -1711,9 +1663,6 @@ CONTAINS
     !$omp end parallel
 
     IF(cntl%fft_tune_batchsize) fft_time_total(fft_tune_num_it)=m_walltime()-temp_time
-    !$ DEALLOCATE(locks_inv,STAT=ierr)
-    !$ IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-    !$      __LINE__,__FILE__)
 #ifdef _USE_SCRATCHLIBRARY
     CALL free_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
@@ -1723,38 +1672,6 @@ CONTAINS
     IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
          __LINE__,__FILE__)
 #endif
-!    DEALLOCATE(coef3,STAT=ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-!         __LINE__,__FILE__)
-!    DEALLOCATE(coef4,STAT=ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-!         __LINE__,__FILE__)
-!    DEALLOCATE(ispin,STAT=ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-!         __LINE__,__FILE__)
-!#ifdef _USE_SCRATCHLIBRARY
-!    CALL free_scratch(il_xf,yf,procedureN//'_yf',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate yf', &
-!         __LINE__,__FILE__)
-!    CALL free_scratch(il_xf,xf,procedureN//'_xf',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate xf', &
-!         __LINE__,__FILE__)
-!    CALL free_scratch(il_wfng,wfn_g,'wfn_g',ierr)
-!#else
-!    DEALLOCATE(wfn_g,STAT=ierr)
-!#endif
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_g', &
-!         __LINE__,__FILE__)
-!
-!    IF(.NOT.rsactive) THEN
-!#ifdef _USE_SCRATCHLIBRARY
-!       CALL free_scratch(il_wfnr,wfn_r,'wfn_r',ierr)
-!#else
-!       DEALLOCATE(wfn_r,STAT=ierr)
-!#endif
-!       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
-!            __LINE__,__FILE__)
-!    END IF
 
     ! ==--------------------------------------------------------------==
     ! redistribute RHOE over the groups if needed

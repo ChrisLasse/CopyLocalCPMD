@@ -7,8 +7,12 @@ MODULE fftpw_make_maps
                                             fft_numbatches
   USE fftpw_param
   USE fftpw_types,                    ONLY: PW_fft_type_descriptor
+  USE mp_interface,                   ONLY: mp_send_init_COMPLEX,&
+                                            mp_recv_init_COMPLEX
   USE timer,                          ONLY: tihalt,&
                                             tiset
+
+  USE mpi_f08
   IMPLICIT NONE
 
   PRIVATE
@@ -106,8 +110,7 @@ s_loop: DO l = 1, howmany_sending( k, i )
 
      target_node = (comm_info_send(j,mype+1)-1) / node_task_size
 
-     CALL MPI_SEND_INIT( comm_send( 1 + target_node*sendsize ), sendsize, MPI_DOUBLE_COMPLEX, comm_info_send( j , mype+1 ) - 1, &
-                         mype, comm, send_handle( j , 1 ), ierr )
+     CALL mp_send_init_complex( comm_send, target_node*sendsize, sendsize, comm_info_send( j , mype+1 ) - 1, mype, comm, send_handle( j , 1 ) )
 
   ENDDO        
 
@@ -115,8 +118,7 @@ s_loop: DO l = 1, howmany_sending( k, i )
 
      origin_node = (comm_info_recv(j,mype+1)-1) / node_task_size
 
-     CALL MPI_RECV_INIT( comm_recv( 1 + origin_node*sendsize ), sendsize, MPI_DOUBLE_COMPLEX, comm_info_recv( j , mype+1 ) - 1, &
-                         MPI_ANY_TAG, comm, recv_handle( j , 1 ), ierr )
+     CALL mp_recv_init_complex( comm_recv, origin_node*sendsize, sendsize, comm_info_recv( j , mype+1 ) - 1, comm, recv_handle( j , 1 ) )
 
   ENDDO        
 
@@ -237,8 +239,7 @@ s_loop: DO l = 1, howmany_sending( k, i )
 
         target_node = (comm_info_send(j,mype+1)-1) / node_task_size
 
-        CALL MPI_SEND_INIT( comm_send( 1 + target_node*sendsize, i ), sendsize, MPI_DOUBLE_COMPLEX, comm_info_send( j , mype+1 ) - 1, &
-                            mype, comm, send_handle( j , i ), ierr )
+        CALL mp_send_init_complex( comm_send(:,i), target_node*sendsize, sendsize, comm_info_send( j , mype+1 ) - 1, mype, comm, send_handle( j , i ) )
 
      ENDDO        
 
@@ -246,8 +247,7 @@ s_loop: DO l = 1, howmany_sending( k, i )
 
         origin_node = (comm_info_recv(j,mype+1)-1) / node_task_size
 
-        CALL MPI_RECV_INIT( comm_recv( 1 + origin_node*sendsize, i ), sendsize, MPI_DOUBLE_COMPLEX, comm_info_recv( j , mype+1 ) - 1, &
-                            MPI_ANY_TAG, comm, recv_handle( j , i ), ierr )
+        CALL mp_recv_init_complex( comm_recv(:,i), origin_node*sendsize, sendsize, comm_info_recv( j , mype+1 ) - 1, comm, recv_handle( j , i ) )
 
      ENDDO        
 
@@ -261,18 +261,16 @@ s_loop: DO l = 1, howmany_sending( k, i )
 
            target_node = (comm_info_send(j,mype+1)-1) / node_task_size
   
-           CALL MPI_SEND_INIT( comm_send( 1 + target_node*sendsize_rem, i ), sendsize_rem, MPI_DOUBLE_COMPLEX, comm_info_send( j , mype+1 ) - 1, &
-                               mype, comm, send_handle_rem( j , i ), ierr )
-  
+           CALL mp_send_init_complex( comm_send(:,i), target_node*sendsize_rem, sendsize_rem, comm_info_send( j , mype+1 ) - 1, mype, comm, send_handle_rem( j , i ) )
+ 
         ENDDO        
   
         DO j = 1, comm_sendrecv( 2 )
   
            origin_node = (comm_info_recv(j,mype+1)-1) / node_task_size
   
-           CALL MPI_RECV_INIT( comm_recv( 1 + origin_node*sendsize_rem, i ), sendsize_rem, MPI_DOUBLE_COMPLEX, comm_info_recv( j , mype+1 ) - 1, &
-                               MPI_ANY_TAG, comm, recv_handle_rem( j , i ), ierr )
-  
+           CALL mp_recv_init_complex( comm_recv(:,i), origin_node*sendsize_rem, sendsize_rem, comm_info_recv( j , mype+1 ) - 1, comm, recv_handle_rem( j , i ) )
+ 
         ENDDO        
   
      ENDDO

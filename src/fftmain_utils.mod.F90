@@ -76,7 +76,9 @@ MODULE fftmain_utils
   !$ USE omp_lib, ONLY: omp_in_parallel, omp_get_thread_num, &
   !$ omp_set_num_threads, omp_set_nested
 
-  USE, INTRINSIC :: ISO_C_BINDING,     ONLY: C_PTR, C_NULL_PTR
+  USE, INTRINSIC :: ISO_C_BINDING,     ONLY: C_PTR,&
+                                             C_NULL_PTR,&
+                                             C_F_POINTER
 #ifdef _USE_SCRATCHLIBRARY
   USE scratch_interface,               ONLY: request_scratch,&
                                              free_scratch
@@ -1135,8 +1137,6 @@ CONTAINS
   END SUBROUTINE fftpw_batch
 
   SUBROUTINE fftpw( isign, dfft, f, ng, nr1s, ir1, ns )
-
-!    USE mpi_f08
 
     IMPLICIT NONE
   

@@ -2,7 +2,7 @@
 MODULE fftpw_param
 !=----------------------------------------------------------------------------=!
 
-  USE mpi_f08
+!  USE mpi_f08
 
   IMPLICIT NONE
   SAVE
