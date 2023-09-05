@@ -9,6 +9,8 @@ MODULE fftpw_batchingSingle
   USE fftpw_param
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
   USE kinds,                                    ONLY: real_8
+  USE mp_interface,                             ONLY: mp_startall,&
+                                                      mp_waitall
   USE system,                                   ONLY: parm
   USE timer,                                    ONLY: tihalt,&
                                                       tiset
