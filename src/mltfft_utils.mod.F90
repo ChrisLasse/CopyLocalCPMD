@@ -23,7 +23,9 @@ MODULE mltfft_utils
   USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_NULL_CHAR,&
        C_INT, C_CHAR,&
        C_PTR,&
-       C_LONG_DOUBLE_COMPLEX
+       C_LONG_DOUBLE_COMPLEX,&
+       C_NULL_PTR,&
+       C_ASSOCIATED
   USE timer,                           ONLY: tihalt,&
        tiset
 
@@ -40,6 +42,7 @@ MODULE mltfft_utils
   PUBLIC :: mltfft_essl
   PUBLIC :: mltfft_hp
   PUBLIC :: mltfft_fftw
+  PUBLIC :: mltfft_fftw_iPnO
   PUBLIC :: mltfft_cuda
 
 CONTAINS
@@ -778,6 +781,116 @@ CONTAINS
          fftw_dir,fftw_exhaustive)
 
   END SUBROUTINE create_fftw_plan
+#endif
+  ! ==================================================================
+  SUBROUTINE mltfft_fftw_iPnO( c, length, howmany, remswitch, mythread, nthreads, isign )
+    ! ==--------------------------------------------------------------==
+    IMPLICIT NONE
+    INTEGER, INTENT(IN) :: isign
+    INTEGER, INTENT(IN) :: howmany(:,:), length
+    INTEGER, INTENT(IN) :: mythread, remswitch, nthreads
+
+    COMPLEX(selected_real_kind(14,200)), INTENT(INOUT) :: c( length , howmany( mythread+1, remswitch ) )
+
+    INTEGER, PARAMETER :: num_plans = 20
+
+    LOGICAL :: done( nthreads )
+    LOGICAL, SAVE :: first = .true.
+    TYPE(C_PTR), SAVE, ALLOCATABLE :: bw_plan_1d(:,:)
+    TYPE(C_PTR), SAVE, ALLOCATABLE :: fw_plan_1d(:,:)
+    INTEGER, SAVE, ALLOCATABLE :: dims_existing(:,:,:)
+    INTEGER, SAVE, ALLOCATABLE :: icurrent(:)
+
+    LOGICAL, SAVE                            :: batch_tuning = .FALSE.
+    INTEGER :: i
+
+#if defined(__HAS_FFT_FFTW3)
+     IF( first ) THEN
+        IF( mythread .eq. 1 .or. nthreads .eq. 1 ) THEN
+           ALLOCATE( bw_plan_1d( num_plans, nthreads ) )
+           ALLOCATE( fw_plan_1d( num_plans, nthreads ) )
+           bw_plan_1d = C_NULL_PTR
+           fw_plan_1d = C_NULL_PTR
+           ALLOCATE( dims_existing( 2, num_plans, nthreads ) )
+           dims_existing = -1
+           ALLOCATE( icurrent( nthreads ) )
+           icurrent = 1
+           first = .false.
+        ELSE
+           !$omp flush( first )
+           !$  DO WHILE( first )
+           !$omp flush( first )
+           !$  END DO
+        END IF
+     END IF
+
+     IF( cntl%fft_tune_batchsize .AND. .NOT. batch_tuning )THEN
+        batch_tuning = .TRUE.
+     END IF
+ 
+     IF( .NOT. cntl%fft_tune_batchsize .AND. batch_tuning )THEN
+        batch_tuning = .FALSE.
+        DO i = 1, num_plans
+           CALL dfftw_destroy_plan( bw_plan_1d( i, mythread+1 ) )
+           CALL dfftw_destroy_plan( fw_plan_1d( i, mythread+1 ) )
+        END DO
+     END IF
+
+     done( mythread+1 ) = .false.
+     DO i = 1, num_plans
+        !   first check if there is already a table initialized
+        !   for this combination of parameters
+        IF( howmany( mythread+1, remswitch ) .eq. dims_existing( 2, i, mythread+1 ) .and. &
+            length .eq. dims_existing( 1, i, mythread+1 ) ) THEN
+           done( mythread+1 ) = .true.
+           EXIT
+        END IF
+     END DO
+
+     IF( .not. done( mythread+1 ) ) THEN
+        CALL create_fftw_plan_iPnO( fw_plan_1d( icurrent(mythread+1), mythread+1 ), bw_plan_1d( icurrent(mythread+1), mythread+1 ), icurrent(mythread+1), & 
+                               length, howmany( mythread+1, remswitch ), c, dims_existing( :, icurrent(mythread+1), mythread+1 ), i, num_plans )
+     END IF
+
+    IF (isign < 0) THEN
+       CALL dfftw_execute_dft( fw_plan_1d( i, mythread+1 ), c, c )
+    ELSE IF (isign > 0) THEN
+       CALL dfftw_execute_dft( bw_plan_1d( i, mythread+1 ), c, c )
+    END IF
+#endif
+    ! ==--------------------------------------------------------------==
+    RETURN
+  END SUBROUTINE mltfft_fftw_iPnO
+  ! ==================================================================
+#if defined(__HAS_FFT_FFTW3)
+  SUBROUTINE create_fftw_plan_iPnO( fw_plan_1d, bw_plan_1d, icurrent, length, howmany, c, dims_existing, i, num_plans )
+    IMPLICIT NONE
+
+    TYPE(C_PTR), INTENT(INOUT) :: fw_plan_1d
+    TYPE(C_PTR), INTENT(INOUT) :: bw_plan_1d
+    INTEGER, INTENT(INOUT)     :: icurrent
+    INTEGER, INTENT(IN)        :: length, howmany, num_plans
+    INTEGER, INTENT(OUT)       :: dims_existing(2), i
+    COMPLEX(selected_real_kind(14,200)), INTENT(IN)   :: c( length , howmany )
+
+    LOGICAL :: FFTW_IN_PLACE
+    LOGICAL :: FFTW_ESTIMATE
+    !
+
+    IF( C_ASSOCIATED(fw_plan_1d) ) CALL dfftw_destroy_plan( fw_plan_1d )
+    IF( C_ASSOCIATED(bw_plan_1d) ) CALL dfftw_destroy_plan( bw_plan_1d )
+
+    CALL dfftw_plan_many_dft( fw_plan_1d, 1, length, howmany, c, &
+         (/SIZE(c)/), 1, length, c, (/SIZE(c)/), 1, length, -1, FFTW_ESTIMATE, FFTW_IN_PLACE)
+    CALL dfftw_plan_many_dft( bw_plan_1d, 1, length, howmany, c, &
+         (/SIZE(c)/), 1, length, c, (/SIZE(c)/), 1, length, 1, FFTW_ESTIMATE, FFTW_IN_PLACE)
+
+    dims_existing( 1 ) = length
+    dims_existing( 2 ) = howmany
+    i = icurrent
+    icurrent = MOD( icurrent, num_plans ) + 1
+
+  END SUBROUTINE create_fftw_plan_iPnO
 #endif
   ! ==================================================================
   SUBROUTINE mltfft_cuda(transa,transb,a,ldax,lday,b,ldbx,ldby,n,m,isign,scale, plan, blas_handle, stream)
