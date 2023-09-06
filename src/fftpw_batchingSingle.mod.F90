@@ -5,10 +5,11 @@ MODULE fftpw_batchingSingle
   USE cppt,                                     ONLY: hg
   USE density_utils,                            ONLY: build_density_sum
   USE elct,                                     ONLY: crge
-  USE fftpw_legacy_routines,                    ONLY: fft_1D
-  USE fftpw_param
+  USE fftpw_param,                              ONLY: DP,&
+                                                      scal
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
   USE kinds,                                    ONLY: real_8
+  USE mltfft_utils,                             ONLY: mltfft_fftw
   USE mp_interface,                             ONLY: mp_startall,&
                                                       mp_waitall
   USE system,                                   ONLY: parm
@@ -41,7 +42,7 @@ SUBROUTINE invfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ns )
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
-  CALL fft_1D( f, ns(dfft%mype+1), dfft%nr3, 2 )
+  CALL mltfft_fftw('n','n',f,dfft%nr3,ns(dfft%mype+1),f,dfft%nr3,ns(dfft%mype+1),dfft%nr3,ns(dfft%mype+1),-1,scal,.FALSE.)
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
@@ -161,7 +162,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, aux, map_acinv, nr1s )
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
-  CALL fft_1D( f, dfft%my_nr2p * dfft%my_nr3p, dfft%nr1, 2 )
+  CALL mltfft_fftw('n','n',f,dfft%nr1,dfft%my_nr2p*dfft%my_nr3p,f,dfft%nr1,dfft%my_nr2p*dfft%my_nr3p,dfft%nr1,dfft%my_nr2p*dfft%my_nr3p,-1,scal,.FALSE.)
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
@@ -210,7 +211,7 @@ SUBROUTINE invfft_y_portion( dfft, comm_mem_recv, aux, map_acinv, nr1s )
 !------------------------------------------------------
 !------------y-FFT Start-------------------------------
 
-  CALL fft_1D( aux, nr1s(dfft%mype2+1) * dfft%my_nr3p, dfft%nr2, 2 )
+  CALL mltfft_fftw('n','n',aux,dfft%nr2,nr1s(dfft%mype2+1)*dfft%my_nr3p,aux,dfft%nr2,nr1s(dfft%mype2+1)*dfft%my_nr3p,dfft%nr2,nr1s(dfft%mype2+1)*dfft%my_nr3p,-1,scal,.FALSE.)
 
 !-------------y-FFT End--------------------------------
 !------------------------------------------------------
@@ -274,7 +275,7 @@ SUBROUTINE fwfft_pre_com( dfft, f, aux, comm_mem_send, comm_mem_recv, nr1s, ns )
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
-  CALL fft_1D( f, dfft%my_nr2p * dfft%my_nr3p, dfft%nr1, -2 )
+  CALL mltfft_fftw('n','n',f,dfft%nr1,dfft%my_nr2p*dfft%my_nr3p,f,dfft%nr1,dfft%my_nr2p*dfft%my_nr3p,dfft%nr1,dfft%my_nr2p*dfft%my_nr3p,1,scal,.FALSE.)
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
@@ -305,7 +306,7 @@ SUBROUTINE fwfft_y_portion( dfft, comm_mem_send, comm_mem_recv, aux, map_pcfw, n
 !------------------------------------------------------
 !------------y-FFT Start-------------------------------
 
-  CALL fft_1D( aux( 1 : dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p , 1 : 1 ), nr1s(dfft%mype2+1) * dfft%my_nr3p, dfft%nr2, -2 )
+  CALL mltfft_fftw('n','n',aux,dfft%nr2,nr1s(dfft%mype2+1)*dfft%my_nr3p,aux,dfft%nr2,nr1s(dfft%mype2+1)*dfft%my_nr3p,dfft%nr2,nr1s(dfft%mype2+1)*dfft%my_nr3p,1,scal,.FALSE.)
 
 !-------------y-FFT End--------------------------------
 !------------------------------------------------------
@@ -400,7 +401,7 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, f, ns )
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
-  CALL fft_1D( f, ns(dfft%mype+1), dfft%nr3, -2 )
+  CALL mltfft_fftw('n','n',f,dfft%nr3,ns(dfft%mype+1),f,dfft%nr3,ns(dfft%mype+1),dfft%nr3,ns(dfft%mype+1),1,scal,.FALSE.)
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------

@@ -2,10 +2,10 @@
 MODULE fftpw_batching
 !=----------------------------------------------------------------------=
 
-  USE fftpw_legacy_routines
   USE fftpw_param
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
   USE kinds,                                    ONLY: real_8
+  USE mltfft_utils,                             ONLY: mltfft_fftw_iPnO
   USE mp_interface,                             ONLY: mp_startall,&
                                                       mp_waitall
   USE system,                                   ONLY: parm
@@ -171,8 +171,8 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, batch_size
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
-  CALL fft_noOMP_1D( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ) , &
-                     dfft%thread_z_sticks(:,:,dfft%mype+1), dfft%nr3, remswitch, mythread, dfft%nthreads, 2 )
+  CALL mltfft_fftw_iPnO( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ) , &
+                         dfft%nr3, dfft%thread_z_sticks(:,:,dfft%mype+1), remswitch, mythread, dfft%nthreads, 2 )
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
@@ -315,7 +315,8 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
       !------------------------------------------------------
       !------------y-FFT Start-------------------------------
       
-        CALL fft_noOMP_1D( aux2( : , dfft%thread_y_start( mythread+1, remswitch ) : dfft%thread_y_end( mythread+1, remswitch ) ), dfft%thread_y_sticks, dfft%nr2, remswitch, mythread, dfft%nthreads, 2 )
+        CALL mltfft_fftw_iPnO( aux2( : , dfft%thread_y_start( mythread+1, remswitch ) : dfft%thread_y_end( mythread+1, remswitch ) ) , &
+                               dfft%nr2, dfft%thread_y_sticks, remswitch, mythread, dfft%nthreads, 2 )
       
       !-------------y-FFT End--------------------------------
       !------------------------------------------------------
@@ -380,7 +381,8 @@ SUBROUTINE invfft_x_section( dfft, aux, remswitch, mythread )
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
-  CALL fft_noOMP_1D( aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ), dfft%thread_x_sticks, dfft%nr1, remswitch, mythread, dfft%nthreads, 2 )
+  CALL mltfft_fftw_iPnO( aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ) , &
+                         dfft%nr1, dfft%thread_x_sticks, remswitch, mythread, dfft%nthreads, 2 )
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
@@ -448,7 +450,8 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, counter, remswitch, mythread )
 
         IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 
-        CALL fft_noOMP_1D( aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ), dfft%thread_x_sticks, dfft%nr1, remswitch, mythread, dfft%nthreads, -2 )
+        CALL mltfft_fftw_iPnO( aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ) , &
+                               dfft%nr1, dfft%thread_x_sticks, remswitch, mythread, dfft%nthreads, -2 )
       
       !-------------x-FFT End--------------------------------
       !------------------------------------------------------
@@ -534,7 +537,8 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, b
       !------------------------------------------------------
       !------------y-FFT Start-------------------------------
       
-        CALL fft_noOMP_1D( aux2( : , dfft%thread_y_start( mythread+1, remswitch ) : dfft%thread_y_end( mythread+1, remswitch ) ), dfft%thread_y_sticks, dfft%nr2, remswitch, mythread, dfft%nthreads, -2 )
+        CALL mltfft_fftw_iPnO( aux2( : , dfft%thread_y_start( mythread+1, remswitch ) : dfft%thread_y_end( mythread+1, remswitch ) ) , &
+                               dfft%nr2, dfft%thread_y_sticks, remswitch, mythread, dfft%nthreads, -2 )
       
       !-------------y-FFT End--------------------------------
       !------------------------------------------------------
@@ -682,8 +686,8 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remsw
 
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
 
-  CALL fft_noOMP_1D( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ), &
-                     dfft%thread_z_sticks(:,:,dfft%mype+1), dfft%nr3, remswitch, mythread, dfft%nthreads, -2 )
+  CALL mltfft_fftw_iPnO( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ) , &
+                         dfft%nr3, dfft%thread_z_sticks(:,:,dfft%mype+1), remswitch, mythread, dfft%nthreads, -2 )
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
