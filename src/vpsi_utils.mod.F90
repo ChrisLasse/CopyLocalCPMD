@@ -96,7 +96,8 @@ MODULE vpsi_utils
                                              mp_comm_free,&
                                              mp_comm_null,&
                                              mp_bcast,&
-                                             mp_win_alloc_shared_mem_central
+                                             mp_win_alloc_shared_mem_central,&
+                                             mp_win_alloc_shared_mem
   USE parac,                           ONLY: parai
   USE part_1d,                         ONLY: part_1d_get_el_in_blk,&
                                              part_1d_nbr_el_in_blk
@@ -2558,9 +2559,15 @@ CONTAINS
     INTEGER, INTENT(IN) :: fft_batchsize, fft_residual, fft_numbatches, nstate
     INTEGER, INTENT(OUT) :: sendsize, sendsize_rem
   
-    INTEGER :: int_mod
+    INTEGER :: int_mod, i
     TYPE(C_PTR) :: baseptr( dfft%node_task_size )
+    TYPE(C_PTR) :: baseptr2( 0:parai%node_nproc-1 )
     INTEGER :: arrayshape(2)
+    TYPE CONTAINER
+       COMPLEX(DP),  POINTER __CONTIGUOUS   :: tempC(:,:)
+       LOGICAL    ,  POINTER __CONTIGUOUS   :: tempL(:,:)
+    END TYPE CONTAINER
+    TYPE(CONTAINER),ALLOCATABLE :: iproc(:)
   
     int_mod = 3
     IF( dfft%rsactive ) int_mod = 2
@@ -2581,7 +2588,17 @@ CONTAINS
     sendsize     = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_batchsize
     sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_residual
     
-!    CALL create_shared_memory_window_2d( comm_send, 1, dfft, sendsize*dfft%nodes_numb, int_mod ) 
+    ALLOCATE( iproc(0:parai%node_nproc-1) )
+
+!    CALL mp_win_alloc_shared_mem( 'c', sendsize*dfft%nodes_numb, int_mod, baseptr2, parai%node_nproc, parai%node_me, parai%node_grp )
+!    arrayshape(1) = sendsize*dfft%nodes_numb
+!    arrayshape(2) = int_mod
+!    CALL C_F_POINTER( baseptr2(0), comm_send, arrayshape )
+!
+!    CALL mp_win_alloc_shared_mem( 'c', sendsize*dfft%nodes_numb, int_mod, baseptr2, parai%node_nproc, parai%node_me, parai%node_grp )
+!    arrayshape(1) = sendsize*dfft%nodes_numb
+!    arrayshape(2) = int_mod
+!    CALL C_F_POINTER( baseptr2(0), comm_recv, arrayshape )
 
     CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 3, sendsize*dfft%nodes_numb*int_mod, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
     arrayshape(1) = sendsize*dfft%nodes_numb
@@ -2592,14 +2609,18 @@ CONTAINS
     arrayshape(1) = sendsize*dfft%nodes_numb
     arrayshape(2) = int_mod
     CALL C_F_POINTER( baseptr(1), comm_recv, arrayshape )
-    
+ 
     CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
                        dfft%node_task_size, int_mod, dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem, dfft%comm_sendrecv, dfft%do_comm )
    
-    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 5, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+    CALL mp_win_alloc_shared_mem( 'l', dfft%node_task_size, ( nstate / fft_batchsize ) + 1, baseptr2, parai%node_nproc, parai%node_me, parai%node_grp )
     arrayshape(1) = dfft%node_task_size
     arrayshape(2) = ( nstate / fft_batchsize ) + 1
-    CALL C_F_POINTER( baseptr(1), locks_calc_inv, arrayshape )
+    CALL C_F_POINTER( baseptr2(0), locks_calc_inv, arrayshape )
+!    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 6, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+!    arrayshape(1) = dfft%node_task_size
+!    arrayshape(2) = ( nstate / fft_batchsize ) + 1
+!    CALL C_F_POINTER( baseptr(1), locks_calc_inv, arrayshape )
     CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 6, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
     arrayshape(1) = dfft%node_task_size
     arrayshape(2) = ( nstate / fft_batchsize ) + 1
