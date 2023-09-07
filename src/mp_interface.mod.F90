@@ -1263,6 +1263,8 @@ CONTAINS
        requested_size=lda*n*mp_double_complex_in_bytes
     ELSEIF(type.EQ.'R'.OR.type.EQ.'r')THEN
        requested_size=lda*n*mp_double_in_bytes
+    ELSEIF(type.EQ.'L'.OR.type.EQ.'l')THEN
+       requested_size=lda*n*mp_logical_in_bytes
     ELSEIF(type.EQ.'D'.OR.type.EQ.'d')THEN
        DO index=1,size(alloc)
           IF(alloc(index))THEN
