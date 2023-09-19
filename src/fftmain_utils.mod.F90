@@ -1161,6 +1161,9 @@ CONTAINS
     INTEGER, SAVE :: sendsize
     TYPE(C_PTR) :: baseptr( dfft%node_task_size )
     INTEGER :: arrayshape(1)
+!    TYPE(C_PTR) :: baseptr( 0:parai%node_nproc-1 )
+!    INTEGER :: arrayshape(2)
+!    COMPLEX(DP), SAVE, POINTER, CONTIGUOUS   :: Big_Pointer(:,:)
 
     CALL tiset(procedureN,isub)
 
@@ -1180,6 +1183,14 @@ CONTAINS
        first = .false.
 
        sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsp ) * dfft%node_task_size * dfft%node_task_size
+      
+!       CALL mp_win_alloc_shared_mem( 'c', sendsize*dfft%nodes_numb*2, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
+!
+!       arrayshape(1) = sendsize*dfft%nodes_numb
+!       arrayshape(2) = 2
+!       CALL C_F_POINTER( baseptr(0), Big_Pointer, arrayshape )
+!       shared1 => Big_Pointer(:,1) 
+!       shared2 => Big_Pointer(:,2) 
 
        CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 1, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
        arrayshape(1) = sendsize*dfft%nodes_numb
@@ -1191,6 +1202,9 @@ CONTAINS
        CALL Prep_single_fft_com( shared1, shared2, sendsize, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, dfft%node_task_size, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm )
 
     END IF
+
+!    shared1 => Big_Pointer(:,1) 
+!    shared2 => Big_Pointer(:,2) 
 
     IF( isign .eq. -1 ) THEN !!  invfft
 

@@ -60,12 +60,12 @@ MODULE mp_interface
   PUBLIC :: mp_get_version
   PUBLIC :: mp_get_library_version
   PUBLIC :: mp_win_alloc_shared_mem
+  PUBLIC :: mp_win_alloc_shared_mem_central
   PUBLIC :: mp_win_sync
   PUBLIC :: mp_win_lock_all_shared
   PUBLIC :: mp_win_unlock_all_shared
   PUBLIC :: mp_startall
   PUBLIC :: mp_waitall
-  PUBLIC :: mp_win_alloc_shared_mem_central
   PUBLIC :: mp_send_init_COMPLEX
   PUBLIC :: mp_recv_init_COMPLEX
   !

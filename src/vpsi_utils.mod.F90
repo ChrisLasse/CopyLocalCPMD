@@ -96,7 +96,6 @@ MODULE vpsi_utils
                                              mp_comm_free,&
                                              mp_comm_null,&
                                              mp_bcast,&
-                                             mp_win_alloc_shared_mem_central,&
                                              mp_win_alloc_shared_mem
   USE parac,                           ONLY: parai
   USE part_1d,                         ONLY: part_1d_get_el_in_blk,&
@@ -1985,7 +1984,7 @@ CONTAINS
                                                 xskin, temp_time
     REAL(real_8), ALLOCATABLE                :: vpotx3a(:,:,:), vpotx3b(:,:,:)
     REAL(real_8), POINTER __CONTIGUOUS       :: VPOTX(:),vpotdg(:,:,:),extf_p(:,:)
-    INTEGER, ALLOCATABLE                     :: lspin(:,:)
+    INTEGER, SAVE, ALLOCATABLE               :: lspin(:,:)
  
     INTEGER                                  :: rem, i1, j1
     INTEGER(INT64) :: time(2)
@@ -2048,11 +2047,6 @@ CONTAINS
 !    !vpotx(1:SIZE(vpotdg)) => vpotdg
 !    CALL reshape_inplace(vpot, (/fpar%nnr1*ispin/), vpotx)
 
-    IF( allocated( lspin ) ) DEALLOCATE( lspin )
-    ALLOCATE(lspin(2,fft_batchsize),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-
     !if overlapping comm/comp active:
     ! if rsactive we operate on two batches
     ! else we operate on 3 batches
@@ -2099,12 +2093,7 @@ CONTAINS
 
     dfft%buffer_size_save = int_mod
 
-    IF( dfft%remember_batch .ne. fft_batchsize ) THEN
-
-       dfft%remember_batch = fft_batchsize
-       CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem )
-  
-    END IF
+    CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, lspin )
   
     locks_calc_inv = .true.
     locks_calc_fw  = .true.
@@ -2553,112 +2542,127 @@ CONTAINS
   END SUBROUTINE vpsi_pw_batchfft
   ! ==================================================================
 
-  SUBROUTINE Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem )
+  SUBROUTINE Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, spin, coef3, coef4 )
     IMPLICIT NONE
   
-    INTEGER, INTENT(IN) :: fft_batchsize, fft_residual, fft_numbatches, nstate
+    INTEGER, INTENT(IN)  :: fft_batchsize, fft_residual, fft_numbatches, nstate
     INTEGER, INTENT(OUT) :: sendsize, sendsize_rem
+    INTEGER, ALLOCATABLE, INTENT(INOUT) :: spin(:,:)
+    REAL(real_8), ALLOCATABLE, OPTIONAL, INTENT(INOUT) :: coef3(:), coef4(:)
+
+    INTEGER :: int_mod, ierr, needed_size, needed_com_size, needed_1lock_size, Com_in_locks, needed_2lock_size, needed_3lock_size
+    INTEGER, SAVE :: remember_batch = 0
+    LOGICAL, SAVE :: first
+    TYPE(C_PTR) :: baseptr( 0:parai%node_nproc-1 )
+    INTEGER :: arrayshape(3)
+    CHARACTER(*), PARAMETER                  :: procedureN = 'Pre_fft_setup'
+    COMPLEX(DP), SAVE, POINTER, CONTIGUOUS   :: Big_Com_Pointer(:,:,:)
+    LOGICAL,     SAVE, POINTER, CONTIGUOUS   :: Big_1Log_Pointer(:,:,:)
+    LOGICAL,     SAVE, POINTER, CONTIGUOUS   :: Big_2Log_Pointer(:,:,:)
+    LOGICAL,     SAVE, POINTER, CONTIGUOUS   :: Big_3Log_Pointer(:,:,:)
+
+    IF( remember_batch .ne. fft_batchsize ) THEN
   
-    INTEGER :: int_mod, i
-    TYPE(C_PTR) :: baseptr( dfft%node_task_size )
-    TYPE(C_PTR) :: baseptr2( 0:parai%node_nproc-1 )
-    INTEGER :: arrayshape(2)
-    TYPE CONTAINER
-       COMPLEX(DP),  POINTER __CONTIGUOUS   :: tempC(:,:)
-       LOGICAL    ,  POINTER __CONTIGUOUS   :: tempL(:,:)
-    END TYPE CONTAINER
-    TYPE(CONTAINER),ALLOCATABLE :: iproc(:)
-  
-    int_mod = 3
-    IF( dfft%rsactive ) int_mod = 2
-    IF( .not. ( dfft%overlapp .and. fft_numbatches .gt. 1 ) ) int_mod = 1
-  
-    dfft%batch_size_save = fft_batchsize
-  
-    IF( ALLOCATED( dfft%map_acinv ) )        DEALLOCATE( dfft%map_acinv )                     
-    ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * fft_batchsize ) )
-    CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, fft_batchsize, dfft%ir1w, dfft%nsw, dfft%zero_acinv_start, dfft%zero_acinv_end ) 
+       remember_batch = fft_batchsize
+
+       int_mod = 3
+       IF( dfft%rsactive ) int_mod = 2
+       IF( .not. ( dfft%overlapp .and. fft_numbatches .gt. 1 ) ) int_mod = 1
+     
+       dfft%batch_size_save = fft_batchsize
+     
+       IF( ALLOCATED( dfft%map_acinv ) )        DEALLOCATE( dfft%map_acinv )                     
+       ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * fft_batchsize ) )
+       CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, fft_batchsize, dfft%ir1w, dfft%nsw, dfft%zero_acinv_start, dfft%zero_acinv_end ) 
+       
+       IF( ALLOCATED( dfft%map_acinv_rem ) )    DEALLOCATE( dfft%map_acinv_rem )                 
+       IF( fft_residual .ne. 0 ) THEN
+          ALLOCATE( dfft%map_acinv_rem( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * fft_residual ) )
+          CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_rem, fft_residual, dfft%ir1w, dfft%nsw )                
+       END IF   
+       
+       sendsize     = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_batchsize
+       sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_residual
+       
+       needed_size = 0
+       needed_com_size = ( sendsize*dfft%nodes_numb * int_mod ) * 2
+       needed_1lock_size = ( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4 ) + 1
+       needed_2lock_size = ( ( dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ) ) / 4 ) + 1
+       needed_3lock_size = ( ( dfft%node_task_size * ( fft_numbatches + 3 ) ) / 4 ) + 1
+       needed_size = needed_com_size + needed_1lock_size + needed_2lock_size + needed_3lock_size
+       CALL mp_win_alloc_shared_mem( 'c', needed_size, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
+
+
+       arrayshape(1) = sendsize*dfft%nodes_numb
+       arrayshape(2) = int_mod
+       arrayshape(3) = 2
+       CALL C_F_POINTER( baseptr(0), Big_Com_Pointer, arrayshape )
+       comm_send => Big_Com_Pointer(:,:,1) 
+       comm_recv => Big_Com_Pointer(:,:,2) 
     
-    IF( ALLOCATED( dfft%map_acinv_rem ) )    DEALLOCATE( dfft%map_acinv_rem )                 
-    IF( fft_residual .ne. 0 ) THEN
-       ALLOCATE( dfft%map_acinv_rem( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * fft_residual ) )
-       CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_rem, fft_residual, dfft%ir1w, dfft%nsw )                
-    END IF   
-    
-    sendsize     = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_batchsize
-    sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_residual
-    
-    ALLOCATE( iproc(0:parai%node_nproc-1) )
+       CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
+                          dfft%node_task_size, int_mod, dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem, dfft%comm_sendrecv, dfft%do_comm )
 
-!    CALL mp_win_alloc_shared_mem( 'c', sendsize*dfft%nodes_numb, int_mod, baseptr2, parai%node_nproc, parai%node_me, parai%node_grp )
-!    arrayshape(1) = sendsize*dfft%nodes_numb
-!    arrayshape(2) = int_mod
-!    CALL C_F_POINTER( baseptr2(0), comm_send, arrayshape )
-!
-!    CALL mp_win_alloc_shared_mem( 'c', sendsize*dfft%nodes_numb, int_mod, baseptr2, parai%node_nproc, parai%node_me, parai%node_grp )
-!    arrayshape(1) = sendsize*dfft%nodes_numb
-!    arrayshape(2) = int_mod
-!    CALL C_F_POINTER( baseptr2(0), comm_recv, arrayshape )
+       Com_in_locks = ( needed_com_size / ( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4 ) ) + 1
+       arrayshape(1) = dfft%node_task_size
+       arrayshape(2) = ( nstate / fft_batchsize ) + 1
+       arrayshape(3) = Com_in_locks + 4
+       CALL C_F_POINTER( baseptr(0), Big_1Log_Pointer, arrayshape )
+       locks_calc_inv => Big_1Log_Pointer(:,:,Com_in_locks+1)
+       locks_calc_fw  => Big_1Log_Pointer(:,:,Com_in_locks+2)
+       locks_com_inv  => Big_1Log_Pointer(:,:,Com_in_locks+3)
+       locks_com_fw   => Big_1Log_Pointer(:,:,Com_in_locks+4)
 
-    CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 3, sendsize*dfft%nodes_numb*int_mod, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-    arrayshape(1) = sendsize*dfft%nodes_numb
-    arrayshape(2) = int_mod
-    CALL C_F_POINTER( baseptr(1), comm_send, arrayshape )
+       Com_in_locks = ( ( needed_com_size + needed_1lock_size ) / ( ( dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ) ) / 4 ) ) + 1
+       arrayshape(1) = dfft%node_task_size
+       arrayshape(2) = nstate + fft_batchsize + (int_mod-1)*fft_batchsize
+       arrayshape(3) = Com_in_locks + 2
+       CALL C_F_POINTER( baseptr(0), Big_2Log_Pointer, arrayshape )
+       locks_calc_1   => Big_2Log_Pointer(:,:,Com_in_locks+1)
+       locks_calc_2   => Big_2Log_Pointer(:,:,Com_in_locks+2)
 
-    CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 4, sendsize*dfft%nodes_numb*int_mod, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-    arrayshape(1) = sendsize*dfft%nodes_numb
-    arrayshape(2) = int_mod
-    CALL C_F_POINTER( baseptr(1), comm_recv, arrayshape )
- 
-    CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
-                       dfft%node_task_size, int_mod, dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem, dfft%comm_sendrecv, dfft%do_comm )
-   
-    CALL mp_win_alloc_shared_mem( 'l', dfft%node_task_size, ( nstate / fft_batchsize ) + 1, baseptr2, parai%node_nproc, parai%node_me, parai%node_grp )
-    arrayshape(1) = dfft%node_task_size
-    arrayshape(2) = ( nstate / fft_batchsize ) + 1
-    CALL C_F_POINTER( baseptr2(0), locks_calc_inv, arrayshape )
-!    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 6, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-!    arrayshape(1) = dfft%node_task_size
-!    arrayshape(2) = ( nstate / fft_batchsize ) + 1
-!    CALL C_F_POINTER( baseptr(1), locks_calc_inv, arrayshape )
-    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 6, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-    arrayshape(1) = dfft%node_task_size
-    arrayshape(2) = ( nstate / fft_batchsize ) + 1
-    CALL C_F_POINTER( baseptr(1), locks_calc_fw, arrayshape )
-    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 7, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-    arrayshape(1) = dfft%node_task_size
-    arrayshape(2) = ( nstate / fft_batchsize ) + 1
-    CALL C_F_POINTER( baseptr(1), locks_com_inv, arrayshape )
-    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 8, dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-    arrayshape(1) = dfft%node_task_size
-    arrayshape(2) = ( nstate / fft_batchsize ) + 1
-    CALL C_F_POINTER( baseptr(1), locks_com_fw, arrayshape )
+       Com_in_locks = ( ( needed_com_size + needed_1lock_size + needed_2lock_size ) / ( ( dfft%node_task_size * ( fft_numbatches + 3 ) ) / 4 ) ) + 1
+       arrayshape(1) = dfft%node_task_size
+       arrayshape(2) = fft_numbatches + 3
+       arrayshape(3) = Com_in_locks + 2
+       CALL C_F_POINTER( baseptr(0), Big_3Log_Pointer, arrayshape )
+       locks_sing_1   => Big_3Log_Pointer(:,:,Com_in_locks+1)
+       locks_sing_2   => Big_3Log_Pointer(:,:,Com_in_locks+2)
+     
+       IF( allocated( locks_omp ) ) DEALLOCATE( locks_omp )
+       ALLOCATE( locks_omp( dfft%nthreads, fft_numbatches+3, 20 ) )
+       
+       dfft%num_buff = int_mod
+     
+       CALL Make_Manual_Maps( dfft, fft_batchsize, fft_residual ) 
 
-    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 9, dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-    arrayshape(1) = dfft%node_task_size
-    arrayshape(2) = nstate + fft_batchsize + (int_mod-1)*fft_batchsize
-    CALL C_F_POINTER( baseptr(1), locks_calc_1, arrayshape )
-    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 10, dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-    arrayshape(1) = dfft%node_task_size
-    arrayshape(2) = nstate + fft_batchsize + (int_mod-1)*fft_batchsize
-    CALL C_F_POINTER( baseptr(1), locks_calc_2, arrayshape )
+       first = .true.
 
-    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 11, dfft%node_task_size * ( fft_numbatches + 3 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-    arrayshape(1) = dfft%node_task_size
-    arrayshape(2) = fft_numbatches + 3
-    CALL C_F_POINTER( baseptr(1), locks_sing_1, arrayshape )
-    CALL mp_win_alloc_shared_mem_central( 'l', baseptr, 12, dfft%node_task_size * ( fft_numbatches + 3 ), dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-    arrayshape(1) = dfft%node_task_size
-    arrayshape(2) = fft_numbatches + 3
-    CALL C_F_POINTER( baseptr(1), locks_sing_2, arrayshape )
-  
-    IF( allocated( locks_omp ) ) DEALLOCATE( locks_omp )
-    ALLOCATE( locks_omp( dfft%nthreads, fft_numbatches+3, 20 ) )
-    
-    dfft%num_buff = int_mod
-  
-    CALL Make_Manual_Maps( dfft, fft_batchsize, fft_residual ) 
-  
+    END IF
+
+    IF( present( coef3 ) ) THEN
+       IF( first ) THEN
+          IF( allocated( coef3 ) ) DEALLOCATE( coef3 )
+          ALLOCATE( coef3( fft_batchsize ), STAT=ierr )
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+               __LINE__,__FILE__)
+          IF( allocated( coef4 ) ) DEALLOCATE( coef4 )
+          ALLOCATE( coef4( fft_batchsize ), STAT=ierr )
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+               __LINE__,__FILE__)
+          IF( allocated( spin ) ) DEALLOCATE( spin )
+          ALLOCATE( spin( 2, fft_batchsize ), STAT=ierr )
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+               __LINE__,__FILE__)
+       END IF
+    ELSE IF( first .or. .not. allocated( spin ) ) THEN
+       IF( allocated( spin ) ) DEALLOCATE( spin )
+       ALLOCATE( spin( 2, fft_batchsize ), STAT=ierr )
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+            __LINE__,__FILE__)
+       first = .false.
+    END IF
+
   END SUBROUTINE Pre_fft_setup
 
 END MODULE vpsi_utils

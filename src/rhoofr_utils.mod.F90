@@ -1437,25 +1437,7 @@ CONTAINS
 
     dfft%buffer_size_save = int_mod
 
-    IF( dfft%remember_batch .ne. fft_batchsize ) THEN
-
-       dfft%remember_batch = fft_batchsize
-       CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem )
-
-       IF( allocated( coef3 ) ) DEALLOCATE( coef3 )
-       ALLOCATE(coef3(fft_batchsize),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-            __LINE__,__FILE__)
-       IF( allocated( coef4 ) ) DEALLOCATE( coef4 )
-       ALLOCATE(coef4(fft_batchsize),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-            __LINE__,__FILE__)
-       IF( allocated( ispin ) ) DEALLOCATE( ispin )
-       ALLOCATE(ispin(2,fft_batchsize),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-            __LINE__,__FILE__)
-  
-    END IF
+    CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, ispin, coef3, coef4 )
   
     locks_calc_inv = .true.
     IF( dfft%do_comm ) THEN
