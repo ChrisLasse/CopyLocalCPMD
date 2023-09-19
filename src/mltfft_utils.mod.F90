@@ -50,7 +50,7 @@ MODULE mltfft_utils
   PUBLIC :: mltfft_essl
   PUBLIC :: mltfft_hp
   PUBLIC :: mltfft_fftw
-  PUBLIC :: mltfft_fftw_iPnO
+  PUBLIC :: mltfft_fftw_t
   PUBLIC :: mltfft_cuda
 
 CONTAINS
@@ -808,114 +808,287 @@ CONTAINS
   END SUBROUTINE create_fftw_plan
 #endif
   ! ==================================================================
-  SUBROUTINE mltfft_fftw_iPnO( c, length, howmany, remswitch, mythread, nthreads, isign )
+  SUBROUTINE mltfft_fftw_t(transa,transb,a,ldax,lday,b,ldbx,ldby,n,m,&
+       isign,scale,use_wisdom,mythread,nthreads)
     ! ==--------------------------------------------------------------==
-    IMPLICIT NONE
-    INTEGER, INTENT(IN) :: isign
-    INTEGER, INTENT(IN) :: howmany(:,:), length
-    INTEGER, INTENT(IN) :: mythread, remswitch, nthreads
+    CHARACTER(len=1)                         :: transa, transb
+    INTEGER                                  :: ldax
+    COMPLEX(real_8)                          :: a(ldax,*)
+    INTEGER                                  :: lday, ldbx
+    COMPLEX(real_8)                          :: b(ldbx,*)
+    INTEGER                                  :: ldby, n, m, isign
+    REAL(real_8)                             :: scale
+    LOGICAL                                  :: use_wisdom
+    INTEGER, INTENT(IN)                      :: mythread
+    INTEGER, INTENT(IN)                      :: nthreads
 
-    COMPLEX(selected_real_kind(14,200)), INTENT(INOUT) :: c( length , howmany( mythread+1, remswitch ) )
+    INTEGER, PARAMETER                       :: fftw_b = 1, fftw_es = 64, &
+                                                fftw_f = -1 , fftw_me = 0, &
+                                                fftw_pa = 32
 
-    INTEGER, PARAMETER :: num_plans = 20
+    INTEGER                                  :: fftw_dir, fftw_flags, i, j
+    LOGICAL                                  :: tscal
 
-    LOGICAL :: done( nthreads )
-    LOGICAL, SAVE :: first = .true.
-    TYPE(C_PTR), SAVE, ALLOCATABLE :: bw_plan_1d(:,:)
-    TYPE(C_PTR), SAVE, ALLOCATABLE :: fw_plan_1d(:,:)
-    INTEGER, SAVE, ALLOCATABLE :: dims_existing(:,:,:)
-    INTEGER, SAVE, ALLOCATABLE :: icurrent(:)
-
-    LOGICAL, SAVE                            :: batch_tuning = .FALSE.
-    INTEGER :: i
-
+    TYPE(C_PTR) :: plan
 #if defined(__HAS_FFT_FFTW3)
-     IF( first ) THEN
-        IF( mythread .eq. 1 .or. nthreads .eq. 1 ) THEN
-           ALLOCATE( bw_plan_1d( num_plans, nthreads ) )
-           ALLOCATE( fw_plan_1d( num_plans, nthreads ) )
-           bw_plan_1d = C_NULL_PTR
-           fw_plan_1d = C_NULL_PTR
-           ALLOCATE( dims_existing( 2, num_plans, nthreads ) )
-           dims_existing = -1
-           ALLOCATE( icurrent( nthreads ) )
-           icurrent = 1
-           first = .false.
-        ELSE
-           !$omp flush( first )
-           !$  DO WHILE( first )
-           !$omp flush( first )
-           !$  END DO
-        END IF
-     END IF
+    tscal=(ABS(scale-1._real_8).GT.1.e-12_real_8)
+    IF (isign.EQ.1) THEN
+       fftw_dir=fftw_f
+    ELSE
+       fftw_dir=fftw_b
+    ENDIF
+    IF (use_wisdom) THEN
+       fftw_flags=fftw_me
+    ELSE
+       fftw_flags=fftw_es
+    ENDIF
 
-     IF( cntl%fft_tune_batchsize .AND. .NOT. batch_tuning )THEN
-        batch_tuning = .TRUE.
-     END IF
- 
-     IF( .NOT. cntl%fft_tune_batchsize .AND. batch_tuning )THEN
-        batch_tuning = .FALSE.
-        DO i = 1, num_plans
-           CALL dfftw_destroy_plan( bw_plan_1d( i, mythread+1 ) )
-           CALL dfftw_destroy_plan( fw_plan_1d( i, mythread+1 ) )
-        END DO
-     END IF
-
-     done( mythread+1 ) = .false.
-     DO i = 1, num_plans
-        !   first check if there is already a table initialized
-        !   for this combination of parameters
-        IF( howmany( mythread+1, remswitch ) .eq. dims_existing( 2, i, mythread+1 ) .and. &
-            length .eq. dims_existing( 1, i, mythread+1 ) ) THEN
-           done( mythread+1 ) = .true.
-           EXIT
-        END IF
-     END DO
-
-     IF( .not. done( mythread+1 ) ) THEN
-        CALL create_fftw_plan_iPnO( fw_plan_1d( icurrent(mythread+1), mythread+1 ), bw_plan_1d( icurrent(mythread+1), mythread+1 ), icurrent(mythread+1), & 
-                               length, howmany( mythread+1, remswitch ), c, dims_existing( :, icurrent(mythread+1), mythread+1 ), i, num_plans )
-     END IF
-
-    IF (isign < 0) THEN
-       CALL dfftw_execute_dft( fw_plan_1d( i, mythread+1 ), c, c )
-    ELSE IF (isign > 0) THEN
-       CALL dfftw_execute_dft( bw_plan_1d( i, mythread+1 ), c, c )
-    END IF
+    CALL get_fftw_plan_t(transa,transb,a,ldax,lday,b,ldbx,ldby,n,m,&
+         isign,mythread,nthreads,plan)
+    CALL dfftw_execute_dft(plan,a,b)
+    IF (tscal) THEN
+       !$omp parallel do private(I,J)
+       DO i = 1,m
+          DO j = 1,n
+             b(j,i)=scale*b(j,i)
+          ENDDO
+       ENDDO
+    ENDIF
 #endif
+    IF (transb.EQ.'N'.OR.transb.EQ.'n') THEN
+       !$omp parallel do private (I,J)
+       DO j=m+1,ldby
+          DO i=1,ldbx
+             b(i,j)=CMPLX(0.0_real_8,0.0_real_8,kind=real_8)
+          ENDDO
+       ENDDO
+       !$omp parallel do private (I,J)
+       DO j=1,m
+          DO i=n+1,ldbx
+             b(i,j)=CMPLX(0.0_real_8,0.0_real_8,kind=real_8)
+          ENDDO
+       ENDDO
+    ELSE
+       !$omp parallel do private (I,J)
+       DO j=n+1,ldby
+          DO i=1,ldbx
+             b(i,j)=CMPLX(0.0_real_8,0.0_real_8,kind=real_8)
+          ENDDO
+       ENDDO
+       !$omp parallel do private (I,J)
+       DO j=1,n
+          DO i=m+1,ldbx
+             b(i,j)=CMPLX(0.0_real_8,0.0_real_8,kind=real_8)
+          ENDDO
+       ENDDO
+    ENDIF
     ! ==--------------------------------------------------------------==
     RETURN
-  END SUBROUTINE mltfft_fftw_iPnO
+  END SUBROUTINE mltfft_fftw_t
   ! ==================================================================
 #if defined(__HAS_FFT_FFTW3)
-  SUBROUTINE create_fftw_plan_iPnO( fw_plan_1d, bw_plan_1d, icurrent, length, howmany, c, dims_existing, i, num_plans )
-    IMPLICIT NONE
+  SUBROUTINE get_fftw_plan_t(transa,transb,a,ldax,lday,b,ldbx,ldby,n,m,&
+       isign,mythread,nthreads,plan)
+    CHARACTER(len=1), INTENT( IN )           :: transa, transb
+    INTEGER, INTENT( IN )                    :: ldax, lday, ldbx, ldby
+    COMPLEX(real_8), INTENT( INOUT )         :: a(ldax,*)
+    COMPLEX(real_8), INTENT( INOUT )         :: b(ldbx,*)
+    INTEGER, INTENT( IN )                    :: n, m, isign, mythread, nthreads
+    TYPE(C_PTR), INTENT( OUT)                :: plan
 
-    TYPE(C_PTR), INTENT(INOUT) :: fw_plan_1d
-    TYPE(C_PTR), INTENT(INOUT) :: bw_plan_1d
-    INTEGER, INTENT(INOUT)     :: icurrent
-    INTEGER, INTENT(IN)        :: length, howmany, num_plans
-    INTEGER, INTENT(OUT)       :: dims_existing(2), i
-    COMPLEX(selected_real_kind(14,200)), INTENT(IN)   :: c( length , howmany )
+    INTEGER, PARAMETER                       :: fftw_b = 1, fftw_f = -1
 
-    LOGICAL :: FFTW_IN_PLACE
-    LOGICAL :: FFTW_ESTIMATE
-    !
+    INTEGER, ALLOCATABLE, SAVE               :: params(:,:,:)
+    TYPE(C_PTR), ALLOCATABLE, SAVE           :: plans(:,:)
+    INTEGER                                  :: params_req(7)
+    INTEGER                                  :: fftw_dir, ierr, i
+    INTEGER, PARAMETER                       :: num_plans = 50
+    INTEGER, SAVE, ALLOCATABLE               :: icurrent(:)
+    INTEGER(int_8)                           :: il_asave(2)
+    complex(real_8), POINTER __CONTIGUOUS    :: asave(:,:)
+    LOGICAL, SAVE                            :: first = .true.
+    LOGICAL                                  :: free = .false.
+    LOGICAL, SAVE                            :: batch_tuning = .FALSE.
+    CHARACTER(*), PARAMETER                  :: procedureN = 'get_fftw_plan'
 
-    IF( C_ASSOCIATED(fw_plan_1d) ) CALL dfftw_destroy_plan( fw_plan_1d )
-    IF( C_ASSOCIATED(bw_plan_1d) ) CALL dfftw_destroy_plan( bw_plan_1d )
+    IF( cntl%fft_tune_batchsize .AND. .NOT. batch_tuning )THEN
+       batch_tuning = .TRUE.
+    END IF
 
-    CALL dfftw_plan_many_dft( fw_plan_1d, 1, length, howmany, c, &
-         (/SIZE(c)/), 1, length, c, (/SIZE(c)/), 1, length, -1, FFTW_ESTIMATE, FFTW_IN_PLACE)
-    CALL dfftw_plan_many_dft( bw_plan_1d, 1, length, howmany, c, &
-         (/SIZE(c)/), 1, length, c, (/SIZE(c)/), 1, length, 1, FFTW_ESTIMATE, FFTW_IN_PLACE)
+    IF( .NOT. cntl%fft_tune_batchsize .AND. batch_tuning )THEN
+       batch_tuning = .FALSE.
+!       CALL clean_fftw_plans_t(plans, params)
+!       icurrent = 0
+    END IF
 
-    dims_existing( 1 ) = length
-    dims_existing( 2 ) = howmany
-    i = icurrent
-    icurrent = MOD( icurrent, num_plans ) + 1
+    IF (isign.EQ.1) THEN
+       fftw_dir=fftw_f
+    ELSE
+       fftw_dir=fftw_b
+    ENDIF
 
-  END SUBROUTINE create_fftw_plan_iPnO
+    params_req(1)=n
+    params_req(2)=m
+    CALL get_stride_t( transa, transb, ldax, ldbx, params_req(3), params_req(4), params_req(5), &
+         params_req(6) )
+    params_req(7)=fftw_dir
+
+    IF( first )THEN
+       IF( mythread .eq. 1 .or. nthreads .eq. 1 ) THEN
+          ALLOCATE( params( 7, num_plans, nthreads ), STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+               __LINE__,__FILE__)
+          ALLOCATE( plans( num_plans, nthreads ), STAT=ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+               __LINE__,__FILE__)
+          params = 0
+          ALLOCATE( icurrent( nthreads ) )
+          icurrent = 0
+          first = .false.
+       ELSE
+          !$omp flush( first )
+          !$  DO WHILE( first )
+          !$omp flush( first )
+          !$  END DO
+       END IF
+    END IF
+
+    DO i = 1, num_plans
+       IF(  params_req(1) .EQ. params(1,i,mythread+1) .AND. params_req(2) .EQ. params(2,i,mythread+1) .AND. &
+            params_req(3) .EQ. params(3,i,mythread+1) .AND. params_req(4) .EQ. params(4,i,mythread+1) .AND. &
+            params_req(5) .EQ. params(5,i,mythread+1) .AND. params_req(6) .EQ. params(6,i,mythread+1) .AND. &
+            params_req(7) .EQ. params(7,i,mythread+1) )EXIT
+    END DO
+    IF( i .LE. num_plans ) THEN
+       plan = plans(i,mythread+1)
+    ELSE
+       icurrent( mythread+1 ) = icurrent( mythread+1 ) + 1
+       params(:,icurrent(mythread+1),mythread+1)=params_req
+       
+       !$omp critical
+       il_asave( 1 ) = INT( ldax, KIND = int_8)
+       il_asave( 2 ) = INT( lday, KIND = int_8)
+       CALL request_scratch(il_asave,asave,procedureN//'_asave',ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+            __LINE__,__FILE__)
+       CALL dcopy(ldax*lday*2, a, 1, asave,  1 )
+       CALL create_fftw_plan_t(plan,params(:,icurrent(mythread+1),mythread+1),a,b)
+       CALL dcopy(ldax*lday*2, asave, 1, a,  1 )
+       CALL free_scratch(il_asave,asave,procedureN//'_asave',ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+            __LINE__,__FILE__)
+       !$omp end critical
+
+       plans(icurrent(mythread+1),mythread+1) = plan
+    END IF
+
+  END SUBROUTINE get_fftw_plan_t
+  ! ==================================================================  
+  SUBROUTINE get_stride_t( transa, transb, ldax, ldbx , istride, idist, ostride, odist )
+    CHARACTER(len=1), INTENT( IN )           :: transa, transb
+    INTEGER, INTENT( IN )                    :: ldax, ldbx
+    INTEGER, INTENT( OUT )                   :: istride, idist, ostride, odist
+
+    IF (transa.EQ.'N'.OR.transa.EQ.'n') THEN
+       istride = 1
+       idist = ldax
+       IF (transb.EQ.'N'.OR.transb.EQ.'n') THEN
+          ostride = 1
+          odist = ldbx
+       ELSE
+          ostride = ldbx
+          odist = 1
+       ENDIF
+    ELSE
+       istride = ldax
+       idist = 1
+       IF (transb.EQ.'N'.OR.transb.EQ.'n') THEN
+          ostride = 1
+          odist = ldbx
+       ELSE
+          ostride = ldbx
+          odist = 1
+       ENDIF
+    ENDIF
+
+  END SUBROUTINE get_stride_t
+  ! ==================================================================
+  SUBROUTINE grow_plan_index_t(plans,params,nthreads)
+    TYPE(C_PTR), ALLOCATABLE, INTENT( INOUT ):: plans(:,:)
+    INTEGER, ALLOCATABLE, INTENT( INOUT )    :: params(:,:,:)
+    INTEGER, INTENT(IN)                      :: nthreads
+
+    TYPE(C_PTR), ALLOCATABLE                 :: swap_plans(:,:)
+    INTEGER, ALLOCATABLE                     :: swap_params(:,:,:)
+    INTEGER                                  :: num_plans
+    INTEGER                                  :: i, j, ierr
+    CHARACTER(*), PARAMETER                  :: procedureN = 'grow_plan_index'
+
+    num_plans = SIZE( plans, 1 )
+    ALLOCATE( swap_params( 7, num_plans + 1, nthreads ), STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+
+    ALLOCATE( swap_plans( num_plans + 1, nthreads ), STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+
+    DO i = 1, num_plans
+       DO j = 1, nthreads
+          swap_params(:,i,j) = params(:,i,j)
+          swap_plans(i,j) = plans(i,j)
+       ENDDO
+    END DO
+
+    CALL MOVE_ALLOC( swap_params, params)
+    CALL MOVE_ALLOC( swap_plans, plans)
+  END SUBROUTINE grow_plan_index_t
+  ! ==================================================================
+  SUBROUTINE clean_fftw_plans_t(plans,params)
+    TYPE(C_PTR), ALLOCATABLE, INTENT( INOUT) :: plans(:,:)
+    INTEGER, ALLOCATABLE, INTENT( INOUT )    :: params(:,:,:)
+    INTEGER                                  :: i, j, ierr
+    CHARACTER(*), PARAMETER                  :: procedureN = 'clean_plans'
+
+    DO i = 1, SIZE( plans, 1 )
+       DO j = 1, SIZE( plans, 2 )
+          CALL dfftw_destroy_plan(plans(i,j))
+       ENDDO
+    END DO
+    DEALLOCATE( params, STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+         __LINE__,__FILE__)
+    DEALLOCATE( plans, STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem',&
+         __LINE__,__FILE__)
+  END SUBROUTINE clean_fftw_plans_t
+  ! ==================================================================
+  SUBROUTINE create_fftw_plan_t(plan,params,a,b)
+    TYPE(C_PTR)                   :: plan
+    INTEGER                       :: params(7)
+    COMPLEX(real_8)               :: a(*)
+    COMPLEX(real_8)               :: b(*)
+
+    INTEGER                       :: n, m, istride, idist, ostride, odist, fftw_dir, rank, size, &
+                                     howmany, inembed, onembed
+    INTEGER, PARAMETER            :: fftw_exhaustive = 8
+    n        = params( 1 )
+    m        = params( 2 )
+    istride  = params( 3 )
+    idist    = params( 4 )
+    ostride  = params( 5 )
+    odist    = params( 6 )
+    fftw_dir = params( 7 )
+    rank = 1
+    size = n
+    howmany = m   
+    inembed = n
+    onembed = n
+
+    CALL dfftw_plan_many_dft(plan,rank,size,howmany,a,inembed,istride,idist,b,onembed,ostride,odist,&
+         fftw_dir,fftw_exhaustive)
+
+  END SUBROUTINE create_fftw_plan_t
 #endif
   ! ==================================================================
   SUBROUTINE mltfft_cuda(transa,transb,a,ldax,lday,b,ldbx,ldby,n,m,isign,scale, plan, blas_handle, stream)

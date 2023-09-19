@@ -5,7 +5,8 @@ MODULE fftpw_batching
   USE fftpw_param
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
   USE kinds,                                    ONLY: real_8
-  USE mltfft_utils,                             ONLY: mltfft_fftw_iPnO
+  USE mltfft_utils,                             ONLY: mltfft_fftw,&
+                                                      mltfft_fftw_t
   USE mp_interface,                             ONLY: mp_startall,&
                                                       mp_waitall
   USE system,                                   ONLY: parm
@@ -171,8 +172,11 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, batch_size
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
-  CALL mltfft_fftw_iPnO( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ) , &
-                         dfft%nr3, dfft%thread_z_sticks(:,:,dfft%mype+1), remswitch, mythread, dfft%nthreads, 2 )
+  CALL mltfft_fftw_t('n','n',aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ), &
+                   dfft%nr3, dfft%thread_z_sticks(mythread+1,remswitch,dfft%mype+1), &
+                   aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ), &
+                   dfft%nr3, dfft%thread_z_sticks(mythread+1,remswitch,dfft%mype+1), &
+                   dfft%nr3, dfft%thread_z_sticks(mythread+1,remswitch,dfft%mype+1),-1,scal,.FALSE.,mythread,dfft%nthreads)
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
@@ -314,9 +318,12 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
         IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
       !------------------------------------------------------
       !------------y-FFT Start-------------------------------
-      
-        CALL mltfft_fftw_iPnO( aux2( : , dfft%thread_y_start( mythread+1, remswitch ) : dfft%thread_y_end( mythread+1, remswitch ) ) , &
-                               dfft%nr2, dfft%thread_y_sticks, remswitch, mythread, dfft%nthreads, 2 )
+
+        CALL mltfft_fftw_t('n','n',aux2( : , dfft%thread_y_start( mythread+1, remswitch ) : dfft%thread_y_end( mythread+1, remswitch ) ), &
+                         dfft%nr2, dfft%thread_y_sticks(mythread+1,remswitch), &
+                         aux2( : , dfft%thread_y_start( mythread+1, remswitch ) : dfft%thread_y_end( mythread+1, remswitch ) ), &
+                         dfft%nr2, dfft%thread_y_sticks(mythread+1,remswitch), &
+                         dfft%nr2, dfft%thread_y_sticks(mythread+1,remswitch),-1,scal,.FALSE.,mythread,dfft%nthreads)
       
       !-------------y-FFT End--------------------------------
       !------------------------------------------------------
@@ -381,8 +388,11 @@ SUBROUTINE invfft_x_section( dfft, aux, remswitch, mythread )
 !------------------------------------------------------
 !------------x-FFT Start-------------------------------
 
-  CALL mltfft_fftw_iPnO( aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ) , &
-                         dfft%nr1, dfft%thread_x_sticks, remswitch, mythread, dfft%nthreads, 2 )
+  CALL mltfft_fftw_t('n','n',aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ), &
+                   dfft%nr1, dfft%thread_x_sticks(mythread+1,remswitch), &
+                   aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ), &
+                   dfft%nr1, dfft%thread_x_sticks(mythread+1,remswitch), &
+                   dfft%nr1, dfft%thread_x_sticks(mythread+1,remswitch),-1,scal,.FALSE.,mythread,dfft%nthreads)
 
 !-------------x-FFT End--------------------------------
 !------------------------------------------------------
@@ -450,8 +460,11 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, counter, remswitch, mythread )
 
         IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 
-        CALL mltfft_fftw_iPnO( aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ) , &
-                               dfft%nr1, dfft%thread_x_sticks, remswitch, mythread, dfft%nthreads, -2 )
+        CALL mltfft_fftw_t('n','n',aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ), &
+                         dfft%nr1, dfft%thread_x_sticks(mythread+1,remswitch), &
+                         aux( : , dfft%thread_x_start( mythread+1, remswitch ) : dfft%thread_x_end( mythread+1, remswitch ) ), &
+                         dfft%nr1, dfft%thread_x_sticks(mythread+1,remswitch), &
+                         dfft%nr1, dfft%thread_x_sticks(mythread+1,remswitch),1,scal,.FALSE.,mythread,dfft%nthreads)
       
       !-------------x-FFT End--------------------------------
       !------------------------------------------------------
@@ -494,13 +507,12 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, b
   INTEGER, INTENT(IN) :: counter, batch_size, remswitch, mythread
   COMPLEX(DP), INTENT(INOUT)  :: comm_mem_send( * )
   COMPLEX(DP), INTENT(INOUT)  :: comm_mem_recv( * )
-!  COMPLEX(DP), INTENT(INOUT) :: aux( dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p , * ) !y_group_size )
   COMPLEX(DP), INTENT(INOUT) :: aux( : , : )
   INTEGER, INTENT(IN) :: map_pcfw( * )
 
   INTEGER :: l, m, i, offset, j, k, ibatch, jter, offset2
 !  INTEGER :: isub, isub4
-!  CHARACTER(*), PARAMETER :: procedureN = 'fwfft_y_section'
+  CHARACTER(*), PARAMETER :: procedureN = 'fwfft_y_section'
 
   INTEGER(INT64) :: time(4)
 
@@ -536,9 +548,12 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, b
         IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
       !------------------------------------------------------
       !------------y-FFT Start-------------------------------
-      
-        CALL mltfft_fftw_iPnO( aux2( : , dfft%thread_y_start( mythread+1, remswitch ) : dfft%thread_y_end( mythread+1, remswitch ) ) , &
-                               dfft%nr2, dfft%thread_y_sticks, remswitch, mythread, dfft%nthreads, -2 )
+
+        CALL mltfft_fftw_t('n','n',aux2( : , dfft%thread_y_start( mythread+1, remswitch ) : dfft%thread_y_end( mythread+1, remswitch ) ), &
+                         dfft%nr2, dfft%thread_y_sticks(mythread+1,remswitch), &
+                         aux2( : , dfft%thread_y_start( mythread+1, remswitch ) : dfft%thread_y_end( mythread+1, remswitch ) ), &
+                         dfft%nr2, dfft%thread_y_sticks(mythread+1,remswitch), &
+                         dfft%nr2, dfft%thread_y_sticks(mythread+1,remswitch),1,scal,.FALSE.,mythread,dfft%nthreads)
       
       !-------------y-FFT End--------------------------------
       !------------------------------------------------------
@@ -686,8 +701,12 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remsw
 
   IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
 
-  CALL mltfft_fftw_iPnO( aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ) , &
-                         dfft%nr3, dfft%thread_z_sticks(:,:,dfft%mype+1), remswitch, mythread, dfft%nthreads, -2 )
+
+  CALL mltfft_fftw_t('n','n',aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ), &
+                   dfft%nr3, dfft%thread_z_sticks(mythread+1,remswitch,dfft%mype+1), &
+                   aux( : , dfft%thread_z_start( mythread+1, remswitch, dfft%mype+1 ) : dfft%thread_z_end( mythread+1, remswitch, dfft%mype+1 ) ), &
+                   dfft%nr3, dfft%thread_z_sticks(mythread+1,remswitch,dfft%mype+1), &
+                   dfft%nr3, dfft%thread_z_sticks(mythread+1,remswitch,dfft%mype+1),1,scal,.FALSE.,mythread,dfft%nthreads)
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
