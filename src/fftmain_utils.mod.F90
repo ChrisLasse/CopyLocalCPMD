@@ -51,10 +51,10 @@ MODULE fftmain_utils
                                              unpack_y2x,&
                                              unpack_y2x_n
   USE fftpw_converting,                ONLY: ConvertFFT_Coeffs
-  USE fftpw_make_maps,                 ONLY: Prep_single_fft_com
+  USE fftpw_make_maps,                 ONLY: Prep_fft_com,&
+                                             Make_Manual_Maps
   USE fftpw_param
   USE fftpw_types,                     ONLY: PW_fft_type_descriptor
-  USE fftpw_batchingSingle
   USE fftpw_batching
   USE kinds,                           ONLY: real_8,&
                                              int_8
@@ -961,7 +961,7 @@ CONTAINS
           IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
           IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 17 ) = dfft%time_adding( 17 ) + ( time(2) - time(1) )
 
-          CALL invfft_z_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), batch_size, remswitch, mythread )
+          CALL invfft_z_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), batch_size, remswitch, mythread, dfft%nsw )
 
           IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
 
@@ -1012,7 +1012,7 @@ CONTAINS
           IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 21 ) = dfft%time_adding( 21 ) + ( time(9) - time(8) )
 
           CALL invfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
-                                 dfft%map_acinv, dfft%map_acinv_rem, counter, remswitch, mythread )
+                                 dfft%map_acinv, dfft%map_acinv_rem, counter, remswitch, mythread, dfft%my_nr1p )
 
        ELSE IF( step .eq. 4 ) THEN
 
@@ -1047,7 +1047,7 @@ CONTAINS
        IF( step .eq. 1 ) THEN
 
 !          !$OMP Barrier !Should be here?
-          CALL fwfft_x_section( dfft, f_inout1, f_inout2, counter, remswitch, mythread )
+          CALL fwfft_x_section( dfft, f_inout1(:,1), f_inout2, counter, remswitch, mythread, dfft%my_nr1p )
 
        ELSE IF( step .eq. 2 ) THEN
 
@@ -1062,7 +1062,7 @@ CONTAINS
           IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 23 ) = dfft%time_adding( 23 ) + ( time(13) - time(12) )
   
           CALL fwfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
-                                    dfft%map_pcfw, batch_size, counter, remswitch, mythread )
+                                    dfft%map_pcfw, batch_size, counter, remswitch, mythread, dfft%my_nr1p, dfft%nsw )
 
           IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(14) )
 
@@ -1112,7 +1112,7 @@ CONTAINS
           IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(20) )
           IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 27 ) = dfft%time_adding( 27 ) + ( time(20) - time(19) )
   
-          CALL fwfft_z_section( dfft, f_inout1(:,work_buffer), f_inout2, counter, batch_size, remswitch, mythread )
+          CALL fwfft_z_section( dfft, f_inout1(:,work_buffer), f_inout2, counter, batch_size, remswitch, mythread, dfft%nsw )
 
           IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) THEN
              !$  IF( dfft%rsactive ) THEN
@@ -1142,25 +1142,27 @@ CONTAINS
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
     INTEGER, INTENT(IN) :: isign, ng
-    COMPLEX(DP), INTENT(INOUT) :: f(:)
+    COMPLEX(DP), TARGET, INTENT(INOUT) :: f(:)
     INTEGER, INTENT(IN) :: ir1(:), ns(:), nr1s(:)
 
-    COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared1(:)
-    COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared2(:)
+    COMPLEX(DP), POINTER, CONTIGUOUS :: f_2d(:,:)
+
+    COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared1(:,:)
+    COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared2(:,:)
 
 #ifdef _USE_SCRATCHLIBRARY
-    COMPLEX(DP), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux(:)
-    INTEGER(int_8) :: il_aux(1)
+    COMPLEX(DP), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux(:,:)
+    INTEGER(int_8) :: il_aux(2)
 #else
-    COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux(:)
+    COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux(:,:)
 #endif
 
-    INTEGER :: i, ierr, isub
+    INTEGER :: i, ierr, isub, mythread
     CHARACTER(*), PARAMETER                  :: procedureN = 'fftpw'
     LOGICAL, SAVE :: first = .true.
     INTEGER, SAVE :: sendsize
     TYPE(C_PTR) :: baseptr( dfft%node_task_size )
-    INTEGER :: arrayshape(1)
+    INTEGER :: arrayshape(2)
 !    TYPE(C_PTR) :: baseptr( 0:parai%node_nproc-1 )
 !    INTEGER :: arrayshape(2)
 !    COMPLEX(DP), SAVE, POINTER, CONTIGUOUS   :: Big_Pointer(:,:)
@@ -1169,11 +1171,12 @@ CONTAINS
 
 #ifdef _USE_SCRATCHLIBRARY
     il_aux(1) = dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p  
+    il_aux(2) = 1
     CALL request_scratch(il_aux,aux,procedureN//'_aux',ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux', &
          __LINE__,__FILE__)
 #else
-    IF( .not. allocated( aux ) ) ALLOCATE( aux( dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p ) )
+    IF( .not. allocated( aux ) ) ALLOCATE( aux( dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p, 1 ) )
     IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux', &
          __LINE__,__FILE__)
 #endif
@@ -1183,7 +1186,8 @@ CONTAINS
        first = .false.
 
        sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsp ) * dfft%node_task_size * dfft%node_task_size
-      
+       dfft%overlapp = .false.   
+   
 !       CALL mp_win_alloc_shared_mem( 'c', sendsize*dfft%nodes_numb*2, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
 !
 !       arrayshape(1) = sendsize*dfft%nodes_numb
@@ -1194,45 +1198,71 @@ CONTAINS
 
        CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 1, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
        arrayshape(1) = sendsize*dfft%nodes_numb
+       arrayshape(2) = 1
        CALL C_F_POINTER( baseptr(1), shared1, arrayshape )
        CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 2, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
        arrayshape(1) = sendsize*dfft%nodes_numb
+       arrayshape(2) = 1
        CALL C_F_POINTER( baseptr(1), shared2, arrayshape )
 
-       CALL Prep_single_fft_com( shared1, shared2, sendsize, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, dfft%node_task_size, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm )
+       CALL Prep_fft_com( shared1, shared2, sendsize, 0, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
+                          dfft%node_task_size, 1, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm, .FALSE. )
+
+       CALL Make_Manual_Maps( dfft, 1, 0, dfft%nsp, dfft%my_nr1p, dfft%my_nr2p, dfft%ngm ) 
+
+       IF( .not. allocated( locks_omp ) ) ALLOCATE( locks_omp( dfft%nthreads, 1, 20 ) )
+       !$ locks_omp = .true.
 
     END IF
 
 !    shared1 => Big_Pointer(:,1) 
 !    shared2 => Big_Pointer(:,2) 
+    !$ locks_omp = .true.
+
+    !$OMP parallel num_threads( dfft%nthreads ) &
+    !$omp private(mythread) &
+    !$omp proc_bind(close)
+    !$ mythread = omp_get_thread_num()
 
     IF( isign .eq. -1 ) THEN !!  invfft
 
        CALL MPI_BARRIER( dfft%comm, ierr )
-       CALL invfft_pre_com( dfft, f, shared1, shared2, ns )
 
-       CALL MPI_BARRIER( dfft%comm, ierr )
-       IF( .not. dfft%single_node ) THEN
-          IF( dfft%do_comm ) CALL fft_com_single( dfft, sendsize, dfft%nodes_numb )
+       CALL invfft_z_section( dfft, f, shared1(:,1), shared2(:,1), 1, 1, mythread, ns )
+
+       !$OMP barrier
+       !$OMP master
           CALL MPI_BARRIER( dfft%comm, ierr )
-       END IF
-   
-       CALL invfft_after_com( dfft, f, shared2, aux, dfft%map_acinv, nr1s )
+          IF( dfft%do_comm ) CALL fft_com( dfft, 1, 1 )
+          CALL MPI_BARRIER( dfft%comm, ierr )
+       !$OMP end master
+       !$OMP barrier
+
+       CALL invfft_y_section( dfft, f, shared2(:,1), aux, dfft%map_acinv, dfft%map_acinv, 1, 1, mythread, dfft%my_nr1p )
+
+       CALL invfft_x_section( dfft, f, 1, mythread )
 
     ELSE !! fw fft
 
        CALL MPI_BARRIER( dfft%comm, ierr )
-       CALL fwfft_pre_com( dfft, f, aux, shared1, shared2, nr1s, ns )
+
+       CALL fwfft_x_section( dfft, f, aux, 1, 1, mythread, dfft%my_nr1p )
+
+       CALL fwfft_y_section( dfft, aux, shared1(:,1), shared2(:,1), dfft%map_pcfw, 1, 1, 1, mythread, dfft%my_nr1p, dfft%nsp )
     
-       CALL MPI_BARRIER( dfft%comm, ierr )
-       IF( .not. dfft%single_node ) THEN
-          IF( dfft%do_comm ) CALL fft_com_single( dfft, sendsize, dfft%nodes_numb )
+       !$OMP barrier
+       !$OMP master
           CALL MPI_BARRIER( dfft%comm, ierr )
-       END IF
+          IF( dfft%do_comm ) CALL fft_com( dfft, 1, 1 )
+          CALL MPI_BARRIER( dfft%comm, ierr )
+       !$OMP end master
+       !$OMP barrier
     
-       CALL fwfft_after_com( dfft, shared2, f, ns )
+       CALL fwfft_z_section( dfft, shared2(:,1), f, 1, 1, 1, mythread, dfft%nsp, dfft%tscale )
     
     END IF
+
+    !$omp end parallel
  
 #ifdef _USE_SCRATCHLIBRARY
     CALL free_scratch(il_aux,aux,procedureN//'_aux',ierr)
