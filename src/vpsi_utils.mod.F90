@@ -2574,7 +2574,7 @@ CONTAINS
        comm_recv => Big_Com_Pointer(:,:,2) 
     
        CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
-                          dfft%node_task_size, int_mod, dfft%send_handle, dfft%recv_handle, dfft%send_handle_rem, dfft%recv_handle_rem, dfft%comm_sendrecv, dfft%do_comm )
+                          dfft%node_task_size, int_mod, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm, .TRUE. )
 
        Com_in_locks = ( needed_com_size / ( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4 ) ) + 1
        arrayshape(1) = dfft%node_task_size
@@ -2607,7 +2607,7 @@ CONTAINS
        
        dfft%num_buff = int_mod
      
-       CALL Make_Manual_Maps( dfft, fft_batchsize, fft_residual ) 
+       CALL Make_Manual_Maps( dfft, fft_batchsize, fft_residual, dfft%nsw, dfft%my_nr1p, dfft%my_nr2p, dfft%ngw ) 
 
        first = .true.
 

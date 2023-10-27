@@ -149,10 +149,8 @@ MODULE fftpw_types
 
     LOGICAL :: do_comm
     INTEGER, ALLOCATABLE :: comm_sendrecv(:)
-    TYPE( MPI_REQUEST ), ALLOCATABLE :: send_handle(:,:)
-    TYPE( MPI_REQUEST ), ALLOCATABLE :: recv_handle(:,:)
-    TYPE( MPI_REQUEST ), ALLOCATABLE :: send_handle_rem(:,:)
-    TYPE( MPI_REQUEST ), ALLOCATABLE :: recv_handle_rem(:,:)
+    TYPE( MPI_REQUEST ), ALLOCATABLE :: send_handle(:,:,:)
+    TYPE( MPI_REQUEST ), ALLOCATABLE :: recv_handle(:,:,:)
 
     INTEGER :: z_group_size_save
     INTEGER :: z_set_size_save
