@@ -64,7 +64,8 @@ MODULE fftmain_utils
                                              mltfft_essl,&
                                              mltfft_fftw,&
                                              mltfft_hp
-  USE mp_interface,                    ONLY: mp_win_alloc_shared_mem_central
+  USE mp_interface,                    ONLY: mp_win_alloc_shared_mem_central, &
+                                             mp_win_alloc_shared_mem
   USE parac,                           ONLY: parai
   USE system,                          ONLY: cntl,&
                                              fpar,&
@@ -101,6 +102,7 @@ MODULE fftmain_utils
 
   COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: comm_send(:,:)
   COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: comm_recv(:,:)
+
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_inv(:,:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_inv(:,:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_fw(:,:)
@@ -109,6 +111,7 @@ MODULE fftmain_utils
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_2(:,:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_sing_1(:,:)
   LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_sing_2(:,:)
+
 
   PUBLIC :: comm_send
   PUBLIC :: comm_recv
@@ -1147,25 +1150,24 @@ CONTAINS
 
     COMPLEX(DP), POINTER, CONTIGUOUS :: f_2d(:,:)
 
-    COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared1(:,:)
-    COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared2(:,:)
-
 #ifdef _USE_SCRATCHLIBRARY
     COMPLEX(DP), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux(:,:)
     INTEGER(int_8) :: il_aux(2)
 #else
     COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux(:,:)
 #endif
+!    COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared1(:,:)
+!    COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared2(:,:)
 
     INTEGER :: i, ierr, isub, mythread
     CHARACTER(*), PARAMETER                  :: procedureN = 'fftpw'
     LOGICAL, SAVE :: first = .true.
     INTEGER, SAVE :: sendsize
-    TYPE(C_PTR) :: baseptr( dfft%node_task_size )
-    INTEGER :: arrayshape(2)
-!    TYPE(C_PTR) :: baseptr( 0:parai%node_nproc-1 )
+!    TYPE(C_PTR) :: baseptr( dfft%node_task_size )
 !    INTEGER :: arrayshape(2)
-!    COMPLEX(DP), SAVE, POINTER, CONTIGUOUS   :: Big_Pointer(:,:)
+    TYPE(C_PTR) :: baseptr( 0:parai%node_nproc-1 )
+    INTEGER :: arrayshape(3)
+    COMPLEX(DP), SAVE, POINTER, CONTIGUOUS   :: Big_Pointer(:,:,:)
 
     CALL tiset(procedureN,isub)
 
@@ -1188,24 +1190,29 @@ CONTAINS
        sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsp ) * dfft%node_task_size * dfft%node_task_size
        dfft%overlapp = .false.   
    
-!       CALL mp_win_alloc_shared_mem( 'c', sendsize*dfft%nodes_numb*2, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
-!
+       CALL mp_win_alloc_shared_mem( 'c', sendsize*dfft%nodes_numb*2, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
+
+       arrayshape(1) = sendsize*dfft%nodes_numb
+       arrayshape(2) = 1
+       arrayshape(3) = 2
+       CALL C_F_POINTER( baseptr(0), Big_Pointer, arrayshape )
+       comm_send => Big_Pointer(:,:,1) 
+       comm_recv => Big_Pointer(:,:,2) 
+!       shared1 => Big_Pointer(:,:,1) 
+!       shared2 => Big_Pointer(:,:,1) 
+
+!       CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 1, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
 !       arrayshape(1) = sendsize*dfft%nodes_numb
-!       arrayshape(2) = 2
-!       CALL C_F_POINTER( baseptr(0), Big_Pointer, arrayshape )
-!       shared1 => Big_Pointer(:,1) 
-!       shared2 => Big_Pointer(:,2) 
+!       arrayshape(2) = 1
+!       CALL C_F_POINTER( baseptr(1), shared1, arrayshape )
+!       CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 2, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
+!       arrayshape(1) = sendsize*dfft%nodes_numb
+!       arrayshape(2) = 1
+!       CALL C_F_POINTER( baseptr(1), shared2, arrayshape )
 
-       CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 1, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-       arrayshape(1) = sendsize*dfft%nodes_numb
-       arrayshape(2) = 1
-       CALL C_F_POINTER( baseptr(1), shared1, arrayshape )
-       CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 2, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-       arrayshape(1) = sendsize*dfft%nodes_numb
-       arrayshape(2) = 1
-       CALL C_F_POINTER( baseptr(1), shared2, arrayshape )
-
-       CALL Prep_fft_com( shared1, shared2, sendsize, 0, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
+!       CALL Prep_fft_com( shared1, shared2, sendsize, 0, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
+!                          dfft%node_task_size, 1, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm, .FALSE. )
+       CALL Prep_fft_com( comm_send, comm_recv, sendsize, 0, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
                           dfft%node_task_size, 1, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm, .FALSE. )
 
        CALL Make_Manual_Maps( dfft, 1, 0, dfft%nsp, dfft%my_nr1p, dfft%my_nr2p, dfft%ngm ) 
@@ -1215,8 +1222,8 @@ CONTAINS
 
     END IF
 
-!    shared1 => Big_Pointer(:,1) 
-!    shared2 => Big_Pointer(:,2) 
+!    comm_send => Big_Pointer(:,:,1) 
+!    comm_recv => Big_Pointer(:,:,2) 
     !$ locks_omp = .true.
 
     !$OMP parallel num_threads( dfft%nthreads ) &
@@ -1228,7 +1235,8 @@ CONTAINS
 
        CALL MPI_BARRIER( dfft%comm, ierr )
 
-       CALL invfft_z_section( dfft, f, shared1(:,1), shared2(:,1), 1, 1, mythread, ns )
+!       CALL invfft_z_section( dfft, f, shared1(:,1), shared2(:,1), 1, 1, mythread, ns )
+       CALL invfft_z_section( dfft, f, comm_send(:,1), comm_recv(:,1), 1, 1, mythread, ns )
 
        !$OMP barrier
        !$OMP master
@@ -1238,7 +1246,8 @@ CONTAINS
        !$OMP end master
        !$OMP barrier
 
-       CALL invfft_y_section( dfft, f, shared2(:,1), aux, dfft%map_acinv, dfft%map_acinv, 1, 1, mythread, dfft%my_nr1p )
+!       CALL invfft_y_section( dfft, f, shared2(:,1), aux, dfft%map_acinv, dfft%map_acinv, 1, 1, mythread, dfft%my_nr1p )
+       CALL invfft_y_section( dfft, f, comm_recv(:,1), aux, dfft%map_acinv, dfft%map_acinv, 1, 1, mythread, dfft%my_nr1p )
 
        CALL invfft_x_section( dfft, f, 1, mythread )
 
@@ -1248,7 +1257,8 @@ CONTAINS
 
        CALL fwfft_x_section( dfft, f, aux, 1, 1, mythread, dfft%my_nr1p )
 
-       CALL fwfft_y_section( dfft, aux, shared1(:,1), shared2(:,1), dfft%map_pcfw, 1, 1, 1, mythread, dfft%my_nr1p, dfft%nsp )
+!       CALL fwfft_y_section( dfft, aux, shared1(:,1), shared2(:,1), dfft%map_pcfw, 1, 1, 1, mythread, dfft%my_nr1p, dfft%nsp )
+       CALL fwfft_y_section( dfft, aux, comm_send(:,1), comm_recv(:,1), dfft%map_pcfw, 1, 1, 1, mythread, dfft%my_nr1p, dfft%nsp )
     
        !$OMP barrier
        !$OMP master
@@ -1258,7 +1268,8 @@ CONTAINS
        !$OMP end master
        !$OMP barrier
     
-       CALL fwfft_z_section( dfft, shared2(:,1), f, 1, 1, 1, mythread, dfft%nsp, dfft%tscale )
+!       CALL fwfft_z_section( dfft, shared2(:,1), f, 1, 1, 1, mythread, dfft%nsp, dfft%tscale )
+       CALL fwfft_z_section( dfft, comm_recv(:,1), f, 1, 1, 1, mythread, dfft%nsp, dfft%tscale )
     
     END IF
 
