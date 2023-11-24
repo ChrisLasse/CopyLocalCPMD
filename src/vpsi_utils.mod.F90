@@ -76,7 +76,8 @@ MODULE vpsi_utils
                                              fwfft_batch
   USE fftnew_utils,                    ONLY: setfftn
   USE fftpw_base,                      ONLY: dfft,&
-                                             wfn_real
+                                             wfn_real,&
+                                             dfftp
   USE fftpw_batching,                  ONLY: locks_omp,&
                                              Prepare_Psi
   USE fftpw_make_maps,                 ONLY: Prep_fft_com,&
@@ -2523,7 +2524,7 @@ CONTAINS
     INTEGER, ALLOCATABLE, INTENT(INOUT) :: spin(:,:)
     REAL(real_8), ALLOCATABLE, OPTIONAL, INTENT(INOUT) :: coef3(:), coef4(:)
 
-    INTEGER :: int_mod, ierr, needed_size, needed_com_size, needed_1lock_size, Com_in_locks, needed_2lock_size, needed_3lock_size
+    INTEGER :: int_mod, ierr, needed_size, needed_com_size, needed_1lock_size, Com_in_locks, needed_2lock_size, needed_3lock_size, sendsize_pot
     INTEGER, SAVE :: remember_batch = 0
     LOGICAL, SAVE :: first
     TYPE(C_PTR) :: baseptr( 0:parai%node_nproc-1 )
@@ -2554,11 +2555,13 @@ CONTAINS
           CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_rem, fft_residual, dfft%ir1w, dfft%nsw )                
        END IF   
        
-       sendsize     = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_batchsize
-       sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * fft_residual
+       sendsize     = MAXVAL ( dfft%nr3p ) * MAXVAL ( dfft%nsw ) * dfft%node_task_size  * dfft%node_task_size * fft_batchsize
+       sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL ( dfft%nsw ) * dfft%node_task_size  * dfft%node_task_size * fft_residual
+       sendsize_pot = MAXVAL( dfftp%nr3p ) * MAXVAL( dfftp%nsp ) * dfftp%node_task_size * dfftp%node_task_size
        
        needed_size = 0
-       needed_com_size = ( sendsize*dfft%nodes_numb * int_mod ) * 2
+!       needed_com_size = ( sendsize*dfft%nodes_numb * int_mod ) * 2
+       needed_com_size = MAX( ( sendsize*dfft%nodes_numb * int_mod ) * 2 , sendsize_pot*dfft%nodes_numb * 2 )
        needed_1lock_size = ( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4 ) + 1
        needed_2lock_size = ( ( dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ) ) / 4 ) + 1
        needed_3lock_size = ( ( dfft%node_task_size * ( fft_numbatches + 3 ) ) / 4 ) + 1
@@ -2575,6 +2578,8 @@ CONTAINS
     
        CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
                           dfft%node_task_size, int_mod, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm, .TRUE. )
+       CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, dfftp%comm, dfftp%nodes_numb, dfftp%mype, dfftp%my_node, dfftp%my_node_rank, &
+                          dfftp%node_task_size, 1, dfftp%send_handle, dfftp%recv_handle, dfftp%comm_sendrecv, dfftp%do_comm, .FALSE. )
 
        Com_in_locks = ( needed_com_size / ( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4 ) ) + 1
        arrayshape(1) = dfft%node_task_size
