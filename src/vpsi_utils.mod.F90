@@ -2551,7 +2551,7 @@ CONTAINS
     INTEGER, ALLOCATABLE, INTENT(INOUT) :: spin(:,:)
     REAL(real_8), ALLOCATABLE, OPTIONAL, INTENT(INOUT) :: coef3(:), coef4(:)
 
-    INTEGER :: int_mod, ierr, needed_size, needed_com_size, needed_1lock_size, Com_in_locks, needed_2lock_size, needed_3lock_size, sendsize_pot
+    INTEGER :: int_mod, ierr, needed_size, Com_in_locks, sendsize_pot, irun
     INTEGER, SAVE :: remember_batch = 0
     LOGICAL, SAVE :: first
     TYPE(C_PTR) :: baseptr( 0:parai%node_nproc-1 )
@@ -2586,53 +2586,69 @@ CONTAINS
        sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL ( dfft%nsw ) * dfft%node_task_size  * dfft%node_task_size * fft_residual
        sendsize_pot = MAXVAL( dfftp%nr3p ) * MAXVAL( dfftp%nsp ) * dfftp%node_task_size * dfftp%node_task_size
        
-       needed_size = 0
-!       needed_com_size = ( sendsize*dfft%nodes_numb * int_mod ) * 2
-       needed_com_size = MAX( ( sendsize*dfft%nodes_numb * int_mod ) * 2 , sendsize_pot*dfft%nodes_numb * 2 )
-       needed_1lock_size = ( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4 ) + 1
-       needed_2lock_size = ( ( dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ) ) / 4 ) + 1
-       needed_3lock_size = ( ( dfft%node_task_size * ( fft_numbatches + 3 ) ) / 4 ) + 1
-       needed_size = needed_com_size + needed_1lock_size + needed_2lock_size + needed_3lock_size
-       CALL mp_win_alloc_shared_mem( 'c', needed_size, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
+!       needed_size = 0
+!!       needed_com_size = ( sendsize*dfft%nodes_numb * int_mod ) * 2
+!       needed_com_size = MAX( ( sendsize*dfft%nodes_numb * int_mod ) * 2 , sendsize_pot*dfft%nodes_numb * 2 )
+!       needed_1lock_size = ( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4 ) + 1
+!       needed_2lock_size = ( ( dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ) ) / 4 ) + 1
+!       needed_3lock_size = ( ( dfft%node_task_size * ( fft_numbatches + 3 ) ) / 4 ) + 1
+!       needed_size = needed_com_size + needed_1lock_size + needed_2lock_size + needed_3lock_size
+       DO irun = 1, 2
+
+          IF( irun .eq. 2 ) CALL mp_win_alloc_shared_mem( 'c', needed_size, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
 
 
-       arrayshape(1) = sendsize*dfft%nodes_numb
-       arrayshape(2) = int_mod
-       arrayshape(3) = 2
-       CALL C_F_POINTER( baseptr(0), Big_Com_Pointer, arrayshape )
-       comm_send => Big_Com_Pointer(:,:,1) 
-       comm_recv => Big_Com_Pointer(:,:,2) 
+          arrayshape(1) = sendsize*dfft%nodes_numb
+          arrayshape(2) = int_mod
+          arrayshape(3) = 2
+          needed_size = MAX( arrayshape(1) * arrayshape(2) * arrayshape(3), sendsize_pot*dfft%nodes_numb * 2 )
+          IF( irun .eq. 2 ) THEN
+             CALL C_F_POINTER( baseptr(0), Big_Com_Pointer, arrayshape )
+             comm_send => Big_Com_Pointer(:,:,1) 
+             comm_recv => Big_Com_Pointer(:,:,2) 
     
-       CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
-                          dfft%node_task_size, int_mod, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm, .TRUE. )
-       CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, dfftp%comm, dfftp%nodes_numb, dfftp%mype, dfftp%my_node, dfftp%my_node_rank, &
-                          dfftp%node_task_size, 1, dfftp%send_handle, dfftp%recv_handle, dfftp%comm_sendrecv, dfftp%do_comm, .FALSE. )
+             CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
+                                dfft%node_task_size, int_mod, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm, .TRUE. )
+             CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, dfftp%comm, dfftp%nodes_numb, dfftp%mype, dfftp%my_node, dfftp%my_node_rank, &
+                                dfftp%node_task_size, 1, dfftp%send_handle, dfftp%recv_handle, dfftp%comm_sendrecv, dfftp%do_comm, .FALSE. )
+          END IF
 
-       Com_in_locks = ( needed_com_size / ( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4 ) ) + 1
-       arrayshape(1) = dfft%node_task_size
-       arrayshape(2) = ( nstate / fft_batchsize ) + 1
-       arrayshape(3) = Com_in_locks + 4
-       CALL C_F_POINTER( baseptr(0), Big_1Log_Pointer, arrayshape )
-       locks_calc_inv => Big_1Log_Pointer(:,:,Com_in_locks+1)
-       locks_calc_fw  => Big_1Log_Pointer(:,:,Com_in_locks+2)
-       locks_com_inv  => Big_1Log_Pointer(:,:,Com_in_locks+3)
-       locks_com_fw   => Big_1Log_Pointer(:,:,Com_in_locks+4)
+          Com_in_locks = ( needed_size / REAL( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4.0 ) ) + 1
+          arrayshape(1) = dfft%node_task_size
+          arrayshape(2) = ( nstate / fft_batchsize ) + 1
+          arrayshape(3) = Com_in_locks + 4
+          needed_size = ( arrayshape(1) * arrayshape(2) * arrayshape(3) / 4 ) + 1
+          IF( irun .eq. 2. ) THEN
+             CALL C_F_POINTER( baseptr(0), Big_1Log_Pointer, arrayshape )
+             locks_calc_inv => Big_1Log_Pointer(:,:,Com_in_locks+1)
+             locks_calc_fw  => Big_1Log_Pointer(:,:,Com_in_locks+2)
+             locks_com_inv  => Big_1Log_Pointer(:,:,Com_in_locks+3)
+             locks_com_fw   => Big_1Log_Pointer(:,:,Com_in_locks+4)
+          END IF
 
-       Com_in_locks = ( ( needed_com_size + needed_1lock_size ) / ( ( dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ) ) / 4 ) ) + 1
-       arrayshape(1) = dfft%node_task_size
-       arrayshape(2) = nstate + fft_batchsize + (int_mod-1)*fft_batchsize
-       arrayshape(3) = Com_in_locks + 2
-       CALL C_F_POINTER( baseptr(0), Big_2Log_Pointer, arrayshape )
-       locks_calc_1   => Big_2Log_Pointer(:,:,Com_in_locks+1)
-       locks_calc_2   => Big_2Log_Pointer(:,:,Com_in_locks+2)
+          Com_in_locks = ( needed_size / REAL( ( dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ) ) / 4.0 ) ) + 1
+          arrayshape(1) = dfft%node_task_size
+          arrayshape(2) = nstate + fft_batchsize + (int_mod-1)*fft_batchsize
+          arrayshape(3) = Com_in_locks + 2
+          needed_size = ( arrayshape(1) * arrayshape(2) * arrayshape(3) / 4 ) + 1
+          IF( irun .eq. 2 ) THEN
+             CALL C_F_POINTER( baseptr(0), Big_2Log_Pointer, arrayshape )
+             locks_calc_1   => Big_2Log_Pointer(:,:,Com_in_locks+1)
+             locks_calc_2   => Big_2Log_Pointer(:,:,Com_in_locks+2)
+          END IF 
+   
+          Com_in_locks = ( needed_size / REAL( ( dfft%node_task_size * ( fft_numbatches + 3 ) ) / 4.0 ) ) + 1
+          arrayshape(1) = dfft%node_task_size
+          arrayshape(2) = fft_numbatches + 3
+          arrayshape(3) = Com_in_locks + 2
+          needed_size = ( arrayshape(1) * arrayshape(2) * arrayshape(3) / 4 ) + 1
+          IF( irun .eq. 2 ) THEN
+             CALL C_F_POINTER( baseptr(0), Big_3Log_Pointer, arrayshape )
+             locks_sing_1   => Big_3Log_Pointer(:,:,Com_in_locks+1)
+             locks_sing_2   => Big_3Log_Pointer(:,:,Com_in_locks+2)
+          END IF
 
-       Com_in_locks = ( ( needed_com_size + needed_1lock_size + needed_2lock_size ) / ( ( dfft%node_task_size * ( fft_numbatches + 3 ) ) / 4 ) ) + 1
-       arrayshape(1) = dfft%node_task_size
-       arrayshape(2) = fft_numbatches + 3
-       arrayshape(3) = Com_in_locks + 2
-       CALL C_F_POINTER( baseptr(0), Big_3Log_Pointer, arrayshape )
-       locks_sing_1   => Big_3Log_Pointer(:,:,Com_in_locks+1)
-       locks_sing_2   => Big_3Log_Pointer(:,:,Com_in_locks+2)
+       ENDDO
      
        IF( allocated( locks_omp ) ) DEALLOCATE( locks_omp )
        ALLOCATE( locks_omp( dfft%nthreads, fft_numbatches+3, 20 ) )
