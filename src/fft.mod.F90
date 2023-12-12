@@ -84,5 +84,42 @@ MODULE fft
   LOGICAL, ALLOCATABLE, ASYNCHRONOUS       :: locks_inv(:,:), locks_fw(:,:)
   REAL(real_8), ALLOCATABLE                :: fft_time_total(:)
   INTEGER, ALLOCATABLE                     :: fft_batchsizes(:)
+
+  ! ==================================================================
+  ! IMPROVED FFT CODE
+  ! ==================================================================
+  TYPE FFT_TYPE_DESCRIPTOR
+
+     INTEGER, ALLOCATABLE :: stownW(:,:)
+     INTEGER, ALLOCATABLE :: stownP(:,:)
+     INTEGER, ALLOCATABLE :: indx_map(:,:)
+     INTEGER, ALLOCATABLE :: indx(:)
+     INTEGER, ALLOCATABLE :: ind1(:)
+     INTEGER, ALLOCATABLE :: ind2(:)
+     INTEGER, ALLOCATABLE :: nr3_ranges(:,:)
+     INTEGER, ALLOCATABLE :: nr3p(:)
+     INTEGER, ALLOCATABLE :: nr3p_offset(:)
+     INTEGER, ALLOCATABLE :: ir1w(:)
+     INTEGER, ALLOCATABLE :: ir1p(:)
+     INTEGER, ALLOCATABLE :: nsw(:)
+     INTEGER, ALLOCATABLE :: nsp(:)
+     INTEGER, ALLOCATABLE :: iss(:)
+     INTEGER, ALLOCATABLE :: ismap(:)
+     
+
+     INTEGER :: nr1w
+     INTEGER :: nr1p
+     INTEGER :: nr1
+     INTEGER :: nr2
+     INTEGER :: nr3
+     INTEGER :: my_nr3p
+     INTEGER :: nhg
+     INTEGER :: ngw
+     INTEGER :: nwst
+     INTEGER :: npst
+
+  END TYPE
+  Type( FFT_TYPE_DESCRIPTOR ) :: plac
+
 END MODULE fft
 
