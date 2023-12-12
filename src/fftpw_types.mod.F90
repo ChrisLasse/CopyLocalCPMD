@@ -123,6 +123,10 @@ MODULE fftpw_types
     INTEGER :: batch_size = 1
     INTEGER :: nstate = 0
 
+    INTEGER, ALLOCATABLE :: nr3_ranges(:,:)
+    INTEGER, ALLOCATABLE :: stown(:,:) ! the owner of each stick
+
+
     INTEGER :: what = 0
     INTEGER :: rem_size = 0
     INTEGER :: batch_size_save  = 1

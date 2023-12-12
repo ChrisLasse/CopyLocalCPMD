@@ -9,6 +9,8 @@ MODULE loadpa_utils
   USE error_handling,                  ONLY: stopgm
   USE fftpw_base,                      ONLY: dfft,&
                                              dfftp
+  USE fft,                             ONLY: plac,&
+                                             FFT_TYPE_DESCRIPTOR
   USE fftpw_converting,                ONLY: Create_PwFFT_datastructure,&
                                              ConvertFFT_array,&
                                              Prep_pwFFT_Wave,&
@@ -61,14 +63,15 @@ CONTAINS
     CHARACTER(*), PARAMETER                  :: procedureN = 'loadpa'
 
     INTEGER :: i, i0, ia, iat, icpu, ierr, ig, ihrays, ii, img, in1, in2, &
-      in3, iorb, ip, ipp, ir, is, isub, isub2, isub3, isub4, ixrays, izpl, j, &
+      in3, iorb, ip, ipp, ir, is, isub, isub2, isub3, isub4, izrays, izpl, j, &
       j1, j2, jmax, jmin, k, kmax, kmin, mspace, nh1, nh2, nh3, nthreads,&
       first, last
     INTEGER, ALLOCATABLE                     :: ihray(:,:), ixray(:,:), &
-                                                mgpa(:,:)
+                                                mgpa(:,:), ind(:), pre_inyh(:,:)
     INTEGER, ALLOCATABLE, DIMENSION(:)       :: thread_buff
     LOGICAL                                  :: oldstatus
     REAL(real_8)                             :: g2, sign, t
+    REAL(real_8), PARAMETER                  :: eps8=1.0E-8_DP
 
     INTEGER :: win
 ! ==--------------------------------------------------------------==
@@ -155,83 +158,46 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     CALL dist_entity2(crge%n,parai%nproc,parap%nst12,nblocal=norbpe,iloc=parai%me)
     ! ==--------------------------------------------------------------==
-    ! DISTRIBUTE REAL SPACE YZ-PLANES
+
+    ALLOCATE( plac%nr3_ranges( 0:parai%nproc-1, 2 ) )
+    ALLOCATE( plac%stownW( fpar%kr1s,fpar%kr2s ) )
+    ALLOCATE( plac%stownP( fpar%kr1s,fpar%kr2s ) )
+    ALLOCATE( plac%indx_map( fpar%kr1s,fpar%kr2s ) )
+    ALLOCATE( plac%indx( fpar%kr1s * fpar%kr2s ) )
+    ALLOCATE( plac%ind1( fpar%kr1s * fpar%kr2s ) )
+    ALLOCATE( plac%ind2( fpar%kr1s * fpar%kr2s ) )
+
+    plac%indx_map = 0
+    plac%indx = 0
+    plac%ind1 = 0
+    plac%ind2 = 0
+    plac%nr1 = fpar%kr1s
+    plac%nr2 = fpar%kr2s
+    plac%nr3 = fpar%kr3s
+
     ! ==--------------------------------------------------------------==
-    CALL dist_entity2(spar%nr1s,parai%nproc,parap%nrxpl)
+    ! DISTRIBUTE REAL SPACE XY-PLANES
+    ! ==--------------------------------------------------------------==
+    CALL dist_entity2(spar%nr3s,parai%nproc,plac%nr3_ranges)
     CALL zeroing(parap%nrzpl)!,2*(maxcpu+1))
     IF (isos1%tclust.AND.isos3%ps_type.EQ.1) THEN      
        ! DISTRIBUTE REAL SPACE XY-PLANES
        CALL dist_entity2(2*spar%nr3s,parai%nproc,parap%nrzpl)
     ENDIF
     ! ==--------------------------------------------------------------==
-    ! DISTRIBUTE G-VECTORS
+    ! DISTRIBUTE G-VECTORS AND MARK ASSOCIATED RAYS
     ! ==--------------------------------------------------------------==
     CALL tiset(procedureN//'_c',isub4)
-    CALL xfft(ixray,gcutwmax)
-    CALL xfft(ihray,gvec_com%gcut)
-    ixrays = 0
-    !$omp parallel do __COLLAPSE2 &
-    !$omp             private(I,J) &
-    !$omp             shared(fpar) &
-    !$omp             reduction(+:IXRAYS)
-    DO j=1,fpar%kr3s
-       DO i=1,fpar%kr2s
-          IF (ixray(i,j).NE.0) THEN
-             ixrays=ixrays+1
-          ENDIF
-       ENDDO
-    ENDDO
-    !$omp end parallel do
-    ipp=0
-    DO ii=1,ixrays
-       ipp=ipp+1
-       ip=MOD(ipp,2*parai%nproc)
-       IF (ip.EQ.0) THEN
-          ip=2*parai%nproc
-       ENDIF
-       IF (ip.GT.parai%nproc) THEN
-          ip=2*parai%nproc+1-ip
-       ENDIF
-       CALL iraymax(fpar%kr2s,fpar%kr3s,ixray,i,j,thread_buff,nthreads)
-       ixray(i,j)=-ip
-    ENDDO
+    CALL zfft(plac%stownW,gcutwmax)
+    CALL zfft(plac%stownP,gvec_com%gcut)
+
+    CALL Distribute_Sticks( fpar%kr1s, fpar%kr2s, plac%stownW )
+    CALL Distribute_Sticks( fpar%kr1s, fpar%kr2s, plac%stownP, plac%stownW )
+
+    CALL czfft(plac%stownW,gcutwmax)
+    CALL czfft(plac%stownP,gvec_com%gcut)
+
     CALL tihalt(procedureN//'_c',isub4)
-    ! ==--------------------------------------------------------------==
-    ! MARK ASSOCIATED RAYS   
-    ! ==--------------------------------------------------------------==
-    CALL tiset(procedureN//'_b',isub3)
-    CALL cxfft(ixray,gcutwmax)
-    ihrays=0
-    !$omp parallel do __COLLAPSE2 &
-    !$omp             private(I,J) &
-    !$omp             shared(fpar) &
-    !$omp             reduction(+:IHRAYS)
-    DO j=1,fpar%kr3s
-       DO i=1,fpar%kr2s
-          IF (ixray(i,j).NE.0) THEN
-             ihray(i,j)=ixray(i,j)
-          ENDIF
-          IF (ihray(i,j).GT.0) THEN
-             ihrays=ihrays+1
-          ENDIF
-       ENDDO
-    ENDDO
-    !$omp end parallel do
-    DO ii=1,ihrays
-       ipp=ipp+1
-       ip=MOD(ipp,2*parai%nproc)
-       IF (ip.EQ.0) THEN
-          ip=2*parai%nproc
-       ENDIF
-       IF (ip.GT.parai%nproc) THEN
-          ip=2*parai%nproc+1-ip
-       ENDIF
-       CALL iraymax(fpar%kr2s,fpar%kr3s,ihray,i,j,thread_buff,nthreads)
-       ihray(i,j)=-ip
-    ENDDO
-    ! MARK ASSOCIATED RAYS   
-    CALL cxfft(ihray,gvec_com%gcut)
-    CALL tihalt(procedureN//'_b',isub3)
     ! ==--------------------------------------------------------------==
     ! ALLOCATE THE GLOBAL DATA ARRAYS
     ! ==--------------------------------------------------------------==
@@ -252,13 +218,16 @@ CONTAINS
 
 !    ixray = dfft%pw_ixray
 !    ihray = dfft%pw_ihray
-    ncpw%nhg = dfft%ngm
-    ncpw%ngw = dfft%ngw
+!    ncpw%nhg = dfft%ngm
+!    ncpw%ngw = dfft%ngw
 
     CALL Prep_pwFFT_Wave( dfft )
     CALL Prep_pwFFT_Rho( dfftp )
 
     ALLOCATE(hg(ncpw%nhg),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(pre_inyh(3,ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
     ALLOCATE(inyh(3,ncpw%nhg),STAT=ierr)
@@ -293,22 +262,22 @@ CONTAINS
     ig=0
     ncpw%ngw=0
     ncpw%nhg=0
-    DO i=0,parm%nr1-1
-       jmin=-parm%nr2+1
-       jmax=parm%nr2-1
+    DO i=0,parm%nr3-1
+       jmin=-parm%nr1+1
+       jmax=parm%nr1-1
        IF (i.EQ.0) THEN
           jmin=0
        ENDIF
        DO j=jmin,jmax
-          kmin=-parm%nr3+1
-          kmax=parm%nr3-1
+          kmin=-parm%nr2+1
+          kmax=parm%nr2-1
           IF (i.EQ.0.AND.j.EQ.0) THEN
              kmin=0
           ENDIF
           DO k=kmin,kmax
              g2=0._real_8
              DO ir=1,3
-                t=REAL(i,kind=real_8)*gvec_com%b1(ir)+REAL(j,kind=real_8)*gvec_com%b2(ir)+REAL(k,kind=real_8)*gvec_com%b3(ir)
+                t=REAL(i,kind=real_8)*gvec_com%b3(ir)+REAL(j,kind=real_8)*gvec_com%b1(ir)+REAL(k,kind=real_8)*gvec_com%b2(ir)
                 g2=g2+t*t
              ENDDO
              IF (compare_lt(g2,gvec_com%gcut)) THEN
@@ -319,7 +288,7 @@ CONTAINS
                 in3=nh3+k
                 IF (compare_lt(g2,gcutwmax)) THEN
 !                IF (g2.LT.gcutwmax) THEN
-                   icpu=ixray(in2,in3)
+                   icpu=plac%stownW(in1,in2)
                    IF (-icpu.EQ.parai%mepos+1) THEN
                       ncpw%ngw=ncpw%ngw+1
                    ENDIF
@@ -327,43 +296,41 @@ CONTAINS
                 ELSE
                    sign=1._real_8
                 ENDIF
-                icpu=ihray(in2,in3)
+                icpu=plac%stownP(in1,in2)
                 IF (-icpu.EQ.parai%mepos+1) THEN
                    ncpw%nhg=ncpw%nhg+1
                    ! HG(NHG)=G2+SQRT(real(IG-1,kind=real_8))*EPSG*SIGN
                    ! G2*EPSGX*SIGN is the epsilon added (>= epsilon(G2))
                    ! SQRT(FLOAT(IG-1)) is to break the symmetry
-!                   hg(ncpw%nhg)=g2*(1._real_8+SQRT(REAL(ig-1,kind=real_8))*epsgx*sign)
-!                   inyh(1,ncpw%nhg)=in1
-!                   inyh(2,ncpw%nhg)=in2
-!                   inyh(3,ncpw%nhg)=in3
+                   hg(ncpw%nhg)=g2!*(1._real_8+SQRT(REAL(ig-1,kind=real_8))*epsgx*sign)
+                   pre_inyh(1,ncpw%nhg)=in1! - ( ( spar%nr1s / 2 ) + 1 )
+                   pre_inyh(2,ncpw%nhg)=in2! - ( ( spar%nr1s / 2 ) + 1 )
+                   pre_inyh(3,ncpw%nhg)=in3! - ( ( spar%nr1s / 2 ) + 1 )
                 ENDIF
              ENDIF
           ENDDO
        ENDDO
     ENDDO
 
-    inyh = dfft%g_pw
-    hg = NINT(dfft%gg_pw)
-    ncpw%nhg = dfft%ngm
-    ncpw%ngw = dfft%ngw
+    plac%nhg = ncpw%nhg
+    plac%ngw = ncpw%ngw
 
     CALL zeroing(mgpa)!,kr2s*kr3s)
     parai%nhrays=0
     parai%ngrays=0
-    DO j1=1,fpar%kr3s
+    DO j1=1,fpar%kr1s
        DO j2=1,fpar%kr2s
-          IF (ihray(j2,j1).EQ.-(parai%mepos+1)) parai%nhrays=parai%nhrays+1
-          IF (ixray(j2,j1).EQ.-(parai%mepos+1)) THEN
+          IF (plac%stownP(j2,j1).EQ.-(parai%mepos+1)) parai%nhrays=parai%nhrays+1
+          IF (plac%stownW(j2,j1).EQ.-(parai%mepos+1)) THEN
              parai%ngrays=parai%ngrays+1
              mgpa(j2,j1)=parai%ngrays
           ENDIF
        ENDDO
     ENDDO
     img=parai%ngrays
-    DO j1=1,fpar%kr3s
+    DO j1=1,fpar%kr1s
        DO j2=1,fpar%kr2s
-          IF (ihray(j2,j1).EQ.-(parai%mepos+1).AND.mgpa(j2,j1).EQ.0) THEN
+          IF (plac%stownP(j2,j1).EQ.-(parai%mepos+1).AND.mgpa(j2,j1).EQ.0) THEN
              img=img+1
              mgpa(j2,j1)=img
           ENDIF
@@ -423,51 +390,21 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     ! SORTING OF G-VECTORS
     ! ==--------------------------------------------------------------==
-!    CALL gsort(hg,inyh,ncpw%nhg)
-!    dfft%g_cpmd = inyh - ( ( spar%nr1s / 2 ) + 1 )
-!    dfftp%g_cpmd = inyh - ( ( spar%nr1s / 2 ) + 1 )
 
+    ALLOCATE(ind(ncpw%nhg),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ind = 0
+    CALL hpsort_eps( ncpw%nhg, hg, ind, eps8 )
 
-
-
-
-!do i = 1, ncpw%nhg
-!write(6,*) i, hg(i), dfft%gg_pw(i)
-!enddo
-
-!    ncpw%nhg = dfft%ngm
-!    IF( allocated( hg ) ) DEALLOCATE( hg )
-!    ALLOCATE(hg(ncpw%nhg),STAT=ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-!         __LINE__,__FILE__)
-!    IF( allocated( inyh ) ) DEALLOCATE( inyh )
-!    ALLOCATE(inyh(3,ncpw%nhg),STAT=ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-!         __LINE__,__FILE__)
-!    IF( allocated( mapgp ) ) DEALLOCATE( mapgp )
-!    ALLOCATE(mapgp(ncpw%nhg),STAT=ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-!         __LINE__,__FILE__)
-!
-!
-!    IF (tkpts%tkpnt) THEN
-!       nkpt%ngwk=ncpw%ngw*2
-!       nkpt%nhgk=ncpw%nhg*2
-!    ELSE
-!       nkpt%ngwk=ncpw%ngw
-!       nkpt%nhgk=ncpw%nhg
-!    ENDIF
-!    parap%sparm(1,parai%mepos)=ncpw%nhg
-
-
-
-    
-
+    DO i = 1, ncpw%nhg
+       inyh(:,i) = pre_inyh(:,ind(i))
+    ENDDO
 
     DO ig=1,ncpw%nhg
        mapgp(ig)=ig
     ENDDO
-    CALL gorder
+!    CALL gorder
     ! ==--------------------------------------------------------------==
     geq0=.FALSE.
     i0=0
@@ -494,6 +431,13 @@ CONTAINS
     DEALLOCATE(thread_buff,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
          __LINE__,__FILE__)
+    ! ==--------------------------------------------------------------==
+    ! SETUP ARRAYS NEEDED FOR IMPROVED FFT
+    ! ==--------------------------------------------------------------==
+
+    CALL SetupArrays()
+
+    ! ==--------------------------------------------------------------==
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==
 
@@ -592,9 +536,9 @@ CONTAINS
     RETURN
   END SUBROUTINE leadim
   ! ==================================================================
-  SUBROUTINE xfft(iray,gvcut)
+  SUBROUTINE zfft(iray,gvcut)
     ! ==--------------------------------------------------------------==
-    INTEGER                                  :: iray(fpar%kr2,fpar%kr3)
+    INTEGER                                  :: iray(fpar%kr1,fpar%kr2)
     REAL(real_8)                             :: gvcut
 
     INTEGER                                  :: i, id1, id2, id3, in1, in2, &
@@ -609,15 +553,15 @@ CONTAINS
     nh1=parm%nr1/2+1
     nh2=parm%nr2/2+1
     nh3=parm%nr3/2+1
-    DO i=0,parm%nr1-1
-       jmin=-parm%nr2+1
-       jmax=parm%nr2-1
+    DO i=0,parm%nr3-1
+       jmin=-parm%nr1+1
+       jmax=parm%nr1-1
        IF (i.EQ.0) THEN
           jmin=0
        ENDIF
        DO j=jmin,jmax
-          kmin=-parm%nr3+1
-          kmax=parm%nr3-1
+          kmin=-parm%nr2+1
+          kmax=parm%nr2-1
           IF (i.EQ.0.AND.j.EQ.0) THEN
              kmin=0
           ENDIF
@@ -635,21 +579,21 @@ CONTAINS
                 id1=2*nh1-in1
                 id2=2*nh2-in2
                 id3=2*nh3-in3
-                ix1=iray(in2,in3)
-                ix2=iray(id2,id3)
+                ix1=iray(in1,in2)
+                ix2=iray(id1,id2)
                 IF (ix1.GT.0) THEN
-                   iray(in2,in3)=ix1+1
+                   iray(in1,in2)=ix1+1
                    IF (ix2.GT.0) THEN
-                      IF ((in2.NE.id2).OR.(in3.NE.id3)) THEN
+                      IF ((in1.NE.id1).OR.(in2.NE.id2)) THEN
                          IF (paral%io_parent) WRITE(6,*) ' INCONSISTENT MESH?'
                          CALL stopgm('XFFT',' ',& 
                               __LINE__,__FILE__)
                       ENDIF
                    ENDIF
                 ELSEIF (ix2.GT.0) THEN
-                   iray(id2,id3)=ix2+1
+                   iray(id1,id2)=ix2+1
                 ELSE
-                   iray(in2,in3)=1
+                   iray(in1,in2)=1
                 ENDIF
              ENDIF
           ENDDO
@@ -657,9 +601,9 @@ CONTAINS
     ENDDO
     ! ==--------------------------------------------------------------==
     RETURN
-  END SUBROUTINE xfft
+  END SUBROUTINE zfft
   ! ==================================================================
-  SUBROUTINE cxfft(iray,gvcut)
+  SUBROUTINE czfft(iray,gvcut)
     ! ==--------------------------------------------------------------==
     INTEGER                                  :: iray(fpar%kr2,*)
     REAL(real_8)                             :: gvcut
@@ -675,22 +619,22 @@ CONTAINS
     nh1=parm%nr1/2+1
     nh2=parm%nr2/2+1
     nh3=parm%nr3/2+1
-    DO i=0,parm%nr1-1
-       jmin=-parm%nr2+1
-       jmax=parm%nr2-1
+    DO i=0,parm%nr3-1
+       jmin=-parm%nr1+1
+       jmax=parm%nr1-1
        IF (i.EQ.0) THEN
           jmin=0
        ENDIF
        DO j=jmin,jmax
-          kmin=-parm%nr3+1
-          kmax=parm%nr3-1
+          kmin=-parm%nr2+1
+          kmax=parm%nr2-1
           IF (i.EQ.0.AND.j.EQ.0) THEN
              kmin=0
           ENDIF
           DO k=kmin,kmax
              g2=0._real_8
              DO ir=1,3
-                t=REAL(i,kind=real_8)*gvec_com%b1(ir)+REAL(j,kind=real_8)*gvec_com%b2(ir)+REAL(k,kind=real_8)*gvec_com%b3(ir)
+                t=REAL(i,kind=real_8)*gvec_com%b3(ir)+REAL(j,kind=real_8)*gvec_com%b1(ir)+REAL(k,kind=real_8)*gvec_com%b2(ir)
                 g2=g2+t*t
              ENDDO
              IF (compare_lt(g2,gvcut)) THEN
@@ -701,16 +645,16 @@ CONTAINS
                 id1=2*nh1-in1
                 id2=2*nh2-in2
                 id3=2*nh3-in3
-                icpu1=iray(in2,in3)
-                icpu2=iray(id2,id3)
+                icpu1=iray(in1,in2)
+                icpu2=iray(id1,id2)
                 IF (icpu2.EQ.0) THEN
-                   iray(id2,id3)=icpu1
+                   iray(id1,id2)=icpu1
                 ELSEIF (icpu1.EQ.0) THEN
-                   iray(in2,in3)=icpu2
+                   iray(in1,in2)=icpu2
                 ELSEIF (icpu1.NE.icpu2) THEN
                    IF (paral%io_parent)&
                         WRITE(6,*) ' INCONSISTENT XRAY FIELDS',icpu1,icpu2
-                   CALL stopgm('CXFFT',' ',& 
+                   CALL stopgm('CZFFT',' ',& 
                         __LINE__,__FILE__)
                 ENDIF
              ENDIF
@@ -719,7 +663,7 @@ CONTAINS
     ENDDO
     ! ==--------------------------------------------------------------==
     RETURN
-  END SUBROUTINE cxfft
+  END SUBROUTINE czfft
   ! ==================================================================
   SUBROUTINE gorder
     ! ==--------------------------------------------------------------==
@@ -892,5 +836,398 @@ CONTAINS
     
   END FUNCTION compare_lt
   ! ******************************************************************************
+  SUBROUTINE Distribute_Sticks( n1, n2, stown, stown2 )
+    IMPLICIT NONE
+
+    INTEGER, INTENT(IN)                         :: n1, n2
+    INTEGER, INTENT(INOUT)                      :: stown( n1, n2 )
+    INTEGER, OPTIONAL, INTENT(INOUT)            :: stown2( n1, n2 )
+
+!    REAL(real_8), PARAMETER                     :: thresh
+    INTEGER                                     :: m1, m2, ifa, jfa, i, j, highest, proc, c_proc, indx1, indx2, k
+    LOGICAL                                     :: finished
+    INTEGER                                     :: nst( parai%nproc ), ngv( parai%nproc )
+
+    finished = .false.
+
+    m1 = ( n1 / 2 ) + 1
+    m2 = ( n2 / 2 ) + 1
+
+    nst = 0
+    ngv = 0
+
+    IF( present( stown2 ) ) THEN
+
+       DO i = 1, n1
+          DO j = 1, n2
+             IF( stown2( i, j ) .ne. 0 ) THEN
+                nst( -stown2( i, j ) ) = nst( -stown2( i, j ) ) + 1
+                ngv( -stown2( i, j ) ) = ngv( -stown2( i, j ) ) + stown( i, j )
+                stown( i, j ) = stown2( i, j )
+             END IF
+          ENDDO
+       ENDDO
+
+       plac%npst = plac%nwst
+       k = plac%nwst
+       DO ifa = 1, n2
+          i = MOD( m2 + ifa - 1 - 1, n2 ) + 1
+          DO jfa = 1, n1
+             j = MOD( m1 + jfa - 1 - 1, n1 ) + 1
+             IF( stown( j, i ) .gt. 0 ) THEN
+                plac%npst = plac%npst + 1
+                plac%indx_map( j, i ) = plac%npst
+             END IF
+          ENDDO
+       ENDDO
+
+    ELSE
+
+       plac%nwst = 0
+       k = 0
+       DO ifa = 1, n2
+          i = MOD( m2 + ifa - 1 - 1, n2 ) + 1
+          DO jfa = 1, n1
+             j = MOD( m1 + jfa - 1 - 1, n1 ) + 1
+             IF( stown( j, i ) .gt. 0 ) THEN
+                plac%nwst = plac%nwst + 1
+                plac%indx_map( j, i ) = plac%nwst
+             END IF
+          ENDDO
+       ENDDO
+
+    END IF
+
+
+    DO while( .not. finished )
+
+       highest = 0
+       indx1 = 0
+       indx2 = 0
+       k = k + 1
+       DO ifa = 1, n2
+          i = MOD( m2 + ifa - 1 - 1, n2 ) + 1
+          DO jfa = 1, n1
+             j = MOD( m1 + jfa - 1 - 1, n1 ) + 1
+             IF( stown( j, i ) .gt. highest ) THEN
+                highest = stown( j, i )
+                indx1 = j
+                indx2 = i
+             END IF
+          ENDDO
+       ENDDO
+
+       IF( highest .ne. 0 ) THEN
+          c_proc = 1
+          DO proc = 1, parai%nproc
+             IF( ngv(proc) .lt. ngv(c_proc) ) THEN
+                c_proc = proc
+             ELSEIF( ngv(proc) .eq. ngv(c_proc) .and. nst(proc) .lt. nst(c_proc) ) THEN
+                c_proc = proc
+             END IF 
+          ENDDO
+          stown( indx1, indx2 ) = - c_proc
+          ngv(c_proc) = ngv(c_proc) + highest
+          nst(c_proc) = nst(c_proc) + 1
+          plac%indx( k ) = plac%indx_map( indx1, indx2 )
+          plac%ind1( plac%indx( k ) ) = indx1
+          plac%ind2( plac%indx( k ) ) = indx2
+       ELSE
+          finished = .true.
+       END IF
+
+    END DO
+
+
+  END SUBROUTINE
+  ! ******************************************************************************
+  SUBROUTINE hpsort_eps (n, ra, ind, eps)
+    !---------------------------------------------------------------------
+    !! Sort an array ra(1:n) into ascending order using heapsort algorithm,
+    !! and considering two elements being equal if their values differ
+    !! for less than "eps".  
+    !! \(\text{n}\) is input, \(\text{ra}\) is replaced on output by its 
+    !! sorted rearrangement.  
+    !! Create an index table (ind) by making an exchange in the index array
+    !! whenever an exchange is made on the sorted data array (\(\text{ra}\)).  
+    !! In case of equal values in the data array (\(\text{ra}\)) the values
+    !! in the index array (ind) are used to order the entries.  
+    !! If on input ind(1) = 0 then indices are initialized in the routine,
+    !! if on input ind(1) != 0 then indices are assumed to have been
+    !! initialized before entering the routine and these indices are carried
+    !! around during the sorting process.
+    !
+    ! no work space needed !
+    ! free us from machine-dependent sorting-routines !
+    !
+    ! adapted from Numerical Recipes pg. 329 (new edition)
+    !
+    implicit none  
+    !-input/output variables
+    integer, intent(in) :: n  
+    integer, intent(inout) :: ind (*)  
+    real(DP), intent(inout) :: ra (*)
+    real(DP), intent(in) :: eps
+    !-local variables
+    integer :: i, ir, j, l, iind  
+    real(DP) :: rra  
+    ! initialize index array
+    if (ind (1) .eq.0) then  
+       do i = 1, n  
+          ind (i) = i  
+       enddo
+    endif
+    ! nothing to order
+    if (n.lt.2) return  
+    ! initialize indices for hiring and retirement-promotion phase
+    l = n / 2 + 1  
+  
+    ir = n  
+  
+    sorting: do 
+    
+      ! still in hiring phase
+      if ( l .gt. 1 ) then  
+         l    = l - 1  
+         rra  = ra (l)  
+         iind = ind (l)  
+         ! in retirement-promotion phase.
+      else  
+         ! clear a space at the end of the array
+         rra  = ra (ir)  
+         !
+         iind = ind (ir)  
+         ! retire the top of the heap into it
+         ra (ir) = ra (1)  
+         !
+         ind (ir) = ind (1)  
+         ! decrease the size of the corporation
+         ir = ir - 1  
+         ! done with the last promotion
+         if ( ir .eq. 1 ) then  
+            ! the least competent worker at all !
+            ra (1)  = rra  
+            !
+            ind (1) = iind  
+            exit sorting  
+         endif
+      endif
+      ! wheter in hiring or promotion phase, we
+      i = l  
+      ! set up to place rra in its proper level
+      j = l + l  
+      !
+      do while ( j .le. ir )  
+         if ( j .lt. ir ) then  
+            ! compare to better underling
+            if ( abs(ra(j)-ra(j+1)).ge.eps ) then  
+               if (ra(j).lt.ra(j+1)) j = j + 1
+            else
+               ! this means ra(j) == ra(j+1) within tolerance
+               if (ind (j) .lt.ind (j + 1) ) j = j + 1
+            endif
+         endif
+         ! demote rra
+         if ( abs(rra - ra(j)).ge.eps ) then  
+            if (rra.lt.ra(j)) then
+               ra (i) = ra (j)  
+               ind (i) = ind (j)  
+               i = j  
+               j = j + j  
+            else
+               ! set j to terminate do-while loop
+               j = ir + 1  
+            end if
+         else
+            !this means rra == ra(j) within tolerance
+            ! demote rra
+            if (iind.lt.ind (j) ) then
+               ra (i) = ra (j)
+               ind (i) = ind (j)
+               i = j
+               j = j + j
+            else
+               ! set j to terminate do-while loop
+               j = ir + 1
+            endif
+         end if
+      enddo
+      ra (i) = rra  
+      ind (i) = iind  
+  
+    end do sorting    
+    !
+  END SUBROUTINE hpsort_eps
+  ! ******************************************************************************
+  SUBROUTINE SetupArrays()
+    IMPLICIT NONE
+    CHARACTER(*), PARAMETER                     :: procedureN = 'SetupArrays'
+
+    INTEGER                                     :: ierr, i, istick, i1, i2, ix, iy, ixM, i1M, i2M, k, f, j, ifa, jfa
+
+
+    ALLOCATE(plac%nr3p(parai%nproc),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%nr3p_offset(parai%nproc),STAT=ierr)
+
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    DO i = 1, parai%nproc
+       plac%nr3p(i) = plac%nr3_ranges( i-1, 2 ) - plac%nr3_ranges( i-1, 1 ) + 1
+       IF( i .eq. 1 ) THEN
+          plac%nr3p_offset(i) = 0
+       ELSE
+          plac%nr3p_offset(i) = plac%nr3p_offset(i-1) + plac%nr3p(i-1)
+       END IF
+    ENDDO
+    plac%my_nr3p = plac%nr3p( parai%me+1 )
+
+
+    ALLOCATE(plac%ir1w(plac%nr1),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%ir1p(plac%nr1),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%nsw(parai%nproc),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%nsp(parai%nproc),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+
+    plac%nsw = 0
+    plac%nsp = 0
+    plac%ir1w = 0
+    plac%ir1p = 0
+    plac%nr1w = 0
+    plac%nr1p = 0
+    DO i = 1, plac%npst
+       istick = plac%indx( i )
+       i1 = plac%ind1( istick )
+       i2 = plac%ind2( istick )
+
+       ix = i1 - ( plac%nr1 / 2 )
+!       IF( ix .lt. 1 ) ix = ix + plac%nr1
+!       iy = i2 - ( plac%nr2 / 2 )
+!       IF( iy .lt. 1 ) iy = iy + plac%nr2
+
+       IF( plac%stownP( i1, i2 ) .ne. 0 ) THEN
+
+          IF( plac%stownW( i1, i2 ) .ne. 0 ) THEN
+   
+             IF( plac%ir1w( ix ) .eq. 0 ) THEN
+                plac%ir1w(ix) = -1
+                plac%ir1p(ix) = -1
+             END IF
+             plac%nsw( - plac%stownW( i1, i2 ) ) = plac%nsw( - plac%stownW( i1, i2 ) ) + 1
+             plac%nsp( - plac%stownW( i1, i2 ) ) = plac%nsp( - plac%stownW( i1, i2 ) ) + 1
+
+          ELSE
+
+             IF( plac%ir1p( ix ) .eq. 0 ) THEN
+                plac%ir1p(ix) = -1
+             END IF
+             plac%nsp( - plac%stownP( i1, i2 ) ) = plac%nsp( - plac%stownP( i1, i2 ) ) + 1
+   
+          END IF
+
+
+          i1M = 2 * ( plac%nr1 / 2 ) + 2 - i1
+          i2M = 2 * ( plac%nr2 / 2 ) + 2 - i2
+          IF( i1M .eq. i1 .and. i2M .eq. i2 ) CYCLE
+          ixM = i1M - ( plac%nr1 / 2 ) + plac%nr1
+          IF( plac%stownW( i1M , i2M ) .ne. 0 ) THEN
+   
+             IF( plac%ir1w( ixM ) .eq. 0 ) THEN
+                plac%ir1w(ixM) = -1
+                plac%ir1p(ixM) = -1
+             END IF
+             plac%nsw( - plac%stownW( i1M, i2M ) ) = plac%nsw( - plac%stownW( i1M, i2M ) ) + 1
+             plac%nsp( - plac%stownW( i1M, i2M ) ) = plac%nsp( - plac%stownW( i1M, i2M ) ) + 1
+
+          ELSE
+
+             IF( plac%ir1p( ixM ) .eq. 0 ) THEN
+                plac%ir1p(ixM) = -1
+             END IF
+             plac%nsp( - plac%stownP( i1M, i2M ) ) = plac%nsp( - plac%stownP( i1M, i2M ) ) + 1
+   
+          END IF
+
+
+       END IF
+
+    ENDDO
+
+    DO i = 1, plac%nr1
+     
+       IF( plac%ir1w( i ) .lt. 0 ) THEN
+          plac%nr1w = plac%nr1w + 1
+          plac%ir1w( i ) = plac%nr1w
+          plac%ir1p( i ) = plac%nr1w
+       END IF
+
+    ENDDO
+    plac%nr1p = plac%nr1w
+    DO i = 1, plac%nr1
+     
+       IF( plac%ir1p( i ) .lt. 0 ) THEN
+          plac%nr1p = plac%nr1p + 1
+          plac%ir1p( i ) = plac%nr1p
+       END IF
+
+    ENDDO
+
+
+    ALLOCATE(plac%iss(parai%nproc),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+
+    DO i = 1, parai%nproc
+      IF( i .eq. 1 ) THEN
+        plac%iss( i ) = 0
+      ELSE
+        plac%iss( i ) = plac%iss( i - 1 ) + plac%nsp( i - 1 )
+      ENDIF
+    ENDDO
+
+
+    ALLOCATE(plac%ismap(plac%nr1*plac%nr2),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+
+    plac%ismap = 0
+    plac%nsp = 0
+    k = 0
+    f = 0
+    DO ifa = 1, plac%nr2
+       i = MOD( ( plac%nr2 / 2 ) + 1 + ifa - 1 - 1, plac%nr2 ) + 1
+       DO jfa = 1, plac%nr1
+          j = MOD( ( plac%nr1 / 2 ) + 1 + jfa - 1 - 1, plac%nr1 ) + 1
+          f = f + 1
+          IF( plac%stownW( j, i ) .lt. 0 ) THEN
+             plac%nsp( - plac%stownW( j, i ) ) = plac%nsp( - plac%stownW( j, i ) ) + 1
+             plac%ismap( plac%nsp( - plac%stownW( j, i ) ) + plac%iss( - plac%stownW( j, i ) ) ) = f
+          END IF
+       ENDDO
+    ENDDO
+
+    k = 0
+    f = 0
+    DO ifa = 1, plac%nr2
+       i = MOD( ( plac%nr2 / 2 ) + 1 + ifa - 1 - 1, plac%nr2 ) + 1
+       DO jfa = 1, plac%nr1
+          j = MOD( ( plac%nr1 / 2 ) + 1 + jfa - 1 - 1, plac%nr1 ) + 1
+          f = f + 1
+          IF( plac%stownW( j, i ) .eq. 0 .and. plac%stownP( j, i ) .lt. 0 ) THEN
+             plac%nsp( - plac%stownP( j, i ) ) = plac%nsp( - plac%stownP( j, i ) ) + 1
+             plac%ismap( plac%nsp( - plac%stownP( j, i ) ) + plac%iss( - plac%stownP( j, i ) ) ) = f
+          END IF
+       ENDDO
+    ENDDO
+
+  END SUBROUTINE
 
 END MODULE loadpa_utils
