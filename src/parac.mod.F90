@@ -46,6 +46,11 @@ MODULE parac
   ! == cp_inter_node_grp : sub group of cp_inter_grp
   ! == cp_inter_node_nproc : nbr of procs
   ! == cp_inter_node_me :index
+  ! ==================================================================
+  ! == NEEDED FOR IMPROVED FFT
+  ! ==================================================================
+  ! == send_handle : send handle for shared memory communication
+  ! == recv_handle : send handle for shared memory communication
   ! ==--------------------------------------------------------------==
   TYPE :: parai_t
      INTEGER :: ncpus = HUGE(0)
@@ -111,6 +116,12 @@ MODULE parac
 #endif
      INTEGER :: cp_inter_node_nproc = HUGE(0)
      INTEGER :: cp_inter_node_me = HUGE(0)
+#ifdef __PARALLEL
+     type(MPI_REQUEST), ALLOCATABLE :: send_handle(:,:,:,:)
+     type(MPI_REQUEST), ALLOCATABLE :: recv_handle(:,:,:,:)
+#endif
+     INTEGER :: nnode = HUGE(0)
+     INTEGER :: my_node = HUGE(0)
   END TYPE parai_t
   TYPE(parai_t), SAVE :: parai
 

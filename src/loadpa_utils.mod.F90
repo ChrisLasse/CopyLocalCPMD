@@ -159,13 +159,27 @@ CONTAINS
     CALL dist_entity2(crge%n,parai%nproc,parap%nst12,nblocal=norbpe,iloc=parai%me)
     ! ==--------------------------------------------------------------==
 
-    ALLOCATE( plac%nr3_ranges( 0:parai%nproc-1, 2 ) )
-    ALLOCATE( plac%stownW( fpar%kr1s,fpar%kr2s ) )
-    ALLOCATE( plac%stownP( fpar%kr1s,fpar%kr2s ) )
-    ALLOCATE( plac%indx_map( fpar%kr1s,fpar%kr2s ) )
-    ALLOCATE( plac%indx( fpar%kr1s * fpar%kr2s ) )
-    ALLOCATE( plac%ind1( fpar%kr1s * fpar%kr2s ) )
-    ALLOCATE( plac%ind2( fpar%kr1s * fpar%kr2s ) )
+    ALLOCATE(plac%nr3_ranges(0:parai%nproc-1,2),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%stownW(fpar%kr1s,fpar%kr2s),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%stownP(fpar%kr1s,fpar%kr2s),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%indx_map(fpar%kr1s,fpar%kr2s),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%indx(fpar%kr1s*fpar%kr2s),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%ind1(fpar%kr1s*fpar%kr2s),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%ind2(fpar%kr1s*fpar%kr2s),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
 
     plac%indx_map = 0
     plac%indx = 0
@@ -435,6 +449,55 @@ CONTAINS
     ! SETUP ARRAYS NEEDED FOR IMPROVED FFT
     ! ==--------------------------------------------------------------==
 
+    parai%nnode = parai%nproc / parai%node_nproc
+    parai%my_node = parai%me / parai%node_nproc
+
+    ALLOCATE( plac%thread_z_sticks( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_z_start( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_z_end( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_y_sticks( parai%ncpus, 2, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_y_start( parai%ncpus, 2, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_y_end( parai%ncpus, 2, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_x_sticks( parai%ncpus, 2, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_x_start( parai%ncpus, 2, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_x_end( parai%ncpus, 2, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_ngms( parai%ncpus ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_ngms_start( parai%ncpus ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_ngms_end( parai%ncpus ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_rspace( parai%ncpus ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_rspace_start( parai%ncpus ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( plac%thread_rspace_end( parai%ncpus ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+  
     CALL SetupArrays()
 
     ! ==--------------------------------------------------------------==
@@ -1065,6 +1128,7 @@ CONTAINS
 
     INTEGER                                     :: ierr, i, istick, i1, i2, ix, iy, ixM, i1M, i2M, k, f, j, ifa, jfa
 
+    plac%which = 1
 
     ALLOCATE(plac%nr3p(parai%nproc),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
