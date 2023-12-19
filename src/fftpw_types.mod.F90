@@ -167,6 +167,7 @@ MODULE fftpw_types
     INTEGER :: apply_group_size_save
     INTEGER :: apply_set_size_save
 
+    INTEGER :: which = 1
     INTEGER, ALLOCATABLE :: thread_z_sticks(:,:,:)
     INTEGER, ALLOCATABLE :: thread_z_start(:,:,:)
     INTEGER, ALLOCATABLE :: thread_z_end(:,:,:)

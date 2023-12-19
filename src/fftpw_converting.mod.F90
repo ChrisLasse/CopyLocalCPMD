@@ -4,6 +4,7 @@ MODULE fftpw_converting
 
   USE elct,                          ONLY: crge
   USE error_handling,                ONLY: stopgm
+  USE fft,                           ONLY: plac
   USE fftpw_base,                    ONLY: smap
   USE fftpw_ggen,                    ONLY: ggen_pw,&
                                            fft_set_nl
@@ -101,6 +102,7 @@ CONTAINS
     dfft%z_group_autosize = dfft%max_batch_size
 
     dfft%overlapp = cntl%overlapp_comm_comp
+    plac%overlapp = cntl%overlapp_comm_comp
     dfft%fft_tuning = cntl%fft_tune_batchsize
 
     dfft%nthreads = parai%ncpus

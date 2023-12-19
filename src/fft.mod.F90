@@ -105,7 +105,22 @@ MODULE fft
      INTEGER, ALLOCATABLE :: nsp(:)
      INTEGER, ALLOCATABLE :: iss(:)
      INTEGER, ALLOCATABLE :: ismap(:)
-     
+
+     INTEGER, ALLOCATABLE :: thread_z_sticks(:,:,:,:)
+     INTEGER, ALLOCATABLE :: thread_y_sticks(:,:,:)
+     INTEGER, ALLOCATABLE :: thread_x_sticks(:,:,:)
+     INTEGER, ALLOCATABLE :: thread_z_start(:,:,:,:)
+     INTEGER, ALLOCATABLE :: thread_y_start(:,:,:)
+     INTEGER, ALLOCATABLE :: thread_x_start(:,:,:)
+     INTEGER, ALLOCATABLE :: thread_z_end(:,:,:,:)
+     INTEGER, ALLOCATABLE :: thread_y_end(:,:,:)
+     INTEGER, ALLOCATABLE :: thread_x_end(:,:,:)
+     INTEGER, ALLOCATABLE :: thread_ngms(:)
+     INTEGER, ALLOCATABLE :: thread_ngms_start(:)
+     INTEGER, ALLOCATABLE :: thread_ngms_end(:)
+     INTEGER, ALLOCATABLE :: thread_rspace(:)
+     INTEGER, ALLOCATABLE :: thread_rspace_start(:)
+     INTEGER, ALLOCATABLE :: thread_rspace_end(:)
 
      INTEGER :: nr1w
      INTEGER :: nr1p
@@ -117,6 +132,10 @@ MODULE fft
      INTEGER :: ngw
      INTEGER :: nwst
      INTEGER :: npst
+     INTEGER :: which
+
+     LOGICAL :: overlapp
+     LOGICAL :: do_comm
 
   END TYPE
   Type( FFT_TYPE_DESCRIPTOR ) :: plac

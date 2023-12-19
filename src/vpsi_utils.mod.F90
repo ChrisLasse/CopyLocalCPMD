@@ -55,7 +55,8 @@ MODULE vpsi_utils
                                              xf,&
                                              yf,&
                                              locks_inv,&
-                                             locks_fw
+                                             locks_fw,&
+                                             plac
   USE fftpw_converting,                ONLY: Make_inv_yzCOM_Maps
   USE fftmain_utils,                   ONLY: fwfftn,&
                                              invfftn,&
@@ -74,14 +75,14 @@ MODULE vpsi_utils
                                              locks_sing_2,&
                                              invfft_batch,&
                                              fwfft_batch
-  USE fftnew_utils,                    ONLY: setfftn
+  USE fftnew_utils,                    ONLY: setfftn,&
+                                             Prep_fft_com,&
+                                             Make_Manual_Maps
   USE fftpw_base,                      ONLY: dfft,&
                                              wfn_real,&
                                              dfftp
   USE fftpw_batching,                  ONLY: locks_omp,&
                                              Prepare_Psi
-  USE fftpw_make_maps,                 ONLY: Prep_fft_com,&
-                                             Make_Manual_Maps
   USE fftpw_param,                     ONLY: DP
   USE geq0mod,                         ONLY: geq0
   USE kinds,                           ONLY: real_8,&
@@ -1804,7 +1805,7 @@ CONTAINS
     INTEGER, INTENT(IN) :: batch_size, mythread, counter, njump, nostat
     COMPLEX(DP), INTENT(IN), OPTIONAL :: c0( : , : )
     COMPLEX(DP), INTENT(INOUT) :: c2( : , : )
-    COMPLEX(DP), INTENT(IN)  :: psi( dfft%nr3 * dfft%nsw(dfft%mype+1), * ) !z_group_size )
+    COMPLEX(DP), INTENT(IN)  :: psi( plac%nr3 * plac%nsw(parai%me+1), * ) !z_group_size )
     REAL(real_8), INTENT(IN)                 :: f( : )
   
     COMPLEX(DP) :: fp, fm
@@ -1821,7 +1822,7 @@ CONTAINS
   !     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
-    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
   
     !$  locks_omp( mythread+1, counter, 4 ) = .false.
     !$omp flush( locks_omp )
@@ -1829,8 +1830,8 @@ CONTAINS
     !$omp flush( locks_omp )
     !$  END DO
   
-    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 28 ) = dfft%time_adding( 28 ) + ( time(2) - time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 28 ) = dfft%time_adding( 28 ) + ( time(2) - time(1) )
   !------------------------------------------------------
   !--------Accumulate_Psi Start--------------------------
 
@@ -1851,7 +1852,7 @@ CONTAINS
        IF (fip1.EQ.0._real_8.AND..NOT.cntl%tksham) fip1=1._real_8
        IF (fip1.EQ.0._real_8.AND.cntl%tksham) fip1=0.5_real_8
   
-       DO j = dfft%thread_ngms_start( mythread+1 ), dfft%thread_ngms_end( mythread+1 )
+       DO j = plac%thread_ngms_start( mythread+1 ), plac%thread_ngms_end( mythread+1 )
           fp = ( psi( dfft%nl(j), ibatch ) + psi( dfft%nlm(j), ibatch ) ) * (- dfft%tscale )
           fm = ( psi( dfft%nl(j), ibatch ) - psi( dfft%nlm(j), ibatch ) ) * (- dfft%tscale )
           c2 ( j, (2*ibatch)-1 ) = -fi * ((parm%tpiba2*dfft%gg_pw(j))*c0( j, (2*ibatch)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
@@ -1861,8 +1862,8 @@ CONTAINS
   
   !---------Accumulate_Psi End---------------------------
   !------------------------------------------------------
-    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
-    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(3) - time(2) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 15 ) = dfft%time_adding( 15 ) + ( time(3) - time(2) )
   
     !$  locks_omp( mythread+1, counter, 5 ) = .false. 
     !$omp flush( locks_omp )
@@ -1870,8 +1871,8 @@ CONTAINS
     !$omp flush( locks_omp )
     !$  END DO 
   
-    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
-    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 29 ) = dfft%time_adding( 29 ) + ( time(4) - time(3) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 29 ) = dfft%time_adding( 29 ) + ( time(4) - time(3) )
   
   !  IF( dfft%fft_tuning ) THEN
   !     IF( dfft%nthreads .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
@@ -1885,8 +1886,8 @@ CONTAINS
   SUBROUTINE Apply_V( f, v, spins, batch_size, mythread )
     IMPLICIT NONE
   
-    COMPLEX(DP), INTENT(INOUT) :: f( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * ) !x_group_size
-    REAL(DP), INTENT(IN) :: v( dfft%my_nr3p * dfft%nr2 * dfft%nr1 , * )
+    COMPLEX(DP), INTENT(INOUT) :: f( plac%my_nr3p * plac%nr2 * plac%nr1 , * ) !x_group_size
+    REAL(DP), INTENT(IN) :: v( plac%my_nr3p * plac%nr2 * plac%nr1 , * )
     INTEGER, INTENT(IN)  :: batch_size, mythread
     INTEGER, INTENT(IN)  :: spins(2,batch_size)
   
@@ -1894,20 +1895,20 @@ CONTAINS
   
     INTEGER(INT64) :: time(2)
   
-    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
   !------------------------------------------------------
   !-----------Apply V Start------------------------------
   
     DO ibatch = 1, batch_size
-       DO j = dfft%thread_rspace_start( mythread+1 ), dfft%thread_rspace_end( mythread+1 )
+       DO j = plac%thread_rspace_start( mythread+1 ), plac%thread_rspace_end( mythread+1 )
           f( j, ibatch )= - ( REAL( f( j, ibatch ) ) * v( j, spins(1,ibatch) ) + uimag * AIMAG( f( j, ibatch ) ) * v( j, spins(2,ibatch) ) )
        END DO
     END DO
   
   !------------Apply V End-------------------------------
   !------------------------------------------------------
-    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-    IF( mythread .eq. 1 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 8 ) = dfft%time_adding( 8 ) + ( time(2) - time(1) )
   
   END SUBROUTINE Apply_V
 
@@ -2580,10 +2581,11 @@ CONTAINS
              comm_send => Big_Com_Pointer(:,:,1) 
              comm_recv => Big_Com_Pointer(:,:,2) 
     
-             CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
-                                dfft%node_task_size, int_mod, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm, .TRUE. )
-             CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, dfftp%comm, dfftp%nodes_numb, dfftp%mype, dfftp%my_node, dfftp%my_node_rank, &
-                                dfftp%node_task_size, 1, dfftp%send_handle, dfftp%recv_handle, dfftp%comm_sendrecv, dfftp%do_comm, .FALSE. )
+             CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
+                                dfft%node_task_size, int_mod, dfft%comm_sendrecv, dfft%do_comm, 1 )
+             CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, dfftp%nodes_numb, dfftp%mype, dfftp%my_node, dfftp%my_node_rank, &
+                                dfftp%node_task_size, 1, dfftp%comm_sendrecv, dfftp%do_comm, 2 )
+             plac%do_comm = dfft%do_comm
           END IF
 
           Com_in_locks = ( needed_size / REAL( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4.0 ) ) + 1
@@ -2628,7 +2630,7 @@ CONTAINS
        
        dfft%num_buff = int_mod
      
-       CALL Make_Manual_Maps( dfft, fft_batchsize, fft_residual, dfft%nsw, dfft%my_nr1p, dfft%my_nr2p, dfft%ngw ) 
+       CALL Make_Manual_Maps( plac, fft_batchsize, fft_residual, dfft%nsw, dfft%my_nr1p, dfft%ngw, dfft%which ) 
 
        first = .true.
 

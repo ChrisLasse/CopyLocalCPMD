@@ -1,6 +1,6 @@
 MODULE density_utils
   USE kinds,                           ONLY: real_8
-  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
+  USE fft,                             ONLY: FFT_TYPE_DESCRIPTOR
 
   IMPLICIT NONE
 
@@ -69,7 +69,7 @@ CONTAINS
   ! ==================================================================
   SUBROUTINE build_density_sum_Man( dfft, alpha_real, alpha_imag, psi, rho, batch_size, mythread, spins, nspin)
     ! ==--------------------------------------------------------------==
-    TYPE(PW_fft_type_descriptor), INTENT(IN) :: dfft
+    TYPE(FFT_TYPE_DESCRIPTOR), INTENT(IN)    :: dfft
     COMPLEX(real_8), INTENT(IN)              :: psi( dfft%my_nr3p * dfft%nr2 * dfft%nr1, * )
     REAL(real_8), INTENT(INOUT)              :: rho( dfft%my_nr3p * dfft%nr2 * dfft%nr1, * )
     INTEGER, INTENT(IN)                      :: mythread, batch_size, nspin

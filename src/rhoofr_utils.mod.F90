@@ -60,7 +60,8 @@ MODULE rhoofr_utils
                                              yf,&
                                              NZFS,&
                                              INZS,&
-                                             locks_inv
+                                             locks_inv,&
+                                             plac
   USE fftpw_converting,                ONLY: Make_inv_yzCOM_Maps
   USE fftmain_utils,                   ONLY: fwfftn,&
                                              invfftn,&
@@ -82,8 +83,6 @@ MODULE rhoofr_utils
                                              wfn_real
   USE fftpw_batching,                  ONLY: locks_omp,&
                                              Prepare_Psi
-  USE fftpw_make_maps,                 ONLY: Prep_fft_com,&
-                                             Make_Manual_Maps
   USE fftpw_param,                     ONLY: DP
   USE geq0mod,                         ONLY: geq0
   USE ions,                            ONLY: ions0,&
@@ -1604,7 +1603,7 @@ CONTAINS
                       coef4(count)=crge%f(is2,1)*inv_omega
                    END IF
                 END DO
-                CALL build_density_sum_Man( dfft, coef3, coef4, psi_work( : , start : ending ), rhoe, bsize, mythread, ispin, clsd%nlsd )
+                CALL build_density_sum_Man( plac, coef3, coef4, psi_work( : , start : ending ), rhoe, bsize, mythread, ispin, clsd%nlsd )
 
 !                !some extra loop in case of lse
 !                IF (lspin2%tlse) THEN

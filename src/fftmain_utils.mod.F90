@@ -31,7 +31,7 @@ MODULE fftmain_utils
   USE fft,                             ONLY: &
        lfrm, lmsq, lr1, lr1m, lr1s, lr2s, lr3s, lrxpl, lsrm, mfrays, msqf, &
        msqs, msrays, qr1, qr1s, qr2s, qr3max, qr3min, qr3s, sp5, sp8, sp9, &
-       xf, yf, fft_residual, fft_total, fft_numbatches, fft_batchsize, locks_inv, locks_fw
+       xf, yf, fft_residual, fft_total, fft_numbatches, fft_batchsize, locks_inv, locks_fw, plac
   USE fft_maxfft,                      ONLY: maxfftn, maxfft
   USE fftcu_methods,                   ONLY: fftcu_frw_full_1,&
                                              fftcu_frw_full_2,&
@@ -41,6 +41,8 @@ MODULE fftmain_utils
                                              fftcu_inv_full_2,&
                                              fftcu_inv_sprs_1,&
                                              fftcu_inv_sprs_2
+  USE fftnew_utils,                    ONLY: Prep_fft_com,&
+                                             Make_Manual_Maps
   USE fftutil_utils,                   ONLY: fft_comm,&
                                              getz,&
                                              pack_x2y,&
@@ -57,8 +59,6 @@ MODULE fftmain_utils
                                              unpack_y2x,&
                                              unpack_y2x_n
   USE fftpw_converting,                ONLY: ConvertFFT_Coeffs
-  USE fftpw_make_maps,                 ONLY: Prep_fft_com,&
-                                             Make_Manual_Maps
   USE fftpw_param
   USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE fftpw_batching
@@ -677,7 +677,9 @@ CONTAINS
        IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
-          CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
+          dfftp%which = 2
+          CALL fftpw( isign, dfftp, f, plac%nhg, plac%nr1p, plac%ir1p, plac%nsp )
+          dfftp%which = 1
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -720,7 +722,9 @@ CONTAINS
        IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
-          CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
+          dfftp%which = 2
+          CALL fftpw( isign, dfftp, f, plac%nhg, plac%nr1p, plac%ir1p, plac%nsp )
+          dfftp%which = 1
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -1020,7 +1024,7 @@ CONTAINS
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(6) )
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 19 ) = dfft%time_adding( 19 ) + ( time(6) - time(5) )
   
-          CALL fft_com( dfft, remswitch, work_buffer )
+          CALL fft_com( dfft, remswitch, work_buffer, 1 )
 
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(7) )
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 20 ) = dfft%time_adding( 20 ) + ( time(7) - time(6) )
@@ -1121,7 +1125,7 @@ CONTAINS
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(17) )
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(17) - time(16) )
      
-          CALL fft_com( dfft, remswitch, work_buffer )
+          CALL fft_com( dfft, remswitch, work_buffer, 1 )
 
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) CALL SYSTEM_CLOCK( time(18) )
           IF( mythread .eq. 0 .or. dfft%nthreads .eq. 1 ) dfft%time_adding( 26 ) = dfft%time_adding( 26 ) + ( time(18) - time(17) )
@@ -1165,14 +1169,14 @@ CONTAINS
   
   END SUBROUTINE fftpw_batch
 
-  SUBROUTINE fftpw( isign, dfft, f, ng, nr1s, ir1, ns )
+  SUBROUTINE fftpw( isign, dfft, f, ngs, nr1s, ir1s, nss )
 
     IMPLICIT NONE
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-    INTEGER, INTENT(IN) :: isign, ng
+    INTEGER, INTENT(IN) :: isign, ngs
     COMPLEX(DP), TARGET, INTENT(INOUT) :: f(:)
-    INTEGER, INTENT(IN) :: ir1(:), ns(:), nr1s(:)
+    INTEGER, INTENT(IN) :: ir1s(:), nss(:), nr1s
 
     COMPLEX(DP), POINTER, CONTIGUOUS :: f_2d(:,:)
 
@@ -1182,15 +1186,11 @@ CONTAINS
 #else
     COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux(:,:)
 #endif
-!    COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared1(:,:)
-!    COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared2(:,:)
 
     INTEGER :: i, ierr, isub, mythread
     CHARACTER(*), PARAMETER                  :: procedureN = 'fftpw'
     LOGICAL, SAVE :: first = .true.
     INTEGER, SAVE :: sendsize
-!    TYPE(C_PTR) :: baseptr( dfft%node_task_size )
-!    INTEGER :: arrayshape(2)
     TYPE(C_PTR) :: baseptr( 0:parai%node_nproc-1 )
     INTEGER :: arrayshape(3)
     COMPLEX(DP), SAVE, POINTER, CONTIGUOUS   :: Big_Pointer(:,:,:)
@@ -1198,58 +1198,49 @@ CONTAINS
     CALL tiset(procedureN,isub)
 
 #ifdef _USE_SCRATCHLIBRARY
-    il_aux(1) = dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p  
+    il_aux(1) = plac%nr2 * nr1s * plac%my_nr3p  
     il_aux(2) = 1
     CALL request_scratch(il_aux,aux,procedureN//'_aux',ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux', &
          __LINE__,__FILE__)
 #else
-    IF( .not. allocated( aux ) ) ALLOCATE( aux( dfft%nr2 * nr1s(dfft%mype2+1) * dfft%my_nr3p, 1 ) )
+    IF( .not. allocated( aux ) ) ALLOCATE( aux( plac%nr2 * nr1s * plac%my_nr3p, 1 ) )
     IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux', &
          __LINE__,__FILE__)
 #endif
+
+    plac%which = 2
 
     IF( first ) THEN
   
        first = .false.
 
-       sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsp ) * dfft%node_task_size * dfft%node_task_size
+       sendsize = MAXVAL ( plac%nr3p ) * MAXVAL( nss ) * parai%node_nproc * parai%node_nproc
        dfft%overlapp = .false.   
    
-       CALL mp_win_alloc_shared_mem( 'c', sendsize*dfft%nodes_numb*2, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
+       CALL mp_win_alloc_shared_mem( 'c', sendsize*parai%nnode*2, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
 
-       arrayshape(1) = sendsize*dfft%nodes_numb
+       arrayshape(1) = sendsize*parai%nnode
        arrayshape(2) = 1
        arrayshape(3) = 2
        CALL C_F_POINTER( baseptr(0), Big_Pointer, arrayshape )
        comm_send => Big_Pointer(:,:,1) 
        comm_recv => Big_Pointer(:,:,2) 
-!       shared1 => Big_Pointer(:,:,1) 
-!       shared2 => Big_Pointer(:,:,1) 
 
-!       CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 1, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-!       arrayshape(1) = sendsize*dfft%nodes_numb
-!       arrayshape(2) = 1
-!       CALL C_F_POINTER( baseptr(1), shared1, arrayshape )
-!       CALL mp_win_alloc_shared_mem_central( 'c', baseptr, 2, sendsize*dfft%nodes_numb, dfft%my_node_rank, dfft%node_task_size, dfft%node_comm, dfft%mpi_window )
-!       arrayshape(1) = sendsize*dfft%nodes_numb
-!       arrayshape(2) = 1
-!       CALL C_F_POINTER( baseptr(1), shared2, arrayshape )
+       CALL Prep_fft_com( comm_send, comm_recv, sendsize, 0, parai%nnode, parai%me, parai%my_node, parai%node_me, &
+                          parai%node_nproc, 1, dfft%comm_sendrecv, dfft%do_comm, 2 )
+       plac%do_comm = dfft%do_comm
 
-!       CALL Prep_fft_com( shared1, shared2, sendsize, 0, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
-!                          dfft%node_task_size, 1, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm, .FALSE. )
-       CALL Prep_fft_com( comm_send, comm_recv, sendsize, 0, dfft%comm, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
-                          dfft%node_task_size, 1, dfft%send_handle, dfft%recv_handle, dfft%comm_sendrecv, dfft%do_comm, .FALSE. )
+       CALL Make_Manual_Maps( plac, 1, 0, nss, nr1s, ngs, dfft%which ) 
 
-       CALL Make_Manual_Maps( dfft, 1, 0, dfft%nsp, dfft%my_nr1p, dfft%my_nr2p, dfft%ngm ) 
-
-       IF( .not. allocated( locks_omp ) ) ALLOCATE( locks_omp( dfft%nthreads, 1, 20 ) )
+       IF( .not. allocated( locks_omp ) ) ALLOCATE( locks_omp( parai%ncpus, 1, 20 ) )
        !$ locks_omp = .true.
 
     END IF
 
 !    comm_send => Big_Pointer(:,:,1) 
 !    comm_recv => Big_Pointer(:,:,2) 
+    CALL MPI_BARRIER( dfft%comm, ierr )
     !$ locks_omp = .true.
 
     !$OMP parallel num_threads( dfft%nthreads ) &
@@ -1259,15 +1250,15 @@ CONTAINS
 
     IF( isign .eq. -1 ) THEN !!  invfft
 
-       CALL MPI_BARRIER( dfft%comm, ierr )
+!       CALL MPI_BARRIER( dfft%comm, ierr )
 
 !       CALL invfft_z_section( dfft, f, shared1(:,1), shared2(:,1), 1, 1, mythread, ns )
-       CALL invfft_z_section( dfft, f, comm_send(:,1), comm_recv(:,1), 1, 1, mythread, ns )
+       CALL invfft_z_section( dfft, f, comm_send(:,1), comm_recv(:,1), 1, 1, mythread, nss )
 
        !$OMP barrier
        !$OMP master
           CALL MPI_BARRIER( dfft%comm, ierr )
-          IF( dfft%do_comm ) CALL fft_com( dfft, 1, 1 )
+          IF( dfft%do_comm ) CALL fft_com( dfft, 1, 1, 2 )
           CALL MPI_BARRIER( dfft%comm, ierr )
        !$OMP end master
        !$OMP barrier
@@ -1279,7 +1270,7 @@ CONTAINS
 
     ELSE !! fw fft
 
-       CALL MPI_BARRIER( dfft%comm, ierr )
+!       CALL MPI_BARRIER( dfft%comm, ierr )
 
        CALL fwfft_x_section( dfft, f, aux, 1, 1, mythread, dfft%my_nr1p )
 
@@ -1289,7 +1280,7 @@ CONTAINS
        !$OMP barrier
        !$OMP master
           CALL MPI_BARRIER( dfft%comm, ierr )
-          IF( dfft%do_comm ) CALL fft_com( dfft, 1, 1 )
+          IF( dfft%do_comm ) CALL fft_com( dfft, 1, 1, 2 )
           CALL MPI_BARRIER( dfft%comm, ierr )
        !$OMP end master
        !$OMP barrier
@@ -1310,6 +1301,8 @@ CONTAINS
     IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux', &
          __LINE__,__FILE__)
 #endif
+
+    plac%which = 1
 
     CALL tihalt(procedureN,isub)
  
