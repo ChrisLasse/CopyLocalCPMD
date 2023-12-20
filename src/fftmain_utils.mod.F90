@@ -1190,7 +1190,6 @@ CONTAINS
        first = .false.
 
        sendsize = MAXVAL ( plac%nr3p ) * MAXVAL( nss ) * parai%node_nproc * parai%node_nproc
-       dfft%overlapp = .false.   
    
        CALL mp_win_alloc_shared_mem( 'c', sendsize*parai%nnode*2, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
 
@@ -1202,8 +1201,7 @@ CONTAINS
        comm_recv => Big_Pointer(:,:,2) 
 
        CALL Prep_fft_com( comm_send, comm_recv, sendsize, 0, parai%nnode, parai%me, parai%my_node, parai%node_me, &
-                          parai%node_nproc, 1, dfft%comm_sendrecv, dfft%do_comm, 2 )
-       plac%do_comm = dfft%do_comm
+                          parai%node_nproc, 1, dfft%comm_sendrecv, plac%do_comm(2), 2 )
 
        CALL Make_Manual_Maps( plac, 1, 0, nss, nr1s, ngs, dfft%which ) 
 
@@ -1214,53 +1212,46 @@ CONTAINS
 
 !    comm_send => Big_Pointer(:,:,1) 
 !    comm_recv => Big_Pointer(:,:,2) 
-    CALL MPI_BARRIER( dfft%comm, ierr )
+    CALL MPI_BARRIER( parai%allgrp, ierr )
     !$ locks_omp = .true.
 
-    !$OMP parallel num_threads( dfft%nthreads ) &
+    !$OMP parallel num_threads( parai%ncpus ) &
     !$omp private(mythread) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
 
     IF( isign .eq. -1 ) THEN !!  invfft
 
-!       CALL MPI_BARRIER( dfft%comm, ierr )
 
-!       CALL invfft_z_section( dfft, f, shared1(:,1), shared2(:,1), 1, 1, mythread, ns )
        CALL invfft_z_section( dfft, f, comm_send(:,1), comm_recv(:,1), 1, 1, mythread, nss )
 
        !$OMP barrier
        !$OMP master
-          CALL MPI_BARRIER( dfft%comm, ierr )
-          IF( dfft%do_comm ) CALL fft_com( dfft, 1, 1, 2 )
-          CALL MPI_BARRIER( dfft%comm, ierr )
+          CALL MPI_BARRIER( parai%allgrp, ierr )
+          IF( plac%do_comm(2) ) CALL fft_com( dfft, 1, 1, 2 )
+          CALL MPI_BARRIER( parai%allgrp, ierr )
        !$OMP end master
        !$OMP barrier
 
-!       CALL invfft_y_section( dfft, f, shared2(:,1), aux, dfft%map_acinv, dfft%map_acinv, 1, 1, mythread, dfft%my_nr1p )
-       CALL invfft_y_section( dfft, f, comm_recv(:,1), aux, dfft%map_acinv, dfft%map_acinv, 1, 1, mythread, dfft%my_nr1p )
+       CALL invfft_y_section( dfft, f, comm_recv(:,1), aux, dfft%map_acinv, dfft%map_acinv, 1, 1, mythread, plac%nr1p )
 
        CALL invfft_x_section( dfft, f, 1, mythread )
 
     ELSE !! fw fft
 
-!       CALL MPI_BARRIER( dfft%comm, ierr )
+       CALL fwfft_x_section( dfft, f, aux, 1, 1, mythread, plac%nr1p )
 
-       CALL fwfft_x_section( dfft, f, aux, 1, 1, mythread, dfft%my_nr1p )
-
-!       CALL fwfft_y_section( dfft, aux, shared1(:,1), shared2(:,1), dfft%map_pcfw, 1, 1, 1, mythread, dfft%my_nr1p, dfft%nsp )
-       CALL fwfft_y_section( dfft, aux, comm_send(:,1), comm_recv(:,1), dfft%map_pcfw, 1, 1, 1, mythread, dfft%my_nr1p, dfft%nsp )
+       CALL fwfft_y_section( dfft, aux, comm_send(:,1), comm_recv(:,1), dfft%map_pcfw, 1, 1, 1, mythread, plac%nr1p, plac%nsp )
     
        !$OMP barrier
        !$OMP master
-          CALL MPI_BARRIER( dfft%comm, ierr )
-          IF( dfft%do_comm ) CALL fft_com( dfft, 1, 1, 2 )
-          CALL MPI_BARRIER( dfft%comm, ierr )
+          CALL MPI_BARRIER( parai%allgrp, ierr )
+          IF( plac%do_comm(2) ) CALL fft_com( dfft, 1, 1, 2 )
+          CALL MPI_BARRIER( parai%allgrp, ierr )
        !$OMP end master
        !$OMP barrier
     
-!       CALL fwfft_z_section( dfft, shared2(:,1), f, 1, 1, 1, mythread, dfft%nsp, dfft%tscale )
-       CALL fwfft_z_section( dfft, comm_recv(:,1), f, 1, 1, 1, mythread, dfft%nsp, dfft%tscale )
+       CALL fwfft_z_section( dfft, comm_recv(:,1), f, 1, 1, 1, mythread, plac%nsp, dfft%tscale )
     
     END IF
 

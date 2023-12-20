@@ -2037,7 +2037,7 @@ CONTAINS
             __LINE__,__FILE__)
     ENDIF
     IF(td_prop%td_extpot.AND.cntl%tlsd.AND.ispin.EQ.2) THEN
-       IF( dfft%mype ) &
+       IF( parai%me ) &
           CALL stopgm(procedureN,'TD_PROP NOT IMPLEMENTED IN THIS FFT VERSION',&
                __LINE__,__FILE__)
     END IF
@@ -2099,12 +2099,12 @@ CONTAINS
   
     locks_calc_inv = .true.
     locks_calc_fw  = .true.
-    IF( dfft%do_comm ) THEN
-       locks_com_inv( dfft%my_node_rank+1, : ) = .true.
-       locks_com_fw ( dfft%my_node_rank+1, : ) = .true.
+    IF( plac%do_comm(1) ) THEN
+       locks_com_inv( parai%node_me+1, : ) = .true.
+       locks_com_fw ( parai%node_me+1, : ) = .true.
     ELSE
-       locks_com_inv( dfft%my_node_rank+1, : ) = .false.
-       locks_com_fw ( dfft%my_node_rank+1, : ) = .false.
+       locks_com_inv( parai%node_me+1, : ) = .false.
+       locks_com_fw ( parai%node_me+1, : ) = .false.
     END IF
   
     locks_calc_1   = .true.
@@ -2121,11 +2121,11 @@ CONTAINS
     locks_sing_1   = .true.
     locks_sing_2   = .true.
     locks_omp   = .true.
-    IF( cntl%overlapp_comm_comp .and. dfft%do_comm ) locks_omp( 1, :, : ) = .false.
+    IF( cntl%overlapp_comm_comp .and. plac%do_comm(1) ) locks_omp( 1, :, : ) = .false.
 
-    il_aux_array(1) = dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2
+    il_aux_array(1) = plac%nr1w * plac%my_nr3p * plac%nr2
     il_aux_array(2) = fft_batchsize
-    il_rs_array(1)  = dfft%nr1 * dfft%my_nr3p * dfft%nr2
+    il_rs_array(1)  = plac%nr1 * plac%my_nr3p * plac%nr2
     il_rs_array(2)  = fft_batchsize
 
 #ifdef _USE_SCRATCHLIBRARY
@@ -2148,14 +2148,14 @@ CONTAINS
     END IF
 #endif
 
-    CALL MPI_BARRIER(dfft%comm, ierr)
+    CALL MPI_BARRIER(parai%allgrp, ierr)
 
     dfft%time_adding=0
     CALL SYSTEM_CLOCK( count_rate = cr )
     IF(.NOT.rsactive) rs_wave=>rs_array(:,1:1)
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
     CALL SYSTEM_CLOCK( time(1) )
-    !$OMP parallel num_threads( dfft%nthreads ) &
+    !$OMP parallel num_threads( parai%ncpus ) &
     !$omp private(mythread,ibatch,bsize,count,ist,is1,is2,ir,offset_state,swap,remswitch,counter) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
@@ -2165,7 +2165,7 @@ CONTAINS
     !Loop over batches
     DO ibatch=1,fft_numbatches+3
        IF(.NOT.rsactive)THEN
-          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 .or. .not. dfft%do_comm ) THEN
+          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              IF(ibatch.LE.fft_numbatches+1)THEN
                 IF(ibatch.LE.fft_numbatches)THEN
@@ -2198,7 +2198,7 @@ CONTAINS
                 END IF
              END IF
           END IF
-          IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%do_comm ) THEN ! .and. dfft%my_node_rank .eq. 0 ) THEN
+          IF( .not. dfft%single_node .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN ! .and. dfft%my_node_rank .eq. 0 ) THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              !communication phase
              IF(ibatch.LE.fft_numbatches+1)THEN
@@ -2219,13 +2219,13 @@ CONTAINS
           IF( dfft%single_node ) THEN
              counter(2) = counter(2) + 1
              !$OMP Barrier 
-             IF( mythread .eq. 0 ) locks_sing_1( dfft%my_node_rank+1, counter(2) ) = .false.
+             IF( mythread .eq. 0 ) locks_sing_1( parai%node_me+1, counter(2) ) = .false.
              !$omp flush( locks_sing_1 )
              !$  DO WHILE( ANY(locks_sing_1( :, counter(2) ) ) )
              !$omp flush( locks_sing_1 )
              !$  END DO
           END IF
-          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 .or. .not. dfft%do_comm ) THEN
+          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
              !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
              !data related to ibatch-1!
 !             IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
@@ -2250,7 +2250,7 @@ CONTAINS
        ! ==------------------------------------------------------------==
        ! == Apply the potential (V), which acts in real space.         ==
 
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 .or. .not. dfft%do_comm ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
 !          IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
@@ -2311,7 +2311,7 @@ CONTAINS
              END IF
           END IF
        END IF
-       IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%do_comm ) THEN !.and. dfft%my_node_rank .eq. 0 ) THEN
+       IF( .not. dfft%single_node .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN !.and. dfft%my_node_rank .eq. 0 ) THEN
 !       IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
@@ -2331,13 +2331,13 @@ CONTAINS
        IF( dfft%single_node ) THEN
           counter(5) = counter(5) + 1
           !$OMP Barrier 
-          IF( mythread .eq. 0 ) locks_sing_2( dfft%my_node_rank+1, counter(5) ) = .false.
+          IF( mythread .eq. 0 ) locks_sing_2( parai%node_me+1, counter(5) ) = .false.
           !$omp flush( locks_sing_2 )
           !$  DO WHILE( ANY(locks_sing_2( :, counter(5) ) ) )
           !$omp flush( locks_sing_2 )
           !$  END DO
        END IF
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 .or. .not. dfft%do_comm ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
 !          IF(ibatch.GE.3.AND.ibatch.LE.fft_numbatches+3)THEN
           IF(ibatch.GT.start_loop2.AND.ibatch.LE.end_loop2)THEN
 !             IF(ibatch-2.LE.fft_numbatches)THEN
@@ -2368,72 +2368,72 @@ CONTAINS
        timer( i ) = REAL( dfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
     ENDDO
 
-    IF( dfft%fft_extra_timings_general .and. dfft%mype .eq. 0 ) THEN
+    IF( dfft%fft_extra_timings_general .and. parai%me .eq. 0 ) THEN
 
        WRITE(6,*)" "
        WRITE(6,*)"Some extra VPSI times"
        write(6,*)"==================================="
        write(6,*)"INV FFT before Com"
-       write(6,*)"Prepare_psi           ", dfft%my_node_rank, timer(1)
-       write(6,*)"CALC LOCK 1           ", dfft%my_node_rank, timer(17)
-       write(6,*)"INV z_fft             ", dfft%my_node_rank, timer(2)
-       write(6,*)"INV Pre_com_copy      ", dfft%my_node_rank, timer(3)
-       write(6,*)"OMP LOCK 2            ", dfft%my_node_rank, timer(18)
+       write(6,*)"Prepare_psi           ", parai%node_me, timer(1)
+       write(6,*)"CALC LOCK 1           ", parai%node_me, timer(17)
+       write(6,*)"INV z_fft             ", parai%node_me, timer(2)
+       write(6,*)"INV Pre_com_copy      ", parai%node_me, timer(3)
+       write(6,*)"OMP LOCK 2            ", parai%node_me, timer(18)
      
        write(6,*)"INV FFT before Com sum  ",timer(1)+timer(2)+timer(3)+timer(17)+timer(18)
        write(6,*)"==================================="
        write(6,*)"INV FFT after Com"
-       write(6,*)"CALC_COM LOCK 1       ", dfft%my_node_rank, timer(21)
-       write(6,*)"INV After_com_copy    ", dfft%my_node_rank, timer(4)
-       write(6,*)"INV y_fft             ", dfft%my_node_rank, timer(5)
-       write(6,*)"INV xy_scatter        ", dfft%my_node_rank, timer(6)
-       write(6,*)"INV x_fft             ", dfft%my_node_rank, timer(7)
-       write(6,*)"OMP LOCK 3            ", dfft%my_node_rank, timer(22)
-       write(6,*)"Apply V               ", dfft%my_node_rank, timer(8)
+       write(6,*)"CALC_COM LOCK 1       ", parai%node_me, timer(21)
+       write(6,*)"INV After_com_copy    ", parai%node_me, timer(4)
+       write(6,*)"INV y_fft             ", parai%node_me, timer(5)
+       write(6,*)"INV xy_scatter        ", parai%node_me, timer(6)
+       write(6,*)"INV x_fft             ", parai%node_me, timer(7)
+       write(6,*)"OMP LOCK 3            ", parai%node_me, timer(22)
+       write(6,*)"Apply V               ", parai%node_me, timer(8)
      
        write(6,*)"INV FFT after Com sum ",  timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(21)+timer(22)
        write(6,*)"==================================="
        write(6,*)"FW FFT before Com"
-       write(6,*)"FW x_fft              ", dfft%my_node_rank, timer(9)
-       write(6,*)"FW xy_scatter         ", dfft%my_node_rank, timer(10)
-       write(6,*)"CALC LOCK 2           ", dfft%my_node_rank, timer(23)
-       write(6,*)"FW y_fft              ", dfft%my_node_rank, timer(11)
-       write(6,*)"FW Pre_com_copy       ", dfft%my_node_rank, timer(12)
-       write(6,*)"OMP LOCK 4            ", dfft%my_node_rank, timer(24)
+       write(6,*)"FW x_fft              ", parai%node_me, timer(9)
+       write(6,*)"FW xy_scatter         ", parai%node_me, timer(10)
+       write(6,*)"CALC LOCK 2           ", parai%node_me, timer(23)
+       write(6,*)"FW y_fft              ", parai%node_me, timer(11)
+       write(6,*)"FW Pre_com_copy       ", parai%node_me, timer(12)
+       write(6,*)"OMP LOCK 4            ", parai%node_me, timer(24)
      
        write(6,*)"FW FFT before Com sum ",  timer(9)+timer(10)+timer(11)+timer(12)+timer(23)+timer(24)
 !       write(6,*)"INV/APPLY/FW x-y-sections sum ", timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(24)+timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
        write(6,*)"==================================="
        write(6,*)"FW FFT after Com"
-       write(6,*)"CALC_COM LOCK 2       ", dfft%my_node_rank, timer(27)
-       write(6,*)"FW After_com_copy     ", dfft%my_node_rank, timer(13)
-       write(6,*)"FW z_fft              ", dfft%my_node_rank, timer(14)
-       write(6,*)"OMP LOCK 5            ", dfft%my_node_rank, timer(28)
-       write(6,*)"Accumulate_Psi        ", dfft%my_node_rank, timer(15)
-       write(6,*)"OMP LOCK 6            ", dfft%my_node_rank, timer(29)
+       write(6,*)"CALC_COM LOCK 2       ", parai%node_me, timer(27)
+       write(6,*)"FW After_com_copy     ", parai%node_me, timer(13)
+       write(6,*)"FW z_fft              ", parai%node_me, timer(14)
+       write(6,*)"OMP LOCK 5            ", parai%node_me, timer(28)
+       write(6,*)"Accumulate_Psi        ", parai%node_me, timer(15)
+       write(6,*)"OMP LOCK 6            ", parai%node_me, timer(29)
      
        write(6,*)"FW FFT after Com sum",  timer(13)+timer(14)+timer(15)+timer(27)+timer(28)+timer(29)
        write(6,*)"==================================="
-       write(6,*)"COM LOCK 1            ", dfft%my_node_rank, timer(19)
-       write(6,*)"FIRST COMM TIMES:     ", dfft%my_node_rank, timer(20)
-       write(6,*)"COM LOCK 2            ", dfft%my_node_rank, timer(25)
-       write(6,*)"SECOND COMM TIMES:    ", dfft%my_node_rank, timer(26)
+       write(6,*)"COM LOCK 1            ", parai%node_me, timer(19)
+       write(6,*)"FIRST COMM TIMES:     ", parai%node_me, timer(20)
+       write(6,*)"COM LOCK 2            ", parai%node_me, timer(25)
+       write(6,*)"SECOND COMM TIMES:    ", parai%node_me, timer(26)
        write(6,*)"==================================="
-       write(6,*)"Adding up CALC:       ", dfft%my_node_rank, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
-                                                              timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
-                                                              timer(13)+timer(14)+timer(15)+timer(17)+&
-                                                              timer(18)+timer(21)+timer(22)+timer(23)+timer(24)+&
-                                                              timer(27)+timer(28)+timer(29)
-       write(6,*)"Adding up COMM:       ", dfft%my_node_rank, timer(19)+timer(20)+timer(25)+timer(26)
-!       write(6,*)"VPSI ADD Control:     ", dfft%my_node_rank, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+       write(6,*)"Adding up CALC:       ", parai%node_me, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+                                                          timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
+                                                          timer(13)+timer(14)+timer(15)+timer(17)+&
+                                                          timer(18)+timer(21)+timer(22)+timer(23)+timer(24)+&
+                                                          timer(27)+timer(28)+timer(29)
+       write(6,*)"Adding up COMM:       ", parai%node_me, timer(19)+timer(20)+timer(25)+timer(26)
+!       write(6,*)"VPSI ADD Control:     ", parai%node_me, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
 !                               timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
 !                               timer(13)+timer(14)+timer(15)+timer(16)+timer(17)+timer(18)+timer(19)+timer(20)+&
 !                               timer(21)+timer(22)+timer(23)+timer(24)+timer(25)+timer(26)+timer(27)+timer(28)+timer(29)
-!       write(6,*)"VPSI WITHOUT Control: ", dfft%my_node_rank, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+!       write(6,*)"VPSI WITHOUT Control: ", parai%node_me, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
 !                               timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
 !                               timer(13)+timer(14)+timer(15)+timer(16)+timer(17)+timer(18)+timer(19)+timer(20)+&
 !                               timer(22)+timer(23)+timer(24)+timer(25)+timer(26)+timer(28)+timer(29)
-       write(6,*)"VPSI Direct Control:  ", dfft%my_node_rank, timer(30)
+       write(6,*)"VPSI Direct Control:  ", parai%node_me, timer(30)
        WRITE(6,*)" "
 
     END IF
@@ -2569,54 +2569,46 @@ CONTAINS
 
        int_mod = 3
        IF( dfft%rsactive ) int_mod = 2
-       IF( .not. ( dfft%overlapp .and. fft_numbatches .gt. 1 ) ) int_mod = 1
+       IF( .not. ( plac%overlapp .and. fft_numbatches .gt. 1 ) ) int_mod = 1
      
        dfft%batch_size_save = fft_batchsize
      
        IF( ALLOCATED( dfft%map_acinv ) )        DEALLOCATE( dfft%map_acinv )                     
-       ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * fft_batchsize ) )
-       CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, fft_batchsize, dfft%ir1w, dfft%nsw, dfft%zero_acinv_start, dfft%zero_acinv_end ) 
+       ALLOCATE( dfft%map_acinv( plac%my_nr3p * plac%nr1 * plac%nr2 * fft_batchsize ) )
+       CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, fft_batchsize, plac%ir1w, plac%nsw, dfft%zero_acinv_start, dfft%zero_acinv_end ) 
        
        IF( ALLOCATED( dfft%map_acinv_rem ) )    DEALLOCATE( dfft%map_acinv_rem )                 
        IF( fft_residual .ne. 0 ) THEN
-          ALLOCATE( dfft%map_acinv_rem( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * fft_residual ) )
-          CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_rem, fft_residual, dfft%ir1w, dfft%nsw )                
+          ALLOCATE( dfft%map_acinv_rem( plac%my_nr3p * plac%nr1 * plac%nr2 * fft_residual ) )
+          CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_rem, fft_residual, plac%ir1w, plac%nsw )                
        END IF   
        
-       sendsize     = MAXVAL ( dfft%nr3p ) * MAXVAL ( dfft%nsw ) * dfft%node_task_size  * dfft%node_task_size * fft_batchsize
-       sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL ( dfft%nsw ) * dfft%node_task_size  * dfft%node_task_size * fft_residual
-       sendsize_pot = MAXVAL( dfftp%nr3p ) * MAXVAL( dfftp%nsp ) * dfftp%node_task_size * dfftp%node_task_size
+       sendsize     = MAXVAL( plac%nr3p ) * MAXVAL ( plac%nsw ) * parai%node_nproc * parai%node_nproc * fft_batchsize
+       sendsize_rem = MAXVAL( plac%nr3p ) * MAXVAL ( plac%nsw ) * parai%node_nproc * parai%node_nproc * fft_residual
+       sendsize_pot = MAXVAL( plac%nr3p ) * MAXVAL(  plac%nsp ) * parai%node_nproc * parai%node_nproc
        
-!       needed_size = 0
-!!       needed_com_size = ( sendsize*dfft%nodes_numb * int_mod ) * 2
-!       needed_com_size = MAX( ( sendsize*dfft%nodes_numb * int_mod ) * 2 , sendsize_pot*dfft%nodes_numb * 2 )
-!       needed_1lock_size = ( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4 ) + 1
-!       needed_2lock_size = ( ( dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ) ) / 4 ) + 1
-!       needed_3lock_size = ( ( dfft%node_task_size * ( fft_numbatches + 3 ) ) / 4 ) + 1
-!       needed_size = needed_com_size + needed_1lock_size + needed_2lock_size + needed_3lock_size
        DO irun = 1, 2
 
           IF( irun .eq. 2 ) CALL mp_win_alloc_shared_mem( 'c', needed_size, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
 
 
-          arrayshape(1) = sendsize*dfft%nodes_numb
+          arrayshape(1) = sendsize*parai%nnode
           arrayshape(2) = int_mod
           arrayshape(3) = 2
-          needed_size = MAX( arrayshape(1) * arrayshape(2) * arrayshape(3), sendsize_pot*dfft%nodes_numb * 2 )
+          needed_size = MAX( arrayshape(1) * arrayshape(2) * arrayshape(3), sendsize_pot*parai%nnode * 2 )
           IF( irun .eq. 2 ) THEN
              CALL C_F_POINTER( baseptr(0), Big_Com_Pointer, arrayshape )
              comm_send => Big_Com_Pointer(:,:,1) 
              comm_recv => Big_Com_Pointer(:,:,2) 
     
-             CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, dfft%nodes_numb, dfft%mype, dfft%my_node, dfft%my_node_rank, &
-                                dfft%node_task_size, int_mod, dfft%comm_sendrecv, dfft%do_comm, 1 )
-             CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, dfftp%nodes_numb, dfftp%mype, dfftp%my_node, dfftp%my_node_rank, &
-                                dfftp%node_task_size, 1, dfftp%comm_sendrecv, dfftp%do_comm, 2 )
-             plac%do_comm = dfft%do_comm
+             CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, parai%nnode, parai%me, parai%my_node, parai%node_me, &
+                                parai%node_nproc, int_mod, dfft%comm_sendrecv, plac%do_comm(1), 1 )
+             CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, parai%nnode, parai%me, parai%my_node, parai%node_me, &
+                                parai%node_nproc, 1, dfftp%comm_sendrecv, plac%do_comm(2), 2 )
           END IF
 
-          Com_in_locks = ( needed_size / REAL( ( dfft%node_task_size * ( ( nstate / fft_batchsize ) + 1 ) ) / 4.0 ) ) + 1
-          arrayshape(1) = dfft%node_task_size
+          Com_in_locks = ( needed_size / REAL( ( parai%node_nproc * ( ( nstate / fft_batchsize ) + 1 ) ) / 4.0 ) ) + 1
+          arrayshape(1) = parai%node_nproc
           arrayshape(2) = ( nstate / fft_batchsize ) + 1
           arrayshape(3) = Com_in_locks + 4
           needed_size = ( arrayshape(1) * arrayshape(2) * arrayshape(3) / 4 ) + 1
@@ -2628,8 +2620,8 @@ CONTAINS
              locks_com_fw   => Big_1Log_Pointer(:,:,Com_in_locks+4)
           END IF
 
-          Com_in_locks = ( needed_size / REAL( ( dfft%node_task_size * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ) ) / 4.0 ) ) + 1
-          arrayshape(1) = dfft%node_task_size
+          Com_in_locks = ( needed_size / REAL( ( parai%node_nproc * ( nstate + fft_batchsize + (int_mod-1)*fft_batchsize ) ) / 4.0 ) ) + 1
+          arrayshape(1) = parai%node_nproc
           arrayshape(2) = nstate + fft_batchsize + (int_mod-1)*fft_batchsize
           arrayshape(3) = Com_in_locks + 2
           needed_size = ( arrayshape(1) * arrayshape(2) * arrayshape(3) / 4 ) + 1
@@ -2639,8 +2631,8 @@ CONTAINS
              locks_calc_2   => Big_2Log_Pointer(:,:,Com_in_locks+2)
           END IF 
    
-          Com_in_locks = ( needed_size / REAL( ( dfft%node_task_size * ( fft_numbatches + 3 ) ) / 4.0 ) ) + 1
-          arrayshape(1) = dfft%node_task_size
+          Com_in_locks = ( needed_size / REAL( ( parai%node_nproc * ( fft_numbatches + 3 ) ) / 4.0 ) ) + 1
+          arrayshape(1) = parai%node_nproc
           arrayshape(2) = fft_numbatches + 3
           arrayshape(3) = Com_in_locks + 2
           needed_size = ( arrayshape(1) * arrayshape(2) * arrayshape(3) / 4 ) + 1
@@ -2653,11 +2645,11 @@ CONTAINS
        ENDDO
      
        IF( allocated( locks_omp ) ) DEALLOCATE( locks_omp )
-       ALLOCATE( locks_omp( dfft%nthreads, fft_numbatches+3, 20 ) )
+       ALLOCATE( locks_omp( parai%ncpus, fft_numbatches+3, 20 ) )
        
        dfft%num_buff = int_mod
      
-       CALL Make_Manual_Maps( plac, fft_batchsize, fft_residual, dfft%nsw, dfft%my_nr1p, dfft%ngw, dfft%which ) 
+       CALL Make_Manual_Maps( plac, fft_batchsize, fft_residual, plac%nsw, plac%nr1w, plac%ngw, dfft%which ) 
 
        first = .true.
 

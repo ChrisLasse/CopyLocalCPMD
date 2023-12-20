@@ -135,7 +135,7 @@ MODULE fft
      INTEGER :: which
 
      LOGICAL :: overlapp
-     LOGICAL :: do_comm
+     LOGICAL :: do_comm( 2 )
 
   END TYPE
   Type( FFT_TYPE_DESCRIPTOR ) :: plac
