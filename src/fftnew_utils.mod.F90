@@ -37,7 +37,8 @@ MODULE fftnew_utils
                                              ncpw,&
                                              parap,&
                                              parm,&
-                                             spar
+                                             spar,&
+                                             cntl
   USE utils,                           ONLY: icopy
   USE zeroing_utils,                   ONLY: zeroing
 
@@ -792,7 +793,7 @@ CONTAINS
 
     ierr = 0
   
-    IF( dfft%overlapp .and. parai%ncpus .gt. 1 .and. dfft%do_comm(which) .and. which .eq. 1 ) THEN
+    IF( cntl%overlapp_comm_comp .and. parai%ncpus .gt. 1 .and. dfft%do_comm(which) .and. which .eq. 1 ) THEN
        eff_nthreads = parai%ncpus - 1
     ELSE
        eff_nthreads = parai%ncpus

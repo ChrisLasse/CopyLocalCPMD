@@ -11,7 +11,8 @@ MODULE fftpw_batching
   USE mp_interface,                             ONLY: mp_startall,&
                                                       mp_waitall
   USE parac,                                    ONLY: parai
-  USE system,                                   ONLY: parm
+  USE system,                                   ONLY: parm,&
+                                                      cntl
   USE timer,                                    ONLY: tihalt,&
                                                       tiset
   USE iso_fortran_env
@@ -48,7 +49,7 @@ SUBROUTINE Prepare_Psi( dfft, psi, aux, remswitch, mythread )
 
   INTEGER(INT64) :: time(2), cr
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
@@ -93,7 +94,7 @@ SUBROUTINE Prepare_Psi( dfft, psi, aux, remswitch, mythread )
 !  CALL SYSTEM_CLOCK( count_rate = cr )
 !  write(6,*) "ACTUAL", REAL( dfft%time_adding( 1 ) / REAL( cr ) )
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
@@ -111,7 +112,7 @@ SUBROUTINE fft_com( dfft, remswitch, work_buffer, which )
 
   INTEGER :: ierr, isub, isub4
 
-  IF( dfft%fft_tuning ) THEN
+  IF( cntl%fft_tune_batchsize ) THEN
      CALL tiset(procedureN//'_tuning',isub4)
   ELSE
      CALL tiset(procedureN,isub)
@@ -129,7 +130,7 @@ SUBROUTINE fft_com( dfft, remswitch, work_buffer, which )
   !CALL mpi_win_unlock_all( dfft%mpi_window( 2 ), ierr )
   !CALL mpi_win_unlock_all( dfft%mpi_window( 1 ), ierr )
 
-  IF( dfft%fft_tuning ) THEN
+  IF( cntl%fft_tune_batchsize ) THEN
      CALL tihalt(procedureN//'_tuning',isub4)
   ELSE
      CALL tihalt(procedureN,isub)
@@ -153,7 +154,7 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, batch_size
 
   INTEGER(INT64) :: time(3)
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
@@ -222,7 +223,7 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, batch_size
   IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 2 ) = dfft%time_adding( 2 ) + ( time(2) - time(1) )
   IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 3 ) = dfft%time_adding( 3 ) + ( time(3) - time(2) )
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
@@ -247,7 +248,7 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
 
   INTEGER(INT64) :: time(5)
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
@@ -267,7 +268,7 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
 
   Call Second_Part_y_section( aux2_r )
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
@@ -369,7 +370,7 @@ SUBROUTINE invfft_x_section( dfft, aux, remswitch, mythread )
 
   INTEGER(INT64) :: time(2)
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
@@ -390,7 +391,7 @@ SUBROUTINE invfft_x_section( dfft, aux, remswitch, mythread )
   IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
   IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 7 ) = dfft%time_adding( 7 ) + ( time(2) - time(1) )
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
@@ -411,7 +412,7 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, counter, remswitch, mythread, my_
 
   INTEGER(INT64) :: time(4)
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
@@ -427,7 +428,7 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, counter, remswitch, mythread, my_
  
   Call Second_Part_x_section( aux_r )
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
@@ -507,7 +508,7 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, b
 
   INTEGER(INT64) :: time(4)
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
@@ -523,7 +524,7 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, b
  
   Call Second_Part_y_section( aux )
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
@@ -655,7 +656,7 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remsw
 
   INTEGER(INT64) :: time(3)
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
@@ -714,7 +715,7 @@ SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remsw
   IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 13 ) = dfft%time_adding( 13 ) + ( time(2) - time(1) )
   IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 14 ) = dfft%time_adding( 14 ) + ( time(4) - time(3) )
 
-!  IF( dfft%fft_tuning ) THEN
+!  IF( cntl%fft_tune_batchsize ) THEN
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
 !  ELSE
 !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
