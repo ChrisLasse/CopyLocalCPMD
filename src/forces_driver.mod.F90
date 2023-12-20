@@ -1,9 +1,7 @@
 #include "cpmd_global.h"
 
 MODULE forces_driver
-  USE autotune_utils,                  ONLY: autotune,&
-                                             autotune_pw_vpsi,&
-                                             autotune_pw_4Svpsi
+  USE autotune_utils,                  ONLY: autotune
   USE benc,                            ONLY: ibench
   USE cp_grp_utils,                    ONLY: cp_grp_get_cp_rank,&
                                              cp_grp_get_sizes,&

@@ -12,7 +12,6 @@ MODULE loadpa_utils
   USE fft,                             ONLY: plac,&
                                              FFT_TYPE_DESCRIPTOR
   USE fftpw_converting,                ONLY: Create_PwFFT_datastructure,&
-                                             ConvertFFT_array,&
                                              Prep_pwFFT_Wave,&
                                              Prep_pwFFT_Rho
   USE fftpw_param,                     ONLY: DP
@@ -1165,7 +1164,7 @@ CONTAINS
        END IF
     ENDDO
     plac%my_nr3p = plac%nr3p( parai%me+1 )
-
+    plac%nr3px   = MAXVAL ( plac%nr3p )
 
     ALLOCATE(plac%ir1w(plac%nr1),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
@@ -1311,6 +1310,15 @@ CONTAINS
        ENDDO
     ENDDO
 
-  END SUBROUTINE
+!    plac%my_nr1w = count ( plac%ir1w > 0 )
+!    plac%my_nr1p = count ( plac%ir1p > 0 )
+    plac%small_chunks(1) = plac%nr3px * MAXVAL( plac%nsw )
+    plac%small_chunks(2) = plac%nr3px * MAXVAL( plac%nsp )
+    plac%big_chunks(1)   = plac%small_chunks(1) * parai%node_nproc * parai%node_nproc
+    plac%big_chunks(2)   = plac%small_chunks(2) * parai%node_nproc * parai%node_nproc
+    plac%tscale = 1.0d0 / dble( plac%nr1 * plac%nr2 * plac%nr3 )
+
+  END SUBROUTINE SetupArrays
+
 
 END MODULE loadpa_utils

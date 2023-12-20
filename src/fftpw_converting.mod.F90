@@ -30,9 +30,9 @@ MODULE fftpw_converting
   SAVE
 
   PUBLIC :: Create_PwFFT_datastructure
-  PUBLIC :: ConvertFFT_array
-  PUBLIC :: ConvertFFT_Coeffs
-  PUBLIC :: ConvertFFT_v
+!  PUBLIC :: ConvertFFT_array
+!  PUBLIC :: ConvertFFT_Coeffs
+!  PUBLIC :: ConvertFFT_v
   PUBLIC :: Prep_pwFFT_Wave
   PUBLIC :: Prep_pwFFT_Rho
   PUBLIC :: Make_inv_yzCOM_Maps
@@ -102,7 +102,6 @@ CONTAINS
     dfft%z_group_autosize = dfft%max_batch_size
 
     dfft%overlapp = cntl%overlapp_comm_comp
-    plac%overlapp = cntl%overlapp_comm_comp
     dfft%fft_tuning = cntl%fft_tune_batchsize
 
     dfft%nthreads = parai%ncpus
@@ -606,136 +605,136 @@ CONTAINS
     
   END SUBROUTINE Make_inv_yzCOM_Maps
 
-  SUBROUTINE ConvertFFT_array( dfft, g_pw, g_cpmd, ng_cpmd, ng_pw )
-    IMPLICIT NONE
-
-    TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
-    
-    REAL(DP), INTENT(IN) :: g_pw(:,:), g_cpmd(:,:)
-    INTEGER, INTENT(IN)  :: ng_cpmd, ng_pw
-
-    INTEGER :: c0_total( 3, dfft%ng_total )
-    REAL(DP), PARAMETER :: eps8=1.0E-8_DP
-    INTEGER :: i,j, offset
-    LOGICAL :: found 
-   
-    iloop: DO i = 1, dfft%ng_total
-
-       found = .false.
-
-       jloop: DO j = 1, ng_cpmd
-
-          IF( abs(g_pw(1,i) - g_cpmd(1,j)) .le. eps8 .and. &
-              abs(g_pw(2,i) - g_cpmd(2,j)) .le. eps8 .and. &
-              abs(g_pw(3,i) - g_cpmd(3,j)) .le. eps8 ) THEN
-             dfft%conv_inv( i ) = j
-             dfft%conv_fw(  j ) = i
-!             CYCLE iloop
-             IF( found ) write(6,*) "same gvector twice"
-             found = .true.
-          END IF
-
-       ENDDO jloop
-
-    ENDDO iloop
-
-    DO i = 1, dfft%ng_total
-       IF( dfft%conv_inv( i ) .gt. 0 ) THEN
-          c0_total( :, i ) = g_cpmd( :, dfft%conv_inv( i ) )
-       ELSE
-          c0_total( :, i ) = (0.0_DP,0.0_DP)
-       END IF
-    ENDDO
-   
-    Call mp_sum( c0_total, 3*dfft%ng_total, dfft%comm )
-
-    offset = SUM( dfft%ng_all( 1:dfft%mype ) )
-    DO i = 1, ng_pw
-       DO j = 1, 3
-          IF( c0_total( j, i + offset ) .ne. g_pw( j, i + offset ) ) write(6,*) "warning missing gvec"
-       ENDDO
-    ENDDO
-
-!    i = dfft%conv_inv( 1 )
-!    dfft%conv_inv( 1 ) = dfft%conv_inv( 2 )
-!    dfft%conv_inv( 2 ) = i
+!  SUBROUTINE ConvertFFT_array( dfft, g_pw, g_cpmd, ng_cpmd, ng_pw )
+!    IMPLICIT NONE
 !
-!    i = dfft%conv_fw( 1 )
-!    dfft%conv_fw( 1 ) = dfft%conv_fw( 4 )
-!    dfft%conv_fw( 4 ) = i
-
-  END SUBROUTINE ConvertFFT_array
-
-  SUBROUTINE ConvertFFT_Coeffs( dfft, isign, c0_in, c0_out, ng_cpmd, ng_pw )
-    IMPLICIT NONE
-
-    TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
-    COMPLEX(DP), INTENT(IN)  :: c0_in(:)
-    COMPLEX(DP), INTENT(OUT) :: c0_out(:)
-    INTEGER, INTENT(IN) :: ng_cpmd, ng_pw, isign
-
-    COMPLEX(DP) :: c0_total( dfft%ng_total )
-    INTEGER     :: i, offset
-    
-    IF( isign .eq. -1 ) THEN ! CPMD in ; PW out
-
-       DO i = 1, dfft%ng_total
-          IF( dfft%conv_inv( i ) .gt. 0 ) THEN
-             c0_total( i ) = c0_in( dfft%conv_inv( i ) )
-          ELSE
-             c0_total( i ) = (0.0_DP,0.0_DP)
-          END IF
-       ENDDO
-   
-       Call mp_sum( c0_total, dfft%ng_total, dfft%comm )
-   
-       offset = SUM( dfft%ng_all( 1:dfft%mype ) )
-       DO i = 1, ng_pw
-          c0_out( i ) = c0_total( i + offset )
-       ENDDO
-
-    ELSE ! PW in ; CPMD out
-
-       c0_total = (0.0_DP,0.0_DP)       
-
-       offset = SUM( dfft%ng_all( 1:dfft%mype ) )
-       DO i = 1, ng_pw
-          c0_total( i + offset ) = c0_in( i )
-       ENDDO
-
-       Call mp_sum( c0_total, dfft%ng_total, dfft%comm )
-
-       DO i = 1, ng_cpmd
-          c0_out( i ) = c0_total( dfft%conv_fw( i ) )
-       ENDDO
-
-    END IF
-
-  END SUBROUTINE ConvertFFT_Coeffs
-
-  SUBROUTINE ConvertFFT_v( dfft, v_in, v_out )
-    IMPLICIT NONE
-
-    TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
-    REAL(DP), INTENT(IN)  :: v_in (:)
-    REAL(DP), INTENT(OUT) :: v_out(:)
-
-    REAL(DP) :: v_total(dfft%nnr_total)
-    INTEGER :: i, j
-
-    v_total = 0.0d0
-    DO i = 1, dfft%nr1*dfft%nr2
-       DO j = 1, dfft%my_nr3p
-          v_total( j + (i-1)*dfft%nr3 + dfft%mype*dfft%my_nr3p ) = v_in( j + (i-1)*dfft%my_nr3p )
-       ENDDO
-    ENDDO
-
-    CALL mp_sum( v_total, dfft%nnr_total, dfft%comm )
-
-    DO i = 1, dfft%nnr
-       v_out( i ) = v_total( i + dfft%nnr_offset )
-    ENDDO
-
-  END SUBROUTINE ConvertFFT_v
+!    TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
+!    
+!    REAL(DP), INTENT(IN) :: g_pw(:,:), g_cpmd(:,:)
+!    INTEGER, INTENT(IN)  :: ng_cpmd, ng_pw
+!
+!    INTEGER :: c0_total( 3, dfft%ng_total )
+!    REAL(DP), PARAMETER :: eps8=1.0E-8_DP
+!    INTEGER :: i,j, offset
+!    LOGICAL :: found 
+!   
+!    iloop: DO i = 1, dfft%ng_total
+!
+!       found = .false.
+!
+!       jloop: DO j = 1, ng_cpmd
+!
+!          IF( abs(g_pw(1,i) - g_cpmd(1,j)) .le. eps8 .and. &
+!              abs(g_pw(2,i) - g_cpmd(2,j)) .le. eps8 .and. &
+!              abs(g_pw(3,i) - g_cpmd(3,j)) .le. eps8 ) THEN
+!             dfft%conv_inv( i ) = j
+!             dfft%conv_fw(  j ) = i
+!!             CYCLE iloop
+!             IF( found ) write(6,*) "same gvector twice"
+!             found = .true.
+!          END IF
+!
+!       ENDDO jloop
+!
+!    ENDDO iloop
+!
+!    DO i = 1, dfft%ng_total
+!       IF( dfft%conv_inv( i ) .gt. 0 ) THEN
+!          c0_total( :, i ) = g_cpmd( :, dfft%conv_inv( i ) )
+!       ELSE
+!          c0_total( :, i ) = (0.0_DP,0.0_DP)
+!       END IF
+!    ENDDO
+!   
+!    Call mp_sum( c0_total, 3*dfft%ng_total, dfft%comm )
+!
+!    offset = SUM( dfft%ng_all( 1:dfft%mype ) )
+!    DO i = 1, ng_pw
+!       DO j = 1, 3
+!          IF( c0_total( j, i + offset ) .ne. g_pw( j, i + offset ) ) write(6,*) "warning missing gvec"
+!       ENDDO
+!    ENDDO
+!
+!!    i = dfft%conv_inv( 1 )
+!!    dfft%conv_inv( 1 ) = dfft%conv_inv( 2 )
+!!    dfft%conv_inv( 2 ) = i
+!!
+!!    i = dfft%conv_fw( 1 )
+!!    dfft%conv_fw( 1 ) = dfft%conv_fw( 4 )
+!!    dfft%conv_fw( 4 ) = i
+!
+!  END SUBROUTINE ConvertFFT_array
+!
+!  SUBROUTINE ConvertFFT_Coeffs( dfft, isign, c0_in, c0_out, ng_cpmd, ng_pw )
+!    IMPLICIT NONE
+!
+!    TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
+!    COMPLEX(DP), INTENT(IN)  :: c0_in(:)
+!    COMPLEX(DP), INTENT(OUT) :: c0_out(:)
+!    INTEGER, INTENT(IN) :: ng_cpmd, ng_pw, isign
+!
+!    COMPLEX(DP) :: c0_total( dfft%ng_total )
+!    INTEGER     :: i, offset
+!    
+!    IF( isign .eq. -1 ) THEN ! CPMD in ; PW out
+!
+!       DO i = 1, dfft%ng_total
+!          IF( dfft%conv_inv( i ) .gt. 0 ) THEN
+!             c0_total( i ) = c0_in( dfft%conv_inv( i ) )
+!          ELSE
+!             c0_total( i ) = (0.0_DP,0.0_DP)
+!          END IF
+!       ENDDO
+!   
+!       Call mp_sum( c0_total, dfft%ng_total, dfft%comm )
+!   
+!       offset = SUM( dfft%ng_all( 1:dfft%mype ) )
+!       DO i = 1, ng_pw
+!          c0_out( i ) = c0_total( i + offset )
+!       ENDDO
+!
+!    ELSE ! PW in ; CPMD out
+!
+!       c0_total = (0.0_DP,0.0_DP)       
+!
+!       offset = SUM( dfft%ng_all( 1:dfft%mype ) )
+!       DO i = 1, ng_pw
+!          c0_total( i + offset ) = c0_in( i )
+!       ENDDO
+!
+!       Call mp_sum( c0_total, dfft%ng_total, dfft%comm )
+!
+!       DO i = 1, ng_cpmd
+!          c0_out( i ) = c0_total( dfft%conv_fw( i ) )
+!       ENDDO
+!
+!    END IF
+!
+!  END SUBROUTINE ConvertFFT_Coeffs
+!
+!  SUBROUTINE ConvertFFT_v( dfft, v_in, v_out )
+!    IMPLICIT NONE
+!
+!    TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
+!    REAL(DP), INTENT(IN)  :: v_in (:)
+!    REAL(DP), INTENT(OUT) :: v_out(:)
+!
+!    REAL(DP) :: v_total(dfft%nnr_total)
+!    INTEGER :: i, j
+!
+!    v_total = 0.0d0
+!    DO i = 1, dfft%nr1*dfft%nr2
+!       DO j = 1, dfft%my_nr3p
+!          v_total( j + (i-1)*dfft%nr3 + dfft%mype*dfft%my_nr3p ) = v_in( j + (i-1)*dfft%my_nr3p )
+!       ENDDO
+!    ENDDO
+!
+!    CALL mp_sum( v_total, dfft%nnr_total, dfft%comm )
+!
+!    DO i = 1, dfft%nnr
+!       v_out( i ) = v_total( i + dfft%nnr_offset )
+!    ENDDO
+!
+!  END SUBROUTINE ConvertFFT_v
 
 END MODULE fftpw_converting

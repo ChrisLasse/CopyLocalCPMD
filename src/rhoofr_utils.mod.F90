@@ -61,7 +61,8 @@ MODULE rhoofr_utils
                                              NZFS,&
                                              INZS,&
                                              locks_inv,&
-                                             plac
+                                             plac,&
+                                             fft_buffsize
   USE fftpw_converting,                ONLY: Make_inv_yzCOM_Maps
   USE fftmain_utils,                   ONLY: fwfftn,&
                                              invfftn,&
@@ -1353,7 +1354,7 @@ CONTAINS
                                                 first_state, offset_state, i_start, i_end, &
                                                 i_start2, i_start3,  me_grp, n_grp, &
                                                 methread, count, &
-                                                swap,  int_mod, start_loop, end_loop
+                                                swap, start_loop, end_loop
     INTEGER(int_8)                           :: il_wfng(2), il_wfnr(2), il_xf(2)
     REAL(real_8)                             :: chksum, ral, rbe, rsp, rsum, rsum1, &
                                                 rsum1abs, rsumv, rto, temp(4), inv_omega, temp_time
@@ -1416,7 +1417,6 @@ CONTAINS
     i_start2=part_1d_get_el_in_blk(1,nstate,me_grp,n_grp)-1
     i_start3=part_1d_get_el_in_blk(1,nstate,me_grp,n_grp)-1
     inv_omega=1.0_real_8/parm%omega
-    int_mod=2
     start_loop=1
     end_loop=fft_numbatches+2
 
@@ -1427,12 +1427,9 @@ CONTAINS
             __LINE__,__FILE__)
 #endif
     ELSE
-       int_mod=1
        start_loop=0
        end_loop=fft_numbatches+1
     END IF
-
-    dfft%buffer_size_save = int_mod
 
     CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, ispin, coef3, coef4 )
   
@@ -1444,7 +1441,7 @@ CONTAINS
     END IF
   
     locks_calc_1   = .true.
-    DO i = 1, fft_batchsize*int_mod
+    DO i = 1, fft_batchsize*fft_buffsize
        locks_calc_1( : , i ) = .false.
     ENDDO
     locks_sing_1   = .true.
@@ -1528,7 +1525,7 @@ CONTAINS
 !                ! ==  ist revers to the current batch (rsactive) or is identical  ==
 !                ! ==  to swap                                                     ==
 !                ! ==--------------------------------------------------------------==
-                swap=mod(ibatch,int_mod)+1
+                swap=mod(ibatch,fft_buffsize)+1
                 CALL invfft_batch( dfft, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
              END IF
           END IF
@@ -1545,7 +1542,7 @@ CONTAINS
                 remswitch = 2
              END IF
              IF(bsize.NE.0)THEN
-                swap=mod(ibatch,int_mod)+1
+                swap=mod(ibatch,fft_buffsize)+1
                 counter(2) = counter(2) + 1
                 CALL invfft_batch( dfft, 2, bsize, remswitch, mythread, counter(2), swap )
              END IF
@@ -1571,10 +1568,10 @@ CONTAINS
                 remswitch = 2
              END IF
              IF(bsize.NE.0)THEN
-                swap=mod(ibatch-start_loop,int_mod)+1
+                swap=mod(ibatch-start_loop,fft_buffsize)+1
                 counter(3) = counter(3) + 1
-                start = (1+((counter(3)-1)*dfft%batch_size_save))
-                ending = (1+(counter(3)-1)*dfft%batch_size_save)+bsize-1
+                start = (1+((counter(3)-1)*fft_batchsize))
+                ending = (1+(counter(3)-1)*fft_batchsize)+bsize-1
                 CALL invfft_batch( dfft, 3, bsize, remswitch, mythread, counter(3), swap, &
                                    f_inout1=psi_work( : , start : ending ), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
                 CALL invfft_batch( dfft, 4, bsize, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : ending ) )

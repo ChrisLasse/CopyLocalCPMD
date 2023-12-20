@@ -88,6 +88,7 @@ MODULE fft
   ! ==================================================================
   ! IMPROVED FFT CODE
   ! ==================================================================
+  INTEGER :: fft_buffsize
   TYPE FFT_TYPE_DESCRIPTOR
 
      INTEGER, ALLOCATABLE :: stownW(:,:)
@@ -128,13 +129,19 @@ MODULE fft
      INTEGER :: nr2
      INTEGER :: nr3
      INTEGER :: my_nr3p
+     INTEGER :: nr3px
+     INTEGER :: my_nr1p
+     INTEGER :: my_nr1w
      INTEGER :: nhg
      INTEGER :: ngw
      INTEGER :: nwst
      INTEGER :: npst
      INTEGER :: which
 
-     LOGICAL :: overlapp
+     DOUBLE PRECISION :: tscale
+
+     INTEGER :: small_chunks( 2 )
+     INTEGER :: big_chunks( 2 )
      LOGICAL :: do_comm( 2 )
 
   END TYPE
