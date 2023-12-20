@@ -1386,7 +1386,7 @@ CONTAINS
     END IF
 
     IF( lspin2%tlse ) THEN
-       IF( dfft%mype .eq. 0 ) &
+       IF( parai%me .eq. 0 ) &
           CALL stopgm(procedureN,'TLSE NOT IMPLEMENTED IN THIS FFT VERSION',&
                __LINE__,__FILE__)
     END IF
@@ -1437,10 +1437,10 @@ CONTAINS
     CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, ispin, coef3, coef4 )
   
     locks_calc_inv = .true.
-    IF( dfft%do_comm ) THEN
-       locks_com_inv( dfft%my_node_rank+1, : ) = .true.
+    IF( plac%do_comm(1) ) THEN
+       locks_com_inv( parai%node_me+1, : ) = .true.
     ELSE
-       locks_com_inv( dfft%my_node_rank+1, : ) = .false.
+       locks_com_inv( parai%node_me+1, : ) = .false.
     END IF
   
     locks_calc_1   = .true.
@@ -1449,15 +1449,15 @@ CONTAINS
     ENDDO
     locks_sing_1   = .true.
     locks_omp   = .true.
-    IF( cntl%overlapp_comm_comp .and. dfft%do_comm ) locks_omp( 1, :, : ) = .false.
+    IF( cntl%overlapp_comm_comp .and. plac%do_comm(1) ) locks_omp( 1, :, : ) = .false.
 
 !    write(6,*) fft_batchsize, fft_residual
 
-    CALL MPI_BARRIER(dfft%comm, ierr)
+    CALL MPI_BARRIER(parai%allgrp, ierr)
 
-    il_aux_array(1) = dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p * dfft%nr2
+    il_aux_array(1) = plac%nr1w * plac%my_nr3p * plac%nr2
     il_aux_array(2) = fft_batchsize
-    il_psi_nors (1) = dfft%my_nr3p * dfft%nr2 * dfft%nr1
+    il_psi_nors (1) = plac%my_nr3p * plac%nr2 * plac%nr1
     il_psi_nors (2) = (nstate/2)+1
 
 #ifdef _USE_SCRATCHLIBRARY
@@ -1481,7 +1481,7 @@ CONTAINS
 #endif
 
     IF( rsactive ) THEN
-       IF( .not. allocated( wfn_real ) ) ALLOCATE( wfn_real( dfft%my_nr3p * dfft%nr2 * dfft%nr1, (nstate/2)+1 ) )
+       IF( .not. allocated( wfn_real ) ) ALLOCATE( wfn_real( plac%my_nr3p * plac%nr2 * plac%nr1, (nstate/2)+1 ) )
        psi_work => wfn_real
     ELSE
        psi_work => psi_nors
@@ -1490,7 +1490,7 @@ CONTAINS
     ! 
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
 
-    !$OMP parallel num_threads( dfft%nthreads ) &
+    !$OMP parallel num_threads( parai%ncpus ) &
     !$omp private(mythread,ibatch,bsize,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
@@ -1500,7 +1500,7 @@ CONTAINS
 
     !Loop over batches
     DO ibatch=1,fft_numbatches+2
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 .or. .not. dfft%do_comm ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           IF(ibatch.LE.fft_numbatches+1)THEN
              IF(ibatch.LE.fft_numbatches)THEN
@@ -1533,7 +1533,7 @@ CONTAINS
              END IF
           END IF
        END IF
-       IF( .not. dfft%single_node .and. mythread .eq. 0 .and. dfft%do_comm ) THEN !.and. dfft%my_node_rank .eq. 0 ) THEN
+       IF( .not. dfft%single_node .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN !.and. dfft%my_node_rank .eq. 0 ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           !communication phase
           IF(ibatch.LE.fft_numbatches+1)THEN
@@ -1554,13 +1554,13 @@ CONTAINS
        IF( dfft%single_node ) THEN
           counter(2) = counter(2) + 1
           !$OMP Barrier 
-          IF( mythread .eq. 0 ) locks_sing_1( dfft%my_node_rank+1, counter(2) ) = .false.
+          IF( mythread .eq. 0 ) locks_sing_1( parai%node_me+1, counter(2) ) = .false.
           !$omp flush( locks_sing_1 )
           !$  DO WHILE( ANY(locks_sing_1( :, counter(2) ) ) )
           !$omp flush( locks_sing_1 )
           !$  END DO
        END IF
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. dfft%nthreads .eq. 1 .or. .not. dfft%do_comm ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
           !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
           IF(ibatch.GT.start_loop.AND.ibatch.LE.end_loop)THEN
              IF (ibatch-start_loop.LE.fft_numbatches)THEN

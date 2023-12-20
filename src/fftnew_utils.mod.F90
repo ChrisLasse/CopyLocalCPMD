@@ -727,11 +727,11 @@ CONTAINS
 !       END IF
 !    END IF
     
-    IF( ALLOCATED( parai%send_handle ) )       DEALLOCATE( parai%send_handle )
-    IF( ALLOCATED( parai%recv_handle ) )       DEALLOCATE( parai%recv_handle )
+    IF( ALLOCATED( parai%send_handle ) .and. WAVE .eq. 1 )       DEALLOCATE( parai%send_handle )
+    IF( ALLOCATED( parai%recv_handle ) .and. WAVE .eq. 1 )       DEALLOCATE( parai%recv_handle )
     
-    ALLOCATE( parai%send_handle( comm_sendrecv(1), buffer_size, 2, 2 ) )
-    ALLOCATE( parai%recv_handle( comm_sendrecv(2), buffer_size, 2, 2 ) )
+    IF( .not. ALLOCATED(parai%send_handle) ) ALLOCATE( parai%send_handle( comm_sendrecv(1), buffer_size, 2, 2 ) )
+    IF( .not. ALLOCATED(parai%recv_handle) ) ALLOCATE( parai%recv_handle( comm_sendrecv(2), buffer_size, 2, 2 ) )
     
     DO i = 1, buffer_size !INITIALIZE SENDING AND RECEIVING
   
@@ -792,7 +792,7 @@ CONTAINS
 
     ierr = 0
   
-    IF( dfft%overlapp .and. parai%ncpus .gt. 1 .and. dfft%do_comm ) THEN
+    IF( dfft%overlapp .and. parai%ncpus .gt. 1 .and. dfft%do_comm(which) .and. which .eq. 1 ) THEN
        eff_nthreads = parai%ncpus - 1
     ELSE
        eff_nthreads = parai%ncpus

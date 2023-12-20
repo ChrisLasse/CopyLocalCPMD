@@ -192,7 +192,8 @@ CONTAINS
     ! ==--------------------------------------------------------------==
     ! DISTRIBUTE REAL SPACE XY-PLANES
     ! ==--------------------------------------------------------------==
-    CALL dist_entity2(spar%nr3s,parai%nproc,plac%nr3_ranges)
+! Currently not used, maybe activated again at a later time
+!    CALL dist_entity2(spar%nr3s,parai%nproc,plac%nr3_ranges)
     CALL zeroing(parap%nrzpl)!,2*(maxcpu+1))
     IF (isos1%tclust.AND.isos3%ps_type.EQ.1) THEN      
        ! DISTRIBUTE REAL SPACE XY-PLANES
@@ -1137,8 +1138,26 @@ CONTAINS
 
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
+
+! Currently not used, maybe activated again at a later time
+!    DO i = 1, parai%nproc
+!       plac%nr3p(i) = plac%nr3_ranges( i-1, 2 ) - plac%nr3_ranges( i-1, 1 ) + 1
+!       IF( i .eq. 1 ) THEN
+!          plac%nr3p_offset(i) = 0
+!       ELSE
+!          plac%nr3p_offset(i) = plac%nr3p_offset(i-1) + plac%nr3p(i-1)
+!       END IF
+!    ENDDO
+!    plac%my_nr3p = plac%nr3p( parai%me+1 )
+
+    plac%nr3p = 0
+    plac%nr3p_offset = 0
+    j = 0
+    DO i = 1, plac%nr3
+       j = mod( j, parai%nproc ) + 1
+       plac%nr3p( j ) = plac%nr3p( j ) + 1
+    ENDDO
     DO i = 1, parai%nproc
-       plac%nr3p(i) = plac%nr3_ranges( i-1, 2 ) - plac%nr3_ranges( i-1, 1 ) + 1
        IF( i .eq. 1 ) THEN
           plac%nr3p_offset(i) = 0
        ELSE
