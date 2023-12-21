@@ -24,7 +24,8 @@ MODULE vpsi_utils
                                              hg,&
                                              indzs,&
                                              nzh,&
-                                             nzhs
+                                             nzhs,&
+                                             indz
   USE cuda_types,                      ONLY: cuda_memory_t,&
                                              cuda_stream_t
   USE cuda_utils,                      ONLY: cuda_alloc_host,&
@@ -1854,8 +1855,8 @@ CONTAINS
        IF (fip1.EQ.0._real_8.AND.cntl%tksham) fip1=0.5_real_8
   
        DO j = plac%thread_ngms_start( mythread+1 ), plac%thread_ngms_end( mythread+1 )
-          fp = ( psi( dfft%nl(j), ibatch ) + psi( dfft%nlm(j), ibatch ) ) * (- plac%tscale )
-          fm = ( psi( dfft%nl(j), ibatch ) - psi( dfft%nlm(j), ibatch ) ) * (- plac%tscale )
+          fp = ( psi( nzh(j), ibatch ) + psi( indz(j), ibatch ) ) * (- plac%tscale )
+          fm = ( psi( nzh(j), ibatch ) - psi( indz(j), ibatch ) ) * (- plac%tscale )
           c2 ( j, (2*ibatch)-1 ) = -fi * ((parm%tpiba2*dfft%gg_pw(j))*c0( j, (2*ibatch)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
           c2 ( j, (2*ibatch)   ) = -fip1 * ((parm%tpiba2*dfft%gg_pw(j))*c0( j, (2*ibatch) ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
        END DO

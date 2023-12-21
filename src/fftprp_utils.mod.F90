@@ -14,7 +14,9 @@ MODULE fftprp_utils
                                              indzs,&
                                              inyh,&
                                              nzh,&
-                                             nzhs
+                                             nzhs,&
+                                             indz_r,&
+                                             nzh_r
   USE cuda_utils,                      ONLY: cuda_alloc_host,cuda_host_register, cuda_host_unregister, cuda_dealloc_host
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
@@ -129,7 +131,7 @@ CONTAINS
 
     INTEGER :: i, ierr, ig, ij, img, iny1, iny2, iny3, ip, ipp, ixf, j, jj, &
       jmg, ldim, len, mxrp, nclu, ngray, nh1, nh2, nh3, nhray, nl1, nl2, nn2, &
-      nr3i, nrx, nstate, ny1, ny2, ny3, first, last, lda, it, count
+      nr3i, nrx, nstate, ny1, ny2, ny3, first, last, lda, it, count, ifa, jfa
     INTEGER, ALLOCATABLE                     :: my(:)
     REAL(real_8)                             :: rmem, rstate, xmpenm
 
@@ -217,8 +219,10 @@ CONTAINS
     ENDDO
     kr1m=MAX(nr1m+MOD(nr1m+1,2),fpar%kr1)
     img=0
-    DO j=1,fpar%kr3s
-       DO i=1,fpar%kr2s
+    DO jfa=1,fpar%kr3s
+       j = MOD( ( fpar%kr3s / 2 ) + 1 + jfa - 1 - 1, fpar%kr3s ) + 1
+       DO ifa=1,fpar%kr2s
+          i = MOD( ( fpar%kr2s / 2 ) + 1 + ifa - 1 - 1, fpar%kr2s ) + 1
           IF (mg(i,j).NE.0) THEN
              img=img+1
              mg(i,j)=img
@@ -236,8 +240,10 @@ CONTAINS
        jmg=mg(iny2,iny3)
        IF (jmg.EQ.0) mg(iny2,iny3)=-1
     ENDDO
-    DO j=1,fpar%kr3s
-       DO i=1,fpar%kr2s
+    DO jfa=1,fpar%kr3s
+       j = MOD( ( fpar%kr3s / 2 ) + 1 + jfa - 1 - 1, fpar%kr3s ) + 1
+       DO ifa=1,fpar%kr2s
+          i = MOD( ( fpar%kr2s / 2 ) + 1 + ifa - 1 - 1, fpar%kr2s ) + 1
           IF (mg(i,j).LT.0) THEN
              img=img+1
              mg(i,j)=img
@@ -281,19 +287,26 @@ CONTAINS
        ENDDO
     ENDDO
     ! REDEFINE NZH AND INDZ FOR COMPRESSED STORAGE
+    ALLOCATE(nzh_r(fpar%nnr1),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(indz_r(fpar%nnr1),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
     nn2=1
     DO ig=1,ncpw%nhg
        ny1=inyh(1,ig)
        ny2=inyh(2,ig)
        ny3=inyh(3,ig)
+       IF( ny3 .lt. ( fpar%kr3s / 2 ) + 1 ) ny3 = ny3 + fpar%kr3s
        iny1=-ny1+2*nh1
        iny2=-ny2+2*nh2
        iny3=-ny3+2*nh3
-       nzh(ig)=ny1 + (mg(ny2,ny3)-1)*fpar%kr1s
-       indz(ig)=iny1 + (mg(iny2,iny3)-1)*fpar%kr1s
-
-       nzh(ig)=dfft%nl(ig)
-       indz(ig)=dfft%nlm(ig)
+       IF( iny3 .lt. ( fpar%kr3s / 2 ) + 1 ) iny3 = iny3 + fpar%kr3s
+       nzh(ig)=ny3 - ( fpar%kr3s / 2 ) + (mg(ny1,ny2)-1)*fpar%kr3s
+       nzh_r( nzh(ig) ) = ig
+       indz(ig)=iny3 - ( fpar%kr3s / 2 ) + (mg(iny1,iny2)-1)*fpar%kr3s
+       indz_r( indz(ig) ) = ig
     ENDDO
     !$omp parallel do private(IG)
     DO ig=1,ncpw%ngw
