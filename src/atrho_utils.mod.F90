@@ -9,7 +9,6 @@ MODULE atrho_utils
                                              nzh
   USE dotp_utils,                      ONLY: dotp
   USE error_handling,                  ONLY: stopgm
-  USE fftpw_base,                      ONLY: dfft
   USE fftmain_utils,                   ONLY: invfftn
   USE fftnew_utils,                    ONLY: setfftn
   USE fitpack_utils,                   ONLY: curv1,&
@@ -143,8 +142,6 @@ USE mpi_f08
     DO ig=1,ncpw%nhg
        psi(indz(ig)) = CONJG(rhog(ig))
        psi(nzh(ig))  = rhog(ig)
-!       psi(dfft%nlm(ig)) = CONJG(rhog(ig))
-!       psi(dfft%nl(ig))  = rhog(ig)
     ENDDO
     IF (geq0) psi(nzh(1)) = rhog(1)
     rsum = 0.0_real_8

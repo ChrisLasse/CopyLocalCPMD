@@ -2,6 +2,8 @@
 MODULE fftpw_batching
 !=----------------------------------------------------------------------=
 
+  USE cppt,                                     ONLY: nzh_r,&
+                                                      indz_r
   USE fft,                                      ONLY: plac
   USE fftpw_param
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
@@ -67,10 +69,10 @@ SUBROUTINE Prepare_Psi( dfft, psi, aux, remswitch, mythread )
      offset2 = 2 * ( ( (i-1) / plac%nsw(parai%me+1) ) + 1 )
 
      DO j = 1, dfft%prep_map(1,iter)-1
-        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), offset2 ) )
+        aux( j, i ) = conjg( psi( indz_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( indz_r( offset + j ), offset2 ) )
      ENDDO
      DO j = 1, dfft%prep_map(2,iter)-1
-        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), offset2 )
+        aux( j, i ) = psi( nzh_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( nzh_r( offset + j ), offset2 )
      ENDDO
 
      DO j = dfft%prep_map(3,iter), dfft%prep_map(4,iter)
@@ -78,10 +80,10 @@ SUBROUTINE Prepare_Psi( dfft, psi, aux, remswitch, mythread )
      ENDDO
 
      DO j = dfft%prep_map(5,iter)+1, plac%nr3
-        aux( j, i ) = psi( dfft%nl_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( dfft%nl_r( offset + j ), offset2 )
+        aux( j, i ) = psi( nzh_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( nzh_r( offset + j ), offset2 )
      ENDDO
      DO j = dfft%prep_map(6,iter)+1, plac%nr3
-        aux( j, i ) = conjg( psi( dfft%nlm_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( dfft%nlm_r( offset + j ), offset2 ) )
+        aux( j, i ) = conjg( psi( indz_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( indz_r( offset + j ), offset2 ) )
      ENDDO
 
   ENDDO
