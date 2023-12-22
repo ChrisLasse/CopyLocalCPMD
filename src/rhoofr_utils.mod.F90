@@ -63,7 +63,6 @@ MODULE rhoofr_utils
                                              locks_inv,&
                                              plac,&
                                              fft_buffsize
-  USE fftpw_converting,                ONLY: Make_inv_yzCOM_Maps
   USE fftmain_utils,                   ONLY: fwfftn,&
                                              invfftn,&
                                              fwfftn_batch,&
@@ -1530,7 +1529,7 @@ CONTAINS
              END IF
           END IF
        END IF
-       IF( .not. dfft%single_node .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN !.and. dfft%my_node_rank .eq. 0 ) THEN
+       IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN !.and. dfft%my_node_rank .eq. 0 ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           !communication phase
           IF(ibatch.LE.fft_numbatches+1)THEN
@@ -1548,7 +1547,7 @@ CONTAINS
              END IF
           END IF
        END IF
-       IF( dfft%single_node ) THEN
+       IF( parai%nnode .eq. 1 ) THEN
           counter(2) = counter(2) + 1
           !$OMP Barrier 
           IF( mythread .eq. 0 ) locks_sing_1( parai%node_me+1, counter(2) ) = .false.

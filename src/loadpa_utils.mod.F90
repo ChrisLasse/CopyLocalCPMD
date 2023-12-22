@@ -500,6 +500,10 @@ CONTAINS
   
     CALL SetupArrays()
 
+    ALLOCATE( plac%time_adding( 100 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+
     ! ==--------------------------------------------------------------==
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==
@@ -1172,6 +1176,12 @@ CONTAINS
     ALLOCATE(plac%ir1p(plac%nr1),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
+    ALLOCATE(plac%indw(plac%nr1),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE(plac%indp(plac%nr1),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
     ALLOCATE(plac%nsw(parai%nproc),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
@@ -1249,6 +1259,8 @@ CONTAINS
           plac%nr1w = plac%nr1w + 1
           plac%ir1w( i ) = plac%nr1w
           plac%ir1p( i ) = plac%nr1w
+          plac%indw( plac%nr1w ) = i
+          plac%indp( plac%nr1w ) = i
        END IF
 
     ENDDO
@@ -1258,6 +1270,7 @@ CONTAINS
        IF( plac%ir1p( i ) .lt. 0 ) THEN
           plac%nr1p = plac%nr1p + 1
           plac%ir1p( i ) = plac%nr1p
+          plac%indp( plac%nr1p ) = i
        END IF
 
     ENDDO
@@ -1310,8 +1323,6 @@ CONTAINS
        ENDDO
     ENDDO
 
-!    plac%my_nr1w = count ( plac%ir1w > 0 )
-!    plac%my_nr1p = count ( plac%ir1p > 0 )
     plac%small_chunks(1) = plac%nr3px * MAXVAL( plac%nsw )
     plac%small_chunks(2) = plac%nr3px * MAXVAL( plac%nsp )
     plac%big_chunks(1)   = plac%small_chunks(1) * parai%node_nproc * parai%node_nproc
@@ -1319,6 +1330,5 @@ CONTAINS
     plac%tscale = 1.0d0 / dble( plac%nr1 * plac%nr2 * plac%nr3 )
 
   END SUBROUTINE SetupArrays
-
 
 END MODULE loadpa_utils

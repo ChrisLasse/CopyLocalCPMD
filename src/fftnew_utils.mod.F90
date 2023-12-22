@@ -52,6 +52,7 @@ MODULE fftnew_utils
   !public :: setrays
   PUBLIC :: Prep_fft_com
   PUBLIC :: Make_Manual_Maps
+  PUBLIC :: Make_inv_yzCOM_Maps
 
   INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
 
@@ -637,7 +638,7 @@ CONTAINS
     INTEGER, INTENT(IN)                                 :: sendsize, sendsize_rem, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size
     COMPLEX(DP), INTENT(IN)                             :: comm_send( : , : )
     COMPLEX(DP), INTENT(INOUT)                          :: comm_recv( : , : )
-    INTEGER, ALLOCATABLE, INTENT(OUT)                   :: comm_sendrecv( : )
+    INTEGER, INTENT(OUT)                                :: comm_sendrecv( : )
     LOGICAL, INTENT(OUT)                                :: do_comm
     INTEGER, INTENT(IN)                                 :: WAVE
   
@@ -664,7 +665,6 @@ CONTAINS
   
     ALLOCATE( comm_info_send( howmany_sending( 1 , 1 ), node_task_size*nodes_numb ) )
     ALLOCATE( comm_info_recv( howmany_sending( 1 , 1 ), node_task_size*nodes_numb ) )
-    ALLOCATE( comm_sendrecv( 2 ) )
     comm_info_send = 0
     comm_info_recv = 0
     comm_sendrecv(1) = howmany_sending  ( my_node_rank+1 , my_node+1 )
@@ -941,6 +941,86 @@ CONTAINS
     ENDDO
     
   END SUBROUTINE Make_Manual_Maps
+  ! ==================================================================
+  SUBROUTINE Make_inv_yzCOM_Maps( dfft, map_acinv, batch_size, ir1s, nss, my_nr1s, small_chunks, big_chunks, zero_start, zero_end )
+    IMPLICIT NONE
+  
+    TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: dfft
+    INTEGER, INTENT(IN)  :: batch_size, my_nr1s, small_chunks, big_chunks
+    INTEGER, INTENT(OUT) :: map_acinv(:)
+    INTEGER, INTENT(IN)  :: ir1s(:), nss(:)
+    INTEGER, OPTIONAL, INTENT(OUT) :: zero_start(:), zero_end(:)
+  
+    LOGICAL :: l_map( dfft%my_nr3p * my_nr1s * dfft%nr2 )
+    LOGICAL :: first
+    INTEGER :: ibatch, j, l, i, k
+    INTEGER :: iproc, offset, it, mc, m1, m2, i1
+    INTEGER :: ierr
+  
+    l_map = .false.
+    map_acinv = 0
+    
+    !$omp parallel private( ibatch, j, l, iproc, offset, i, it, mc, m1, m2, i1, k)
+    DO ibatch = 1, batch_size
+       DO j = 1, parai%nnode
+          DO l = 1, parai%node_nproc
+             iproc = (j-1)*parai%node_nproc + l
+             offset = ( parai%node_me*parai%node_nproc + (l-1) ) * small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * big_chunks
+             !$omp do
+             DO i = 1, nss( iproc )
+                it = offset + dfft%nr3px * (i-1) 
+                mc = dfft%ismap( i + dfft%iss(iproc) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
+                m1 = mod ( mc-1, dfft%nr1 ) + 1
+                m2 = (mc-1)/dfft%nr1 + 1
+                i1 = m2 + ( ir1s(m1) - 1 ) * dfft%nr2 + (ibatch-1)*dfft%my_nr3p*my_nr1s*dfft%nr2
+                DO k = 1, dfft%my_nr3p
+                   IF( ibatch .eq. 1 ) l_map( i1 ) = .true.
+                   map_acinv( i1 ) = k + it
+                   i1 = i1 + dfft%nr2*my_nr1s
+                ENDDO
+             ENDDO
+             !$omp end do
+          ENDDO
+       ENDDO
+    ENDDO
+    !$omp end parallel
+  
+    IF( present( zero_start ) ) THEN
+     
+       zero_start = 0
+       zero_end = dfft%nr2
+       first = .true.
+       
+!       IF( parai%me .eq. 0 ) THEN 
+          DO j = 1, my_nr1s
+             first = .true.
+             DO l = 1, dfft%nr2
+       
+                IF( l_map( (j-1)*dfft%nr2 + l ) .eqv. .true. ) THEN
+                   IF( first .eqv. .false. ) THEN
+                      zero_end( j ) = l-1
+                      first = .true.
+                   END IF
+                ELSE
+                   IF( first .eqv. .true. ) THEN
+                      zero_start( j ) = l
+                      first = .false.
+                   END IF
+                END IF
+       
+             ENDDO
+          ENDDO
+!       END IF
+!       IF( parai%node_me .eq. 0 .and. parai%nnode .ne. 1 ) THEN
+!          CALL MP_BCAST( zero_start, my_nr1s, 0, dfft%inter_node_comm )
+!          CALL MP_BCAST( zero_end  , my_nr1s, 0, dfft%inter_node_comm )
+!       END IF
+!       CALL MP_BCAST( zero_start, my_nr1s, 0, dfft%node_comm )
+!       CALL MP_BCAST( zero_end  , my_nr1s, 0, dfft%node_comm )
+  
+    END IF
+    
+  END SUBROUTINE Make_inv_yzCOM_Maps
   ! ==================================================================
 
 END MODULE fftnew_utils

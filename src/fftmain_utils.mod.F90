@@ -1032,7 +1032,7 @@ CONTAINS
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(8) )
 
           !$omp flush( locks_com_inv )
-          !$  DO WHILE( ANY( locks_com_inv( :, counter ) ) .and. .not. dfft%single_node )
+          !$  DO WHILE( ANY( locks_com_inv( :, counter ) ) .and. parai%nnode .ne. 1 )
           !$omp flush( locks_com_inv )
           !$  END DO
 
@@ -1040,7 +1040,7 @@ CONTAINS
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 21 ) = dfft%time_adding( 21 ) + ( time(9) - time(8) )
 
           CALL invfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
-                                 dfft%map_acinv, dfft%map_acinv_rem, counter, remswitch, mythread, dfft%my_nr1p )
+                                 plac%map_acinv_wave, plac%map_acinv_wave_rem, counter, remswitch, mythread, dfft%my_nr1p )
 
        ELSE IF( step .eq. 4 ) THEN
 
@@ -1090,7 +1090,7 @@ CONTAINS
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 23 ) = dfft%time_adding( 23 ) + ( time(13) - time(12) )
   
           CALL fwfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
-                                    dfft%map_pcfw, batch_size, counter, remswitch, mythread, dfft%my_nr1p, dfft%nsw )
+                                    plac%map_pcfw(:,1), batch_size, counter, remswitch, mythread, dfft%my_nr1p, dfft%nsw )
 
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(14) )
 
@@ -1133,7 +1133,7 @@ CONTAINS
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(19) )
 
           !$omp flush( locks_com_fw )
-          !$  DO WHILE( ANY( locks_com_fw( :, counter ) ) .and. .not. dfft%single_node )
+          !$  DO WHILE( ANY( locks_com_fw( :, counter ) ) .and. parai%nnode .ne. 1 )
           !$omp flush( locks_com_fw )
           !$  END DO
 
@@ -1222,7 +1222,7 @@ CONTAINS
        comm_recv => Big_Pointer(:,:,2) 
 
        CALL Prep_fft_com( comm_send, comm_recv, sendsize, 0, parai%nnode, parai%me, parai%my_node, parai%node_me, &
-                          parai%node_nproc, 1, dfft%comm_sendrecv, plac%do_comm(2), 2 )
+                          parai%node_nproc, 1, plac%comm_sendrecv(:,2), plac%do_comm(2), 2 )
 
        CALL Make_Manual_Maps( plac, 1, 0, nss, nr1s, ngs, plac%which ) 
 
@@ -1254,7 +1254,7 @@ CONTAINS
        !$OMP end master
        !$OMP barrier
 
-       CALL invfft_y_section( dfft, f, comm_recv(:,1), aux, dfft%map_acinv, dfft%map_acinv, 1, 1, mythread, plac%nr1p )
+       CALL invfft_y_section( dfft, f, comm_recv(:,1), aux, plac%map_acinv_pot, plac%map_acinv_pot, 1, 1, mythread, plac%nr1p )
 
        CALL invfft_x_section( dfft, f, 1, mythread )
 
@@ -1262,7 +1262,7 @@ CONTAINS
 
        CALL fwfft_x_section( dfft, f, aux, 1, 1, mythread, plac%nr1p )
 
-       CALL fwfft_y_section( dfft, aux, comm_send(:,1), comm_recv(:,1), dfft%map_pcfw, 1, 1, 1, mythread, plac%nr1p, plac%nsp )
+       CALL fwfft_y_section( dfft, aux, comm_send(:,1), comm_recv(:,1), plac%map_pcfw(:,2), 1, 1, 1, mythread, plac%nr1p, plac%nsp )
     
        !$OMP barrier
        !$OMP master
