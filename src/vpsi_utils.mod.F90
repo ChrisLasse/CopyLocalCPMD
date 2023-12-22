@@ -59,7 +59,6 @@ MODULE vpsi_utils
                                              locks_fw,&
                                              plac,&
                                              fft_buffsize
-  USE fftpw_converting,                ONLY: Make_inv_yzCOM_Maps
   USE fftmain_utils,                   ONLY: fwfftn,&
                                              invfftn,&
                                              fwfftn_batch,&
@@ -79,7 +78,8 @@ MODULE vpsi_utils
                                              fwfft_batch
   USE fftnew_utils,                    ONLY: setfftn,&
                                              Prep_fft_com,&
-                                             Make_Manual_Maps
+                                             Make_Manual_Maps,&
+                                             Make_inv_yzCOM_Maps
   USE fftpw_base,                      ONLY: dfft,&
                                              wfn_real,&
                                              dfftp
@@ -2195,7 +2195,7 @@ CONTAINS
                 END IF
              END IF
           END IF
-          IF( .not. dfft%single_node .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN ! .and. dfft%my_node_rank .eq. 0 ) THEN
+          IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN ! .and. dfft%my_node_rank .eq. 0 ) THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              !communication phase
              IF(ibatch.LE.fft_numbatches+1)THEN
@@ -2213,7 +2213,7 @@ CONTAINS
                 END IF
              END IF
           END IF
-          IF( dfft%single_node ) THEN
+          IF( parai%nnode .eq. 1 ) THEN
              counter(2) = counter(2) + 1
              !$OMP Barrier 
              IF( mythread .eq. 0 ) locks_sing_1( parai%node_me+1, counter(2) ) = .false.
@@ -2308,7 +2308,7 @@ CONTAINS
              END IF
           END IF
        END IF
-       IF( .not. dfft%single_node .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN !.and. dfft%my_node_rank .eq. 0 ) THEN
+       IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN !.and. dfft%my_node_rank .eq. 0 ) THEN
 !       IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
@@ -2325,7 +2325,7 @@ CONTAINS
              END IF
           END IF
        END IF
-       IF( dfft%single_node ) THEN
+       IF( parai%nnode .eq. 1 ) THEN
           counter(5) = counter(5) + 1
           !$OMP Barrier 
           IF( mythread .eq. 0 ) locks_sing_2( parai%node_me+1, counter(5) ) = .false.
@@ -2568,14 +2568,14 @@ CONTAINS
        IF( cntl%krwfn ) fft_buffsize = 2
        IF( .not. ( cntl%overlapp_comm_comp .and. fft_numbatches .gt. 1 ) ) fft_buffsize = 1
      
-       IF( ALLOCATED( dfft%map_acinv ) )        DEALLOCATE( dfft%map_acinv )                     
-       ALLOCATE( dfft%map_acinv( plac%my_nr3p * plac%nr1w * plac%nr2 * fft_batchsize ) )
-       CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, fft_batchsize, plac%ir1w, plac%nsw, dfft%zero_acinv_start, dfft%zero_acinv_end ) 
+       IF( ALLOCATED( plac%map_acinv_wave ) )        DEALLOCATE( plac%map_acinv_wave )
+       ALLOCATE( plac%map_acinv_wave( plac%my_nr3p * plac%nr1w * plac%nr2 * fft_batchsize ) )
+       CALL Make_inv_yzCOM_Maps( plac, plac%map_acinv_wave, fft_batchsize, plac%ir1w, plac%nsw, plac%nr1w, plac%small_chunks(1), plac%big_chunks(1), plac%zero_acinv_start(:,1), plac%zero_acinv_end(:,1) ) 
        
-       IF( ALLOCATED( dfft%map_acinv_rem ) )    DEALLOCATE( dfft%map_acinv_rem )                 
+       IF( ALLOCATED( plac%map_acinv_wave_rem ) )    DEALLOCATE( plac%map_acinv_wave_rem )
        IF( fft_residual .ne. 0 ) THEN
-          ALLOCATE( dfft%map_acinv_rem( plac%my_nr3p * plac%nr1w * plac%nr2 * fft_residual ) )
-          CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_rem, fft_residual, plac%ir1w, plac%nsw )                
+          ALLOCATE( plac%map_acinv_wave_rem( plac%my_nr3p * plac%nr1w * plac%nr2 * fft_residual ) )
+          CALL Make_inv_yzCOM_Maps( plac, plac%map_acinv_wave_rem, fft_residual, plac%ir1w, plac%nsw, plac%nr1w, plac%small_chunks(1), plac%big_chunks(1) )
        END IF   
        
        sendsize     = MAXVAL( plac%nr3p ) * MAXVAL ( plac%nsw ) * parai%node_nproc * parai%node_nproc * fft_batchsize
@@ -2597,9 +2597,9 @@ CONTAINS
              comm_recv => Big_Com_Pointer(:,:,2) 
     
              CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, parai%nnode, parai%me, parai%my_node, parai%node_me, &
-                                parai%node_nproc, fft_buffsize, dfft%comm_sendrecv, plac%do_comm(1), 1 )
+                                parai%node_nproc, fft_buffsize, plac%comm_sendrecv(:,1), plac%do_comm(1), 1 )
              CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, parai%nnode, parai%me, parai%my_node, parai%node_me, &
-                                parai%node_nproc, 1, dfftp%comm_sendrecv, plac%do_comm(2), 2 )
+                                parai%node_nproc, 1, plac%comm_sendrecv(:,2), plac%do_comm(2), 2 )
           END IF
 
           Com_in_locks = ( needed_size / REAL( ( parai%node_nproc * ( ( nstate / fft_batchsize ) + 1 ) ) / 4.0 ) ) + 1

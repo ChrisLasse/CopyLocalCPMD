@@ -91,6 +91,8 @@ MODULE fft
   INTEGER :: fft_buffsize
   TYPE FFT_TYPE_DESCRIPTOR
 
+     INTEGER, ALLOCATABLE :: time_adding(:)
+
      INTEGER, ALLOCATABLE :: stownW(:,:)
      INTEGER, ALLOCATABLE :: stownP(:,:)
      INTEGER, ALLOCATABLE :: indx_map(:,:)
@@ -102,6 +104,8 @@ MODULE fft
      INTEGER, ALLOCATABLE :: nr3p_offset(:)
      INTEGER, ALLOCATABLE :: ir1w(:)
      INTEGER, ALLOCATABLE :: ir1p(:)
+     INTEGER, ALLOCATABLE :: indw(:)
+     INTEGER, ALLOCATABLE :: indp(:)
      INTEGER, ALLOCATABLE :: nsw(:)
      INTEGER, ALLOCATABLE :: nsp(:)
      INTEGER, ALLOCATABLE :: iss(:)
@@ -123,6 +127,18 @@ MODULE fft
      INTEGER, ALLOCATABLE :: thread_rspace_start(:)
      INTEGER, ALLOCATABLE :: thread_rspace_end(:)
 
+     INTEGER, ALLOCATABLE :: prep_map(:,:)
+     INTEGER, ALLOCATABLE :: map_scatter_inv(:,:)
+     INTEGER, ALLOCATABLE :: map_scatter_fw(:,:)
+     INTEGER :: zero_scatter_start( 2 )
+     INTEGER :: zero_scatter_end( 2 )
+     INTEGER, ALLOCATABLE :: map_pcfw(:,:)
+     INTEGER, ALLOCATABLE :: map_acinv_wave(:)
+     INTEGER, ALLOCATABLE :: map_acinv_wave_rem(:)
+     INTEGER, ALLOCATABLE :: map_acinv_pot(:)
+     INTEGER, ALLOCATABLE :: zero_acinv_start(:,:)
+     INTEGER, ALLOCATABLE :: zero_acinv_end(:,:)
+
      INTEGER :: nr1w
      INTEGER :: nr1p
      INTEGER :: nr1
@@ -130,8 +146,6 @@ MODULE fft
      INTEGER :: nr3
      INTEGER :: my_nr3p
      INTEGER :: nr3px
-     INTEGER :: my_nr1p
-     INTEGER :: my_nr1w
      INTEGER :: nhg
      INTEGER :: ngw
      INTEGER :: nwst
@@ -143,6 +157,7 @@ MODULE fft
      INTEGER :: small_chunks( 2 )
      INTEGER :: big_chunks( 2 )
      LOGICAL :: do_comm( 2 )
+     INTEGER :: comm_sendrecv(2,2)
 
   END TYPE
   Type( FFT_TYPE_DESCRIPTOR ) :: plac
