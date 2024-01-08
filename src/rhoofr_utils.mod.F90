@@ -80,7 +80,7 @@ MODULE rhoofr_utils
                                              invfft_batch
   USE fftnew_utils,                    ONLY: setfftn
   USE fftpw_base,                      ONLY: wfn_real
-  USE fftpw_batching,                  ONLY: locks_omp,&
+  USE fftutil_utils,                   ONLY: locks_omp,&
                                              Prepare_Psi
   USE geq0mod,                         ONLY: geq0
   USE ions,                            ONLY: ions0,&

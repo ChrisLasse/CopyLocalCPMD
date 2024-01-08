@@ -57,9 +57,17 @@ MODULE fftmain_utils
                                              unpack_x2y_n,&
                                              pack_x2y_n,&
                                              unpack_y2x,&
-                                             unpack_y2x_n
+                                             unpack_y2x_n,&
+                                             locks_omp,&
+                                             Prepare_Psi,&
+                                             fft_com,&
+                                             invfft_z_section,&
+                                             invfft_y_section,&
+                                             invfft_x_section,&
+                                             fwfft_z_section,&
+                                             fwfft_y_section,&
+                                             fwfft_x_section
   USE fftpw_types,                     ONLY: PW_fft_type_descriptor
-  USE fftpw_batching
   USE kinds,                           ONLY: real_8,&
                                              int_8
   USE machine,                         ONLY: m_walltime
