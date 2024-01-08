@@ -79,7 +79,6 @@ MODULE rhoofr_utils
                                              locks_sing_1,&
                                              invfft_batch
   USE fftnew_utils,                    ONLY: setfftn
-  USE fftpw_base,                      ONLY: wfn_real
   USE fftutil_utils,                   ONLY: locks_omp,&
                                              Prepare_Psi
   USE geq0mod,                         ONLY: geq0
@@ -1479,8 +1478,7 @@ CONTAINS
 #endif
 
     IF( rsactive ) THEN
-       IF( .not. allocated( wfn_real ) ) ALLOCATE( wfn_real( plac%my_nr3p * plac%nr2 * plac%nr1, (nstate/2)+1 ) )
-       psi_work => wfn_real
+       psi_work => wfn_r
     ELSE
        psi_work => psi_nors
     END IF
