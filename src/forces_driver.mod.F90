@@ -18,8 +18,6 @@ MODULE forces_driver
                                              fft_tune_max_it,&
                                              jgw
   USE fftprp_utils,                    ONLY: autotune_fftbatchsize
-  USE fftpw_base,                      ONLY: dfft
-  USE fftpw_param,                     ONLY: DP
   USE fnonloc_utils,                   ONLY: fnonloc
   USE func,                            ONLY: func1
   USE geq0mod,                         ONLY: geq0
@@ -164,7 +162,7 @@ CONTAINS
 
     INTEGER, SAVE                            :: autotune_it=1
     INTEGER(INT64) :: time(2), cr
-    REAL(DP) :: total_time
+    REAL :: total_time
     LOGICAL, SAVE :: tunning_finished = .false.
     CALL tiset(procedureN,isub)
     CALL tiset(procedureN//'_a',isub2)
@@ -358,7 +356,7 @@ CONTAINS
                clsd%nlsd,redist_c2)
           CALL SYSTEM_CLOCK( time(2) )
           CALL SYSTEM_CLOCK( count_rate = cr )
-          IF ( dfft%fft_timing .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
+!          IF ( paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
        ELSE
           CALL vpsi(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,&
                redist_c2)

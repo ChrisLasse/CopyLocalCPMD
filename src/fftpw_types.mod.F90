@@ -3,7 +3,6 @@ MODULE fftpw_types
 !=----------------------------------------------------------------------------=!
 
   USE error_handling,                ONLY: stopgm
-  USE fftpw_param
   USE fftpw_stick_base,              ONLY: get_sticks,&
                                            sticks_map_allocate,&
                                            sticks_map
@@ -16,6 +15,8 @@ MODULE fftpw_types
   IMPLICIT NONE
   PRIVATE
   SAVE
+
+  INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
 
   TYPE PW_fft_type_descriptor
 

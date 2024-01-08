@@ -3,7 +3,6 @@ MODULE fftpw_stick_base
 !=----------------------------------------------------------------------=
 
    USE error_handling,                ONLY: stopgm
-   USE fftpw_param
    USE mpi_f08
 
    IMPLICIT NONE
@@ -16,6 +15,8 @@ MODULE fftpw_stick_base
    PUBLIC :: sticks_map, sticks_map_allocate
 !   PUBLIC :: sticks_map_deallocate, get_sticks
    PUBLIC :: get_sticks
+
+   INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
 
    TYPE sticks_map
       LOGICAL :: lgamma=.false. ! if .true. the map has gamma symmetry

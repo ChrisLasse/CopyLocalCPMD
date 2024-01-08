@@ -2,7 +2,6 @@
 MODULE fftpw_base
 !=----------------------------------------------------------------------=!
 
-  USE fftpw_param
   USE fftpw_stick_base,      ONLY: sticks_map
   USE fftpw_types,           ONLY: PW_fft_type_descriptor
 
@@ -12,6 +11,8 @@ MODULE fftpw_base
   TYPE( PW_fft_type_descriptor ) :: dfftp
 
   TYPE (sticks_map) :: smap
+
+  INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
 
   COMPLEX(DP), TARGET, ALLOCATABLE :: wfn_real(:,:)
 

@@ -79,11 +79,9 @@ MODULE rhoofr_utils
                                              locks_sing_1,&
                                              invfft_batch
   USE fftnew_utils,                    ONLY: setfftn
-  USE fftpw_base,                      ONLY: dfft,&
-                                             wfn_real
+  USE fftpw_base,                      ONLY: wfn_real
   USE fftpw_batching,                  ONLY: locks_omp,&
                                              Prepare_Psi
-  USE fftpw_param,                     ONLY: DP
   USE geq0mod,                         ONLY: geq0
   USE ions,                            ONLY: ions0,&
                                              ions1
@@ -168,6 +166,8 @@ MODULE rhoofr_utils
   PUBLIC :: rhoofr_batchfft
   PUBLIC :: rhoofr_pw_batchfft
   !public :: movepsih
+
+  INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
 
 CONTAINS
 
@@ -1511,7 +1511,7 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 counter(1) = counter(1) + 1
                 ! Loop over the electronic states of this batch
-                CALL Prepare_Psi( dfft, c0( :, 1+(counter(1)-1)*fft_batchsize*2 : bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread )
+                CALL Prepare_Psi( plac, c0( :, 1+(counter(1)-1)*fft_batchsize*2 : bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread )
 !                ! ==--------------------------------------------------------------==
 !                ! ==  Fourier transform the wave functions to real space.         ==
 !                ! ==  In the array PSI was used also the fact that the wave       ==
@@ -1527,11 +1527,11 @@ CONTAINS
 !                ! ==  to swap                                                     ==
 !                ! ==--------------------------------------------------------------==
                 swap=mod(ibatch,fft_buffsize)+1
-                CALL invfft_batch( dfft, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
+                CALL invfft_batch( plac, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
              END IF
           END IF
        END IF
-       IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN !.and. dfft%my_node_rank .eq. 0 ) THEN
+       IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN !.and. parai%node_me .eq. 0 ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           !communication phase
           IF(ibatch.LE.fft_numbatches+1)THEN
@@ -1545,7 +1545,7 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch,fft_buffsize)+1
                 counter(2) = counter(2) + 1
-                CALL invfft_batch( dfft, 2, bsize, remswitch, mythread, counter(2), swap )
+                CALL invfft_batch( plac, 2, bsize, remswitch, mythread, counter(2), swap )
              END IF
           END IF
        END IF
@@ -1573,9 +1573,9 @@ CONTAINS
                 counter(3) = counter(3) + 1
                 start = (1+((counter(3)-1)*fft_batchsize))
                 ending = (1+(counter(3)-1)*fft_batchsize)+bsize-1
-                CALL invfft_batch( dfft, 3, bsize, remswitch, mythread, counter(3), swap, &
+                CALL invfft_batch( plac, 3, bsize, remswitch, mythread, counter(3), swap, &
                                    f_inout1=psi_work( : , start : ending ), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
-                CALL invfft_batch( dfft, 4, bsize, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : ending ) )
+                CALL invfft_batch( plac, 4, bsize, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : ending ) )
 
                 ! Compute the charge density from the wave functions
                 ! in real space

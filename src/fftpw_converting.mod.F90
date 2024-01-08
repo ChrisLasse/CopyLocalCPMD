@@ -8,7 +8,6 @@ MODULE fftpw_converting
   USE fftpw_base,                    ONLY: smap
   USE fftpw_ggen,                    ONLY: ggen_pw,&
                                            fft_set_nl
-  USE fftpw_param
   USE fftpw_stick_base,              ONLY: sticks_map
   USE fftpw_types,                   ONLY: fft_type_init,&
                                            PW_fft_type_descriptor,&
@@ -35,6 +34,8 @@ MODULE fftpw_converting
 !  PUBLIC :: ConvertFFT_v
   PUBLIC :: Prep_pwFFT_Wave
   PUBLIC :: Prep_pwFFT_Rho
+
+  INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
       
 CONTAINS
 
