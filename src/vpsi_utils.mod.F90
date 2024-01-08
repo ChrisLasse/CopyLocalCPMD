@@ -80,7 +80,6 @@ MODULE vpsi_utils
                                              Prep_fft_com,&
                                              Make_Manual_Maps,&
                                              Make_inv_yzCOM_Maps
-  USE fftpw_base,                      ONLY: wfn_real
   USE fftutil_utils,                   ONLY: locks_omp,&
                                              Prepare_Psi
   USE geq0mod,                         ONLY: geq0
@@ -2229,7 +2228,7 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop1,fft_buffsize)+1
                 start = 1+(ibatch-1)*fft_batchsize-start_loop1
-                IF(rsactive) rs_wave=>wfn_real(:,start:start)
+                IF(rsactive) rs_wave=>wfn_r(:,start:start)
                 
                 lspin=1
                 offset_state=i_start2
