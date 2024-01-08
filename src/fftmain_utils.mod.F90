@@ -31,7 +31,7 @@ MODULE fftmain_utils
   USE fft,                             ONLY: &
        lfrm, lmsq, lr1, lr1m, lr1s, lr2s, lr3s, lrxpl, lsrm, mfrays, msqf, &
        msqs, msrays, qr1, qr1s, qr2s, qr3max, qr3min, qr3s, sp5, sp8, sp9, &
-       xf, yf, fft_residual, fft_total, fft_numbatches, fft_batchsize, locks_inv, locks_fw, plac, fft_buffsize
+       xf, yf, fft_residual, fft_total, fft_numbatches, fft_batchsize, locks_inv, locks_fw, FFT_TYPE_DESCRIPTOR, fft_buffsize
   USE fft_maxfft,                      ONLY: maxfftn, maxfft
   USE fftcu_methods,                   ONLY: fftcu_frw_full_1,&
                                              fftcu_frw_full_2,&
@@ -58,7 +58,6 @@ MODULE fftmain_utils
                                              pack_x2y_n,&
                                              unpack_y2x,&
                                              unpack_y2x_n
-  USE fftpw_param
   USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE fftpw_batching
   USE kinds,                           ONLY: real_8,&
@@ -102,6 +101,7 @@ MODULE fftmain_utils
   PUBLIC :: invfftn_batch
   PUBLIC :: fwfftn_batch
 
+  INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
 
   COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: comm_send(:,:)
   COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: comm_recv(:,:)
@@ -646,7 +646,7 @@ CONTAINS
     ! == FUNCTION F. THE FOURIER TRANSFORM IS                         ==
     ! == RETURNED IN F (THE INPUT F IS OVERWRITTEN).                  ==
     ! ==--------------------------------------------------------------==
-    USE fftpw_base,                             ONLY: dfftp
+    USE fft,                             ONLY : plac
 #ifdef __PARALLEL
     USE mpi_f08
 #endif
@@ -676,7 +676,7 @@ CONTAINS
        IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
-          CALL fftpw( isign, dfftp, f, plac%nhg, plac%nr1p, plac%ir1p, plac%nsp )
+          CALL fftpw( isign, plac, f, plac%nhg, plac%nr1p, plac%ir1p, plac%nsp )
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -689,7 +689,7 @@ CONTAINS
     ! == FUNCTION F. THE FOURIER TRANSFORM IS                         ==
     ! == RETURNED IN F IN OUTPUT (THE INPUT F IS OVERWRITTEN).        ==
     ! ==--------------------------------------------------------------==
-    USE fftpw_base,                             ONLY: dfftp
+    USE fft,                             ONLY : plac
 #ifdef __PARALLEL
     USE mpi_f08
 #endif
@@ -719,7 +719,7 @@ CONTAINS
        IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
-          CALL fftpw( isign, dfftp, f, plac%nhg, plac%nr1p, plac%ir1p, plac%nsp )
+          CALL fftpw( isign, plac, f, plac%nhg, plac%nr1p, plac%ir1p, plac%nsp )
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -871,10 +871,10 @@ CONTAINS
     ! ==--------------------------------------------------------------==
   END SUBROUTINE invfftn_batch
 
-  SUBROUTINE invfft_batch( dfft, step, batch_size, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+  SUBROUTINE invfft_batch( plac, step, batch_size, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
     IMPLICIT NONE
   
-    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac
     INTEGER, INTENT(IN) :: step, batch_size, remswitch, mythread, counter, work_buffer
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout1(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:,:)
@@ -891,15 +891,15 @@ CONTAINS
     END IF
   
     IF( step .eq. 1 ) THEN
-       CALL fftpw_batch( dfft, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fftpw_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 2 ) THEN                                          
-       CALL fftpw_batch( dfft, -1, step, batch_size, remswitch, mythread, counter, work_buffer )
+       CALL fftpw_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer )
     ELSE IF( step .eq. 3 ) THEN                                       
-       CALL fftpw_batch( dfft, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fftpw_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 4 ) THEN                                       
-       CALL fftpw_batch( dfft, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fftpw_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     END IF
 
@@ -911,10 +911,10 @@ CONTAINS
   
   END SUBROUTINE invfft_batch
   
-  SUBROUTINE fwfft_batch( dfft, step, batch_size, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+  SUBROUTINE fwfft_batch( plac, step, batch_size, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
     IMPLICIT NONE
   
-    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac 
     INTEGER, INTENT(IN) :: step, batch_size, remswitch, mythread, counter, work_buffer
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout1(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:,:)
@@ -931,15 +931,15 @@ CONTAINS
     END IF
   
     IF( step .eq. 1 ) THEN
-       CALL fftpw_batch( dfft, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fftpw_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 2 ) THEN
-       CALL fftpw_batch( dfft, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fftpw_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 3 ) THEN
-       CALL fftpw_batch( dfft, 1, step, batch_size, remswitch, mythread, counter, work_buffer )
+       CALL fftpw_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer )
     ELSE IF( step .eq. 4 ) THEN
-       CALL fftpw_batch( dfft, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fftpw_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     END IF
 
@@ -951,10 +951,10 @@ CONTAINS
   
   END SUBROUTINE fwfft_batch
 
-  SUBROUTINE fftpw_batch( dfft, isign, step, batch_size, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+  SUBROUTINE fftpw_batch( plac, isign, step, batch_size, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
     IMPLICIT NONE
   
-    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac
     INTEGER, INTENT(IN) :: isign, step, batch_size, counter, work_buffer
     INTEGER, INTENT(IN) :: remswitch, mythread
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout1(:,:)
@@ -987,9 +987,9 @@ CONTAINS
           !$  END DO
 
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 17 ) = dfft%time_adding( 17 ) + ( time(2) - time(1) )
+          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 17 ) = plac%time_adding( 17 ) + ( time(2) - time(1) )
 
-          CALL invfft_z_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), batch_size, remswitch, mythread, dfft%nsw )
+          CALL invfft_z_section( plac, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), batch_size, remswitch, mythread, plac%nsw )
 
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
 
@@ -1000,7 +1000,7 @@ CONTAINS
           !$  END DO
 
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 18 ) = dfft%time_adding( 18 ) + ( time(4) - time(3) )
+          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 18 ) = plac%time_adding( 18 ) + ( time(4) - time(3) )
 
           !$  IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) THEN
           !$     locks_calc_inv( parai%node_me+1, counter ) = .false.
@@ -1017,12 +1017,12 @@ CONTAINS
           !$  END DO
 
           IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(6) )
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 19 ) = dfft%time_adding( 19 ) + ( time(6) - time(5) )
+          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) plac%time_adding( 19 ) = plac%time_adding( 19 ) + ( time(6) - time(5) )
   
-          CALL fft_com( dfft, remswitch, work_buffer, 1 )
+          CALL fft_com( plac, remswitch, work_buffer, 1 )
 
           IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(7) )
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 20 ) = dfft%time_adding( 20 ) + ( time(7) - time(6) )
+          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) plac%time_adding( 20 ) = plac%time_adding( 20 ) + ( time(7) - time(6) )
   
           !$  locks_com_inv( parai%node_me+1, counter ) = .false.
           !$omp flush( locks_com_inv )
@@ -1037,17 +1037,17 @@ CONTAINS
           !$  END DO
 
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(9) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 21 ) = dfft%time_adding( 21 ) + ( time(9) - time(8) )
+          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 21 ) = plac%time_adding( 21 ) + ( time(9) - time(8) )
 
-          CALL invfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
-                                 plac%map_acinv_wave, plac%map_acinv_wave_rem, counter, remswitch, mythread, dfft%my_nr1p )
+          CALL invfft_y_section( plac, f_inout1, f_inout2(:,work_buffer), f_inout3, &
+                                 plac%map_acinv_wave, plac%map_acinv_wave_rem, counter, remswitch, mythread, plac%nr1w )
 
        ELSE IF( step .eq. 4 ) THEN
 
-          CALL invfft_x_section( dfft, f_inout1, remswitch, mythread )
+          CALL invfft_x_section( plac, f_inout1, remswitch, mythread )
 
           IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) THEN
-             IF( dfft%vpsi ) THEN
+             IF( plac%which .eq. 1 ) THEN
                 !$  locks_calc_2( parai%node_me+1, 1+current:fft_batchsize+current ) = .false.
                 !$omp flush( locks_calc_2 )
              ELSE
@@ -1066,7 +1066,7 @@ CONTAINS
           !$  END DO
 
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(11) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 22 ) = dfft%time_adding( 22 ) + ( time(11) - time(10) )
+          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 22 ) = plac%time_adding( 22 ) + ( time(11) - time(10) )
 
        END IF
   
@@ -1075,7 +1075,7 @@ CONTAINS
        IF( step .eq. 1 ) THEN
 
 !          !$OMP Barrier !Should be here?
-          CALL fwfft_x_section( dfft, f_inout1(:,1), f_inout2, counter, remswitch, mythread, dfft%my_nr1p )
+          CALL fwfft_x_section( plac, f_inout1(:,1), f_inout2, counter, remswitch, mythread, plac%nr1w )
 
        ELSE IF( step .eq. 2 ) THEN
 
@@ -1087,10 +1087,10 @@ CONTAINS
           !$  END DO
   
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(13) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 23 ) = dfft%time_adding( 23 ) + ( time(13) - time(12) )
+          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 23 ) = plac%time_adding( 23 ) + ( time(13) - time(12) )
   
-          CALL fwfft_y_section( dfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
-                                    plac%map_pcfw(:,1), batch_size, counter, remswitch, mythread, dfft%my_nr1p, dfft%nsw )
+          CALL fwfft_y_section( plac, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
+                                    plac%map_pcfw(:,1), batch_size, counter, remswitch, mythread, plac%nr1w, plac%nsw )
 
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(14) )
 
@@ -1101,10 +1101,10 @@ CONTAINS
           !$  END DO
   
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(15) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 24 ) = dfft%time_adding( 24 ) + ( time(15) - time(14) )
+          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 24 ) = plac%time_adding( 24 ) + ( time(15) - time(14) )
 
           !$  IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) THEN
-          !$     locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
+          !$     locks_calc_fw( parai%node_me+1, counter ) = .false.
           !$omp flush( locks_calc_fw )
           !$  END IF
 
@@ -1118,12 +1118,12 @@ CONTAINS
           !$  END DO
   
           IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(17) )
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 25 ) = dfft%time_adding( 25 ) + ( time(17) - time(16) )
+          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) plac%time_adding( 25 ) = plac%time_adding( 25 ) + ( time(17) - time(16) )
      
-          CALL fft_com( dfft, remswitch, work_buffer, 1 )
+          CALL fft_com( plac, remswitch, work_buffer, 1 )
 
           IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(18) )
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 26 ) = dfft%time_adding( 26 ) + ( time(18) - time(17) )
+          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) plac%time_adding( 26 ) = plac%time_adding( 26 ) + ( time(18) - time(17) )
 
           !$  locks_com_fw( parai%node_me+1, counter ) = .false.
           !$omp flush( locks_com_fw )
@@ -1138,9 +1138,9 @@ CONTAINS
           !$  END DO
 
           IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(20) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) dfft%time_adding( 27 ) = dfft%time_adding( 27 ) + ( time(20) - time(19) )
+          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 27 ) = plac%time_adding( 27 ) + ( time(20) - time(19) )
   
-          CALL fwfft_z_section( dfft, f_inout1(:,work_buffer), f_inout2, counter, batch_size, remswitch, mythread, dfft%nsw )
+          CALL fwfft_z_section( plac, f_inout1(:,work_buffer), f_inout2, counter, batch_size, remswitch, mythread, plac%nsw )
 
           IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) THEN
              !$  IF( cntl%krwfn ) THEN
@@ -1164,11 +1164,11 @@ CONTAINS
   
   END SUBROUTINE fftpw_batch
 
-  SUBROUTINE fftpw( isign, dfft, f, ngs, nr1s, ir1s, nss )
+  SUBROUTINE fftpw( isign, plac, f, ngs, nr1s, ir1s, nss )
 
     IMPLICIT NONE
   
-    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac 
     INTEGER, INTENT(IN) :: isign, ngs
     COMPLEX(DP), TARGET, INTENT(INOUT) :: f(:)
     INTEGER, INTENT(IN) :: ir1s(:), nss(:), nr1s
@@ -1244,35 +1244,35 @@ CONTAINS
     IF( isign .eq. -1 ) THEN !!  invfft
 
 
-       CALL invfft_z_section( dfft, f, comm_send(:,1), comm_recv(:,1), 1, 1, mythread, nss )
+       CALL invfft_z_section( plac, f, comm_send(:,1), comm_recv(:,1), 1, 1, mythread, nss )
 
        !$OMP barrier
        !$OMP master
           CALL MPI_BARRIER( parai%allgrp, ierr )
-          IF( plac%do_comm(2) ) CALL fft_com( dfft, 1, 1, 2 )
+          IF( plac%do_comm(2) ) CALL fft_com( plac, 1, 1, 2 )
           CALL MPI_BARRIER( parai%allgrp, ierr )
        !$OMP end master
        !$OMP barrier
 
-       CALL invfft_y_section( dfft, f, comm_recv(:,1), aux, plac%map_acinv_pot, plac%map_acinv_pot, 1, 1, mythread, plac%nr1p )
+       CALL invfft_y_section( plac, f, comm_recv(:,1), aux, plac%map_acinv_pot, plac%map_acinv_pot, 1, 1, mythread, plac%nr1p )
 
-       CALL invfft_x_section( dfft, f, 1, mythread )
+       CALL invfft_x_section( plac, f, 1, mythread )
 
     ELSE !! fw fft
 
-       CALL fwfft_x_section( dfft, f, aux, 1, 1, mythread, plac%nr1p )
+       CALL fwfft_x_section( plac, f, aux, 1, 1, mythread, plac%nr1p )
 
-       CALL fwfft_y_section( dfft, aux, comm_send(:,1), comm_recv(:,1), plac%map_pcfw(:,2), 1, 1, 1, mythread, plac%nr1p, plac%nsp )
+       CALL fwfft_y_section( plac, aux, comm_send(:,1), comm_recv(:,1), plac%map_pcfw(:,2), 1, 1, 1, mythread, plac%nr1p, plac%nsp )
     
        !$OMP barrier
        !$OMP master
           CALL MPI_BARRIER( parai%allgrp, ierr )
-          IF( plac%do_comm(2) ) CALL fft_com( dfft, 1, 1, 2 )
+          IF( plac%do_comm(2) ) CALL fft_com( plac, 1, 1, 2 )
           CALL MPI_BARRIER( parai%allgrp, ierr )
        !$OMP end master
        !$OMP barrier
     
-       CALL fwfft_z_section( dfft, comm_recv(:,1), f, 1, 1, 1, mythread, plac%nsp, plac%tscale )
+       CALL fwfft_z_section( plac, comm_recv(:,1), f, 1, 1, 1, mythread, plac%nsp, plac%tscale )
     
     END IF
 

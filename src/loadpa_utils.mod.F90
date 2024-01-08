@@ -14,7 +14,6 @@ MODULE loadpa_utils
   USE fftpw_converting,                ONLY: Create_PwFFT_datastructure,&
                                              Prep_pwFFT_Wave,&
                                              Prep_pwFFT_Rho
-  USE fftpw_param,                     ONLY: DP
   USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE geq0mod,                         ONLY: geq0
   USE gvec,                            ONLY: epsg,&
@@ -52,6 +51,8 @@ MODULE loadpa_utils
 
   PUBLIC :: loadpa
   PUBLIC :: leadim
+
+  INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
 
 CONTAINS
 

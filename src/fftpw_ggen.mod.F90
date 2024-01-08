@@ -14,13 +14,14 @@ MODULE fftpw_ggen
   !  ... components onto the FFT grid(s) in reciprocal space
   !
    USE error_handling,                  ONLY: stopgm
-   USE fftpw_param
    USE mpi_f08
    USE fftpw_types,  ONLY : PW_fft_type_descriptor
    PRIVATE
    SAVE
 
    PUBLIC :: ggen_pw, fft_set_nl
+
+   INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
 
 !=----------------------------------------------------------------------=
 CONTAINS

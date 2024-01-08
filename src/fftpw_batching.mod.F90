@@ -4,8 +4,7 @@ MODULE fftpw_batching
 
   USE cppt,                                     ONLY: nzh_r,&
                                                       indz_r
-  USE fft,                                      ONLY: plac
-  USE fftpw_param
+  USE fft,                                      ONLY: FFT_TYPE_DESCRIPTOR
   USE fftpw_types,                              ONLY: PW_fft_type_descriptor
   USE kinds,                                    ONLY: real_8
   USE mltfft_utils,                             ONLY: mltfft_fftw,&
@@ -34,12 +33,15 @@ MODULE fftpw_batching
   PUBLIC :: fwfft_y_section
   PUBLIC :: fwfft_z_section
 
+  INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
+  REAL(DP), PARAMETER :: scal = 1.0
+
 CONTAINS
 
-SUBROUTINE Prepare_Psi( dfft, psi, aux, remswitch, mythread )
+SUBROUTINE Prepare_Psi( plac, psi, aux, remswitch, mythread )
   IMPLICIT NONE
 
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac
   INTEGER, INTENT(IN) :: remswitch, mythread
   COMPLEX(DP), INTENT(IN)  :: psi ( : , : )
   COMPLEX(DP), INTENT(OUT)  :: aux ( plac%nr3 , * ) !ns(parai%me+1)*z_group_size )
@@ -104,11 +106,11 @@ SUBROUTINE Prepare_Psi( dfft, psi, aux, remswitch, mythread )
 
 END SUBROUTINE Prepare_Psi
 
-SUBROUTINE fft_com( dfft, remswitch, work_buffer, which )
+SUBROUTINE fft_com( plac, remswitch, work_buffer, which )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN)                            :: remswitch, work_buffer, which
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT)    :: dfft
+  TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT)    :: plac 
 
   CHARACTER(*), PARAMETER :: procedureN = 'fft_com'
 
@@ -140,11 +142,11 @@ SUBROUTINE fft_com( dfft, remswitch, work_buffer, which )
 
 END SUBROUTINE fft_com
 
-SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, batch_size, remswitch, mythread, nss )
+SUBROUTINE invfft_z_section( plac, aux, comm_mem_send, comm_mem_recv, batch_size, remswitch, mythread, nss )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: batch_size, remswitch, mythread
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac
   COMPLEX(DP), INTENT(INOUT) :: comm_mem_send( * ), comm_mem_recv( * )
   COMPLEX(DP), INTENT(INOUT)  :: aux ( plac%nr3 , * ) !ns(parai%me+1)*z_group_size )
   INTEGER, INTENT(IN) :: nss(*)
@@ -229,11 +231,11 @@ SUBROUTINE invfft_z_section( dfft, aux, comm_mem_send, comm_mem_recv, batch_size
 
 END SUBROUTINE invfft_z_section 
 
-SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, counter, remswitch, mythread, my_nr1s )
+SUBROUTINE invfft_y_section( plac, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, counter, remswitch, mythread, my_nr1s )
   !$ USE omp_lib
   IMPLICIT NONE
 
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac
   INTEGER, INTENT(IN) :: remswitch, mythread, counter, my_nr1s
   COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
   COMPLEX(DP), INTENT(INOUT) :: aux ( plac%my_nr3p * plac%nr2 * plac%nr1 , * ) !y_group_size
@@ -356,11 +358,11 @@ SUBROUTINE invfft_y_section( dfft, aux, comm_mem_recv, aux2_r, map_acinv, map_ac
 
 END SUBROUTINE invfft_y_section
 
-SUBROUTINE invfft_x_section( dfft, aux, remswitch, mythread )
+SUBROUTINE invfft_x_section( plac, aux, remswitch, mythread )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: remswitch, mythread
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac
   COMPLEX(DP), INTENT(INOUT) :: aux( plac%nr1, * ) !plac%my_nr3p * plac%nr2 * x_group_size )
 
 !  INTEGER :: isub, isub4
@@ -397,10 +399,10 @@ SUBROUTINE invfft_x_section( dfft, aux, remswitch, mythread )
 
 END SUBROUTINE invfft_x_section
 
-SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, counter, remswitch, mythread, my_nr1s )
+SUBROUTINE fwfft_x_section( plac, aux_r, aux2, counter, remswitch, mythread, my_nr1s )
   IMPLICIT NONE
 
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac
   INTEGER, INTENT(IN) :: counter, remswitch, mythread, my_nr1s
   COMPLEX(DP), INTENT(INOUT)  :: aux_r( : ) !plac%my_nr3p * plac%nr2 * plac%nr1 , * ) !x_group_size )
   COMPLEX(DP), INTENT(INOUT) :: aux2( my_nr1s * plac%my_nr3p * plac%nr2 , * ) !x_group_size )
@@ -490,10 +492,10 @@ SUBROUTINE fwfft_x_section( dfft, aux_r, aux2, counter, remswitch, mythread, my_
 
 END SUBROUTINE fwfft_x_section
 
-SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, batch_size, counter, remswitch, mythread, my_nr1s, nss )
+SUBROUTINE fwfft_y_section( plac, aux, comm_mem_send, comm_mem_recv, map_pcfw, batch_size, counter, remswitch, mythread, my_nr1s, nss )
   IMPLICIT NONE
 
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac
   INTEGER, INTENT(IN) :: counter, batch_size, remswitch, mythread, my_nr1s
   COMPLEX(DP), INTENT(INOUT)  :: comm_mem_send( * )
   COMPLEX(DP), INTENT(INOUT)  :: comm_mem_recv( * )
@@ -589,41 +591,19 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, b
       
         !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, dfft%mpi_window( 2 ), ierr )
       
-        IF( parai%nnode .ne. 1 ) THEN
-      
-           DO m = 1, parai%node_nproc
-              i = parai%my_node*parai%node_nproc + m
-              offset = ( parai%node_me + (i-1)*parai%node_nproc ) * plac%small_chunks(plac%which) + parai%my_node*(batch_size-1) * plac%big_chunks(plac%which)
-              DO j = plac%thread_z_start( mythread+1, remswitch, i, plac%which ), plac%thread_z_end( mythread+1, remswitch, i, plac%which )
-                 jter = mod( j-1, nss( i ) ) 
-                 ibatch = ( (j-1) / nss( i ) )
-                 offset2 =  ibatch * plac%big_chunks(plac%which)
-                 DO k = 1, plac%my_nr3p
-                    comm_mem_recv( offset + offset2 + jter*plac%nr3px + k ) = &
-                    aux2( map_pcfw( (i-1)*plac%small_chunks(plac%which) + jter*plac%nr3px + k ), ibatch+1 )
-                 END DO
+        DO m = 1, parai%node_nproc
+           i = parai%my_node*parai%node_nproc + m
+           offset = ( parai%node_me + (i-1)*parai%node_nproc ) * plac%small_chunks(plac%which) + parai%my_node*(batch_size-1) * plac%big_chunks(plac%which)
+           DO j = plac%thread_z_start( mythread+1, remswitch, i, plac%which ), plac%thread_z_end( mythread+1, remswitch, i, plac%which )
+              jter = mod( j-1, nss( i ) ) 
+              ibatch = ( (j-1) / nss( i ) )
+              offset2 =  ibatch * plac%big_chunks(plac%which)
+              DO k = 1, plac%my_nr3p
+                 comm_mem_recv( offset + offset2 + jter*plac%nr3px + k ) = &
+                 aux2( map_pcfw( (i-1)*plac%small_chunks(plac%which) + jter*plac%nr3px + k ), ibatch+1 )
               END DO
            END DO
-      
-        END IF
-      
-        IF( parai%nnode .eq. 1 ) THEN
-      
-           DO m = 1, parai%node_nproc
-              i = parai%my_node*parai%node_nproc + m
-              offset = ( parai%node_me + (i-1)*parai%node_nproc ) * plac%small_chunks(plac%which) + parai%my_node*(batch_size-1) * plac%big_chunks(plac%which)
-              DO j = plac%thread_z_start( mythread+1, remswitch, i, plac%which ), plac%thread_z_end( mythread+1, remswitch, i, plac%which )
-                 jter = mod( j-1, nss( i ) ) 
-                 ibatch = ( (j-1) / nss( i ) )
-                 offset2 =  ibatch * plac%big_chunks(plac%which)
-                 DO k = 1, plac%my_nr3p
-                    comm_mem_recv( offset + offset2 + jter*plac%nr3px + k ) = &
-                    aux2( map_pcfw( (i-1)*plac%small_chunks(plac%which) + jter*plac%nr3px + k ), ibatch+1 )
-                 END DO
-              END DO
-           END DO
-      
-        END IF
+        END DO
       
         !CALL mpi_win_unlock_all( dfft%mpi_window( 2 ), ierr )
       
@@ -636,11 +616,11 @@ SUBROUTINE fwfft_y_section( dfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, b
       
 END SUBROUTINE fwfft_y_section
 
-SUBROUTINE fwfft_z_section( dfft, comm_mem_recv, aux, counter, batch_size, remswitch, mythread, nss, factor_in )
+SUBROUTINE fwfft_z_section( plac, comm_mem_recv, aux, counter, batch_size, remswitch, mythread, nss, factor_in )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: counter, batch_size, remswitch, mythread
-  TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac
   COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
   COMPLEX(DP), INTENT(INOUT)  :: aux ( plac%nr3 , * ) !ns(parai%me+1)*z_group_size )
   INTEGER, INTENT(IN) :: nss( * )
