@@ -29,9 +29,6 @@ MODULE fftprp_utils
   USE fftnew_utils,                    ONLY: addfftnset,&
                                              setfftn,&
                                              Make_inv_yzCOM_Maps
-  USE fftpw_base,                      ONLY: dfft
-  USE fftpw_converting,                ONLY: Create_PwFFT_datastructure
-  USE fftpw_ggen,                      ONLY: fft_set_nl
   USE isos,                            ONLY: isos1
   USE kinds,                           ONLY: real_8
   USE kpts,                            ONLY: tkpts
@@ -291,6 +288,8 @@ CONTAINS
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
     nn2=1
+    nzh = 0
+    indz = 0
     DO ig=1,ncpw%nhg
        ny1=inyh(1,ig)
        ny2=inyh(2,ig)
@@ -474,7 +473,6 @@ CONTAINS
        !if autotuning is requested, we use this batchsize to set fft_max_numbatches
        a2a_msgsize=a2a_msgsize*1024/(parai%nproc*16)
        fft_batchsize=FLOOR(REAL(a2a_msgsize,KIND=real_8)/REAL(lda,KIND=real_8))
-       IF( dfft%exact_batchsize ) fft_batchsize = dfft%given_batchsize
        fft_batchsize=MIN( fft_batchsize, nstate/4 )
        IF(fft_batchsize.LE.0) fft_batchsize=1
        fft_residual=MOD(fft_total,fft_batchsize)
@@ -989,7 +987,7 @@ CONTAINS
       
         INTEGER :: iproc, i, k, it, mc, m1, m2, i1
       
-        dfft%map_pcfw = 0
+        map_pcfw = 0
       
         DO iproc = 1, parai%nproc
            DO i = 1, nss( iproc )

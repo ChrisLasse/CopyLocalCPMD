@@ -61,7 +61,6 @@ MODULE fftmain_utils
                                              fwfft_z_section,&
                                              fwfft_y_section,&
                                              fwfft_x_section
-  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE kinds,                           ONLY: real_8,&
                                              int_8
   USE machine,                         ONLY: m_walltime
@@ -672,7 +671,7 @@ CONTAINS
        IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
-          CALL fftpw( isign, plac, f, plac%nhg, plac%nr1p, plac%ir1p, plac%nsp )
+          CALL fft_improved( isign, plac, f, plac%nhg, plac%nr1p, plac%ir1p, plac%nsp )
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -714,7 +713,7 @@ CONTAINS
        IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
-          CALL fftpw( isign, plac, f, plac%nhg, plac%nr1p, plac%ir1p, plac%nsp )
+          CALL fft_improved( isign, plac, f, plac%nhg, plac%nr1p, plac%ir1p, plac%nsp )
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -873,15 +872,15 @@ CONTAINS
     END IF
   
     IF( step .eq. 1 ) THEN
-       CALL fftpw_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fft_improved_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 2 ) THEN                                          
-       CALL fftpw_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer )
+       CALL fft_improved_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer )
     ELSE IF( step .eq. 3 ) THEN                                       
-       CALL fftpw_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fft_improved_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 4 ) THEN                                       
-       CALL fftpw_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fft_improved_batch( plac, -1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     END IF
 
@@ -913,15 +912,15 @@ CONTAINS
     END IF
   
     IF( step .eq. 1 ) THEN
-       CALL fftpw_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fft_improved_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 2 ) THEN
-       CALL fftpw_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fft_improved_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     ELSE IF( step .eq. 3 ) THEN
-       CALL fftpw_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer )
+       CALL fft_improved_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer )
     ELSE IF( step .eq. 4 ) THEN
-       CALL fftpw_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
+       CALL fft_improved_batch( plac, 1, step, batch_size, remswitch, mythread, counter, work_buffer, &
                             f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
     END IF
 
@@ -933,7 +932,7 @@ CONTAINS
   
   END SUBROUTINE fwfft_batch
 
-  SUBROUTINE fftpw_batch( plac, isign, step, batch_size, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+  SUBROUTINE fft_improved_batch( plac, isign, step, batch_size, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
     IMPLICIT NONE
   
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: plac
@@ -943,7 +942,7 @@ CONTAINS
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout2(:,:)
     COMPLEX(DP), OPTIONAL, INTENT(INOUT) :: f_inout3(:,:)
 
-    CHARACTER(*), PARAMETER :: procedureN = 'fftpw_batch'
+    CHARACTER(*), PARAMETER :: procedureN = 'fft_improved_batch'
   
     INTEGER :: current, isub, isub4
     INTEGER(INT64) :: time(20)
@@ -1144,9 +1143,9 @@ CONTAINS
        IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
     END IF
   
-  END SUBROUTINE fftpw_batch
+  END SUBROUTINE fft_improved_batch
 
-  SUBROUTINE fftpw( isign, plac, f, ngs, nr1s, ir1s, nss )
+  SUBROUTINE fft_improved( isign, plac, f, ngs, nr1s, ir1s, nss )
 
     IMPLICIT NONE
   
@@ -1274,6 +1273,6 @@ CONTAINS
 
     CALL tihalt(procedureN,isub)
  
-  END SUBROUTINE fftpw
+  END SUBROUTINE fft_improved
 
 END MODULE fftmain_utils
