@@ -81,7 +81,7 @@ MODULE vpsi_utils
                                              Make_Manual_Maps,&
                                              Make_inv_yzCOM_Maps
   USE fftpw_base,                      ONLY: wfn_real
-  USE fftpw_batching,                  ONLY: locks_omp,&
+  USE fftutil_utils,                   ONLY: locks_omp,&
                                              Prepare_Psi
   USE geq0mod,                         ONLY: geq0
   USE kinds,                           ONLY: real_8,&
