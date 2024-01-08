@@ -24,7 +24,6 @@ MODULE fftnew_utils
   USE fft_maxfft,                      ONLY: maxfft,&
                                              maxfftn
   USE fftchk_utils,                    ONLY: fftchk
-  USE fftpw_base,                      ONLY: dfft
   USE kinds,                           ONLY: real_8
   USE loadpa_utils,                    ONLY: leadim
   USE mp_interface,                    ONLY: mp_bcast,&

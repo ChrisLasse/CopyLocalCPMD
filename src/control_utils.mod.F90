@@ -28,7 +28,6 @@ MODULE control_utils
                                              maxbetap,&
                                              maxtrot
   USE fft,                             ONLY: a2a_msgsize,batch_fft
-  USE fftpw_base,                      ONLY: dfft
   USE g_loc,                           ONLY: gloc_list,&
                                              glocal,&
                                              gloci,&
@@ -3700,18 +3699,6 @@ CONTAINS
                 ELSE
                    cntl%overlapp_comm_comp=.TRUE.
                 ENDIF
-             ELSEIF ( keyword_contains(line,'NEW_FFT_TIMINGS_GENERAL') ) THEN
-                IF ( keyword_contains(line,'ON') ) THEN
-                   dfft%fft_extra_timings_general=.TRUE.
-                ELSE
-                   dfft%fft_extra_timings_general=.FALSE.
-                ENDIF
-             ELSEIF ( keyword_contains(line,'NEW_FFT_TIMING') ) THEN
-                IF ( keyword_contains(line,'ON') ) THEN
-                   dfft%fft_timing=.TRUE.
-                ELSE
-                   dfft%fft_timing=.FALSE.
-                ENDIF
              ELSEIF ( keyword_contains(line,'BLOCKSIZE_USPP') ) THEN
                 READ(iunit,'(A)',iostat=ierr) line
                 CALL readsi(line,1,last,cnti%blocksize_uspp,erread)
@@ -3738,17 +3725,6 @@ CONTAINS
                 ELSE
                    cntl%use_elpa_autotune=.TRUE.
                 ENDIF
-
-             ELSEIF ( keyword_contains(line,'EXACT_BATCHSIZE') ) THEN
-                IF ( keyword_contains(line,'OFF') ) THEN
-                   dfft%exact_batchsize=.FALSE.
-                ELSE
-                   dfft%exact_batchsize=.TRUE.
-                   READ(iunit,'(A)',iostat=ierr) line
-                   CALL readsi(line,1,last,dfft%given_batchsize,erread)
-                ENDIF
-
-
              ELSEIF ( keyword_contains(line,'USE_BATCHFFT') ) THEN
                 IF ( keyword_contains(line,'OFF') ) THEN
                    batch_fft=.FALSE.

@@ -7,14 +7,8 @@ MODULE loadpa_utils
                                              dist_entity
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
-  USE fftpw_base,                      ONLY: dfft,&
-                                             dfftp
   USE fft,                             ONLY: plac,&
                                              FFT_TYPE_DESCRIPTOR
-  USE fftpw_converting,                ONLY: Create_PwFFT_datastructure,&
-                                             Prep_pwFFT_Wave,&
-                                             Prep_pwFFT_Rho
-  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE geq0mod,                         ONLY: geq0
   USE gvec,                            ONLY: epsg,&
                                              epsgx,&
@@ -223,22 +217,6 @@ CONTAINS
     ncpw%ngw=MIN(ncpw%ngw,spar%ngws)
     ncpw%ngw=MAX(ncpw%ngw,100)
 
-    dfftp%what = 1
-    dfft%what  = 2
-
-    CALL Create_PwFFT_datastructure( dfft, "wave" )
-
-    CALL Create_PwFFT_datastructure( dfftp, "rho" )
-
-
-!    ixray = dfft%pw_ixray
-!    ihray = dfft%pw_ihray
-!    ncpw%nhg = dfft%ngm
-!    ncpw%ngw = dfft%ngw
-
-    CALL Prep_pwFFT_Wave( dfft )
-    CALL Prep_pwFFT_Rho( dfftp )
-
     ALLOCATE(hg(ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
@@ -248,18 +226,11 @@ CONTAINS
     ALLOCATE(inyh(3,ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(dfftp%g_cpmd(3,ncpw%nhg),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-         __LINE__,__FILE__)
-    ALLOCATE(dfft%g_cpmd(3,ncpw%nhg),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
-         __LINE__,__FILE__)
     ALLOCATE(mapgp(ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
     CALL zeroing(hg)!,nhg)
     CALL zeroing(inyh)!,3*nhg)
-    CALL zeroing(dfft%g_cpmd)!,3*nhg)
     CALL zeroing(mapgp)!,nhg)
     ! ==--------------------------------------------------------------==
     ! SYSTEM PARAMETER PER CPU
@@ -378,18 +349,6 @@ CONTAINS
     parap%sparm(9,parai%mepos)=parai%ngrays
     CALL my_allgather_i(parap%sparm,SIZE(parap%sparm,1),parai%allgrp)
 
-    IF (paral%io_parent) THEN
-       WRITE(6,'(A,A)') '  NCPU     NGW',&
-            '     NHG  PLANES  GXRAYS  HXRAYS ORBITALS Z-PLANES'
-       DO i=0,parai%nproc-1
-          iorb=parap%nst12(i,2)-parap%nst12(i,1)+1
-          izpl=parap%nrzpl(i,2)-parap%nrzpl(i,1)+1
-          WRITE(6,'(I6,8I8)') i,parap%sparm(3,i),parap%sparm(1,i),parap%sparm(5,i),&
-               parap%sparm(9,i),parap%sparm(8,i),iorb,izpL,dfft%nr3p(i+1)
-          ! IF(SPARM(3,I).LE.0) CALL stopgm(procedureN,
-          ! *            'NGW .LE. 0')
-       ENDDO
-    ENDIF
     ! ==--------------------------------------------------------------==
     ! DEALLOCATE DATA ARRAYS
     ! ==--------------------------------------------------------------==
@@ -439,9 +398,6 @@ CONTAINS
     ! LEADING DIMENSIONS OF REAL SPACE ARRAYS
     ! ==--------------------------------------------------------------==
     CALL leadim(parm%nr1,parm%nr2,parm%nr3,fpar%kr1,fpar%kr2,fpar%kr3)
-
-    fpar%kr1 = dfft%nr3p( dfft%mype+1 )
-
     fpar%nnr1=fpar%kr1*fpar%kr2s*fpar%kr3s
     DEALLOCATE(thread_buff,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
@@ -504,6 +460,21 @@ CONTAINS
     ALLOCATE( plac%time_adding( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
+
+    fpar%kr1 = plac%nr3p( parai%me+1 )
+
+    IF (paral%io_parent) THEN
+       WRITE(6,'(A,A)') '  NCPU     NGW',&
+            '     NHG  PLANES  GXRAYS  HXRAYS ORBITALS Z-PLANES'
+       DO i=0,parai%nproc-1
+          iorb=parap%nst12(i,2)-parap%nst12(i,1)+1
+          izpl=parap%nrzpl(i,2)-parap%nrzpl(i,1)+1
+          WRITE(6,'(I6,8I8)') i,parap%sparm(3,i),parap%sparm(1,i),parap%sparm(5,i),&
+               parap%sparm(9,i),parap%sparm(8,i),iorb,izpL,plac%nr3p(i+1)
+          ! IF(SPARM(3,I).LE.0) CALL stopgm(procedureN,
+          ! *            'NGW .LE. 0')
+       ENDDO
+    ENDIF
 
     ! ==--------------------------------------------------------------==
     CALL tihalt(procedureN,isub)
