@@ -165,7 +165,7 @@ MODULE vpsi_utils
   PUBLIC :: vpsi
   PUBLIC :: vpsi_batchfft
   PUBLIC :: vpsimt
-  PUBLIC :: vpsi_pw_batchfft
+  PUBLIC :: vpsi_batchfft_improved
   PUBLIC :: Pre_fft_setup
   !public :: movepsid
 
@@ -1938,7 +1938,7 @@ CONTAINS
   END SUBROUTINE Apply_V
 
   ! ==================================================================
-  SUBROUTINE vpsi_pw_batchfft(c0,c2,f,vpot,psi,nstate,ikind,ispin,redist_c2)
+  SUBROUTINE vpsi_batchfft_improved(c0,c2,f,vpot,psi,nstate,ikind,ispin,redist_c2)
     ! ==================================================================
     ! == K-POINT AND NOT K-POINT VERSION OF VPSI.                     ==
     ! ==--------------------------------------------------------------==
@@ -2532,7 +2532,7 @@ CONTAINS
 
     ! ==--------------------------------------------------------------==
     RETURN
-  END SUBROUTINE vpsi_pw_batchfft
+  END SUBROUTINE vpsi_batchfft_improved
   ! ==================================================================
 
   SUBROUTINE Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, spin, coef3, coef4 )

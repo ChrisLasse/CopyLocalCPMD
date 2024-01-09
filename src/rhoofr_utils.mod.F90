@@ -163,7 +163,7 @@ MODULE rhoofr_utils
 
   PUBLIC :: rhoofr
   PUBLIC :: rhoofr_batchfft
-  PUBLIC :: rhoofr_pw_batchfft
+  PUBLIC :: rhoofr_batchfft_improved
   !public :: movepsih
 
   INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
@@ -1313,7 +1313,7 @@ CONTAINS
   END SUBROUTINE copy
 
   ! ==================================================================
-  SUBROUTINE rhoofr_pw_batchfft(c0,rhoe,psi,nstate)
+  SUBROUTINE rhoofr_batchfft_improved(c0,rhoe,psi,nstate)
     ! ==--------------------------------------------------------------==
     ! ==                        COMPUTES                              ==
     ! ==  THE NORMALIZED ELECTRON DENSITY RHOE IN REAL SPACE          ==
@@ -1824,6 +1824,6 @@ CONTAINS
     END IF
     ! ==--------------------------------------------------------------==
     RETURN
-  END SUBROUTINE rhoofr_pw_batchfft
+  END SUBROUTINE rhoofr_batchfft_improved
 
 END MODULE rhoofr_utils
