@@ -27,7 +27,7 @@ MODULE control_utils
                                              fint5,&
                                              maxbetap,&
                                              maxtrot
-  USE fft,                             ONLY: a2a_msgsize,batch_fft
+  USE fft,                             ONLY: a2a_msgsize,batch_fft,tfft
   USE g_loc,                           ONLY: gloc_list,&
                                              glocal,&
                                              gloci,&
@@ -3698,6 +3698,17 @@ CONTAINS
                    cntl%overlapp_comm_comp=.FALSE.
                 ELSE
                    cntl%overlapp_comm_comp=.TRUE.
+                ENDIF
+             ELSEIF ( keyword_contains(line,'FFT_TIMING') ) THEN
+                IF ( keyword_contains(line,'OFF') ) THEN
+                   tfft%timing=.FALSE.
+                ELSE
+                   tfft%timing=.TRUE.
+                   IF ( keyword_contains(line,'SPECIFIC') ) THEN
+                      tfft%timing_specific=.TRUE.
+                   ELSE
+                      tfft%timing_specific=.FALSE.
+                   ENDIF
                 ENDIF
              ELSEIF ( keyword_contains(line,'BLOCKSIZE_USPP') ) THEN
                 READ(iunit,'(A)',iostat=ierr) line

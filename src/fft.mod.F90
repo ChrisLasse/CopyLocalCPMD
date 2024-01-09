@@ -159,6 +159,9 @@ MODULE fft
      LOGICAL :: do_comm( 2 )
      INTEGER :: comm_sendrecv(2,2)
 
+     LOGICAL :: timing
+     LOGICAL :: timing_specific
+
   END TYPE
   Type( FFT_TYPE_DESCRIPTOR ) :: tfft
 
