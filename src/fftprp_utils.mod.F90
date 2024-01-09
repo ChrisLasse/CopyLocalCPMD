@@ -24,7 +24,7 @@ MODULE fftprp_utils
        fftpool, kr1m, kr2max, kr2min, kr3max, kr3min, lmsqmax, lnzf, lnzs, &
        maxrpt, mg, ms, msp, mxy, mz, ngrm, nhrm, nr1m, nr3m, xf, yf,&
        batch_fft, a2a_msgsize, fft_batchsize, fft_numbatches, fft_residual, &
-       fft_total,  fft_tune_max_it, fft_tune_num_it, fft_time_total, fft_batchsizes, fft_min_numbatches, plac
+       fft_total,  fft_tune_max_it, fft_tune_num_it, fft_time_total, fft_batchsizes, fft_min_numbatches, tfft
   USE fft_maxfft,                      ONLY: maxfft
   USE fftnew_utils,                    ONLY: addfftnset,&
                                              setfftn,&
@@ -761,39 +761,39 @@ CONTAINS
     INTEGER :: ierr
   
     !Prepare_Psi
-    ALLOCATE( plac%prep_map( 6, plac%nsw( parai%me+1 ) ), STAT=ierr )
+    ALLOCATE( tfft%prep_map( 6, tfft%nsw( parai%me+1 ) ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
        __LINE__,__FILE__)
-    CALL Make_PrepPsi_Maps( plac%prep_map, plac%nr3, plac%nsw(parai%me+1), plac%ngw )
+    CALL Make_PrepPsi_Maps( tfft%prep_map, tfft%nr3, tfft%nsw(parai%me+1), tfft%ngw )
 
     !Scatter_xy
-    ALLOCATE( plac%map_scatter_inv( fpar%nnr1, 2 ), STAT=ierr )
+    ALLOCATE( tfft%map_scatter_inv( fpar%nnr1, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
        __LINE__,__FILE__)
-    ALLOCATE( plac%map_scatter_fw ( fpar%nnr1, 2 ), STAT=ierr )
+    ALLOCATE( tfft%map_scatter_fw ( fpar%nnr1, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
        __LINE__,__FILE__)
-    CALL Make_scatter_Map( plac%map_scatter_inv(:,1), plac%map_scatter_fw(:,1), plac%zero_scatter_start(1), plac%zero_scatter_end(1), plac%nr1w, plac%indw )
-    CALL Make_scatter_Map( plac%map_scatter_inv(:,2), plac%map_scatter_fw(:,2), plac%zero_scatter_start(2), plac%zero_scatter_end(2), plac%nr1p, plac%indp )
+    CALL Make_scatter_Map( tfft%map_scatter_inv(:,1), tfft%map_scatter_fw(:,1), tfft%zero_scatter_start(1), tfft%zero_scatter_end(1), tfft%nr1w, tfft%indw )
+    CALL Make_scatter_Map( tfft%map_scatter_inv(:,2), tfft%map_scatter_fw(:,2), tfft%zero_scatter_start(2), tfft%zero_scatter_end(2), tfft%nr1p, tfft%indp )
 
     !FW_Pre_Com
-    ALLOCATE( plac%map_pcfw( plac%nr3px * parai%nproc * MAXVAL( plac%nsp ), 2 ), STAT=ierr )
+    ALLOCATE( tfft%map_pcfw( tfft%nr3px * parai%nproc * MAXVAL( tfft%nsp ), 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
        __LINE__,__FILE__)
-    CALL Make_fw_yzCOM_Map( plac%map_pcfw(:,1), plac%ir1w, plac%nsw, plac%small_chunks(1), plac%nr1w )
-    CALL Make_fw_yzCOM_Map( plac%map_pcfw(:,2), plac%ir1p, plac%nsp, plac%small_chunks(2), plac%nr1p )
+    CALL Make_fw_yzCOM_Map( tfft%map_pcfw(:,1), tfft%ir1w, tfft%nsw, tfft%small_chunks(1), tfft%nr1w )
+    CALL Make_fw_yzCOM_Map( tfft%map_pcfw(:,2), tfft%ir1p, tfft%nsp, tfft%small_chunks(2), tfft%nr1p )
 
     !INV_After_Com
-    ALLOCATE( plac%zero_acinv_start( plac%nr1p, 2 ), STAT=ierr ) 
+    ALLOCATE( tfft%zero_acinv_start( tfft%nr1p, 2 ), STAT=ierr ) 
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
        __LINE__,__FILE__)
-    ALLOCATE( plac%zero_acinv_end( plac%nr1p, 2 ), STAT=ierr ) 
+    ALLOCATE( tfft%zero_acinv_end( tfft%nr1p, 2 ), STAT=ierr ) 
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
        __LINE__,__FILE__)
-    ALLOCATE( plac%map_acinv_pot( plac%my_nr3p * plac%nr1p * plac%nr2 ), STAT=ierr )
+    ALLOCATE( tfft%map_acinv_pot( tfft%my_nr3p * tfft%nr1p * tfft%nr2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
        __LINE__,__FILE__)
-    CALL Make_inv_yzCOM_Maps( plac, plac%map_acinv_pot, 1, plac%ir1p, plac%nsp, plac%nr1p, plac%small_chunks(2), plac%big_chunks(2), plac%zero_acinv_start(:,2), plac%zero_acinv_end(:,2) )
+    CALL Make_inv_yzCOM_Maps( tfft, tfft%map_acinv_pot, 1, tfft%ir1p, tfft%nsp, tfft%nr1p, tfft%small_chunks(2), tfft%big_chunks(2), tfft%zero_acinv_start(:,2), tfft%zero_acinv_end(:,2) )
 
     CONTAINS
   
@@ -918,35 +918,35 @@ CONTAINS
         IMPLICIT NONE
       
         INTEGER, INTENT(IN)  :: nr1s
-        INTEGER, INTENT(IN)  :: inds( plac%nr1 )
+        INTEGER, INTENT(IN)  :: inds( tfft%nr1 )
         INTEGER, INTENT(OUT) :: map_scatter_inv(:), map_scatter_fw(:)
         INTEGER, INTENT(OUT) :: zero_scatter_start, zero_scatter_end
       
         INTEGER :: ncpx, sendsize, it, m3, i1, m1, icompact, iproc2, i, j, l
         LOGICAL :: first
       
-        ncpx = nr1s * plac%my_nr3p       ! maximum number of Y columns to be disributed
-        sendsize = ncpx * plac%nr2       ! dimension of the scattered chunks (safe value)
+        ncpx = nr1s * tfft%my_nr3p       ! maximum number of Y columns to be disributed
+        sendsize = ncpx * tfft%nr2       ! dimension of the scattered chunks (safe value)
       
         map_scatter_inv = 0
       
         !$omp parallel do private(it,m3,i1,m1,icompact)
         DO i = 0, ncpx-1
-           it = plac%nr2 * i
+           it = tfft%nr2 * i
            m3 = i/nr1s+1
            i1 = mod(i,nr1s)+1
            m1 = inds(i1)
-           icompact = m1 + (m3-1)*plac%nr1*plac%nr2
-           DO j = 1, plac%nr2
+           icompact = m1 + (m3-1)*tfft%nr1*tfft%nr2
+           DO j = 1, tfft%nr2
               map_scatter_inv( icompact ) = j + it
-              icompact = icompact + plac%nr1
+              icompact = icompact + tfft%nr1
            ENDDO
         ENDDO
         !$omp end parallel do
       
         first = .true.
         
-        do l = 1, plac%nr1
+        do l = 1, tfft%nr1
         
            IF( map_scatter_inv( l ) .eqv. .true. ) THEN
               IF( first .eqv. .false. ) THEN
@@ -964,14 +964,14 @@ CONTAINS
       
         !$omp parallel do private(it,m3,i1,m1,icompact)
         DO i = 0, ncpx-1
-           it = plac%nr2 * i
+           it = tfft%nr2 * i
            m3 = i/nr1s+1
            i1 = mod(i,nr1s)+1
            m1 = inds(i1)
-           icompact = m1 + (m3-1)*plac%nr1*plac%nr2
-           DO j = 1, plac%nr2
+           icompact = m1 + (m3-1)*tfft%nr1*tfft%nr2
+           DO j = 1, tfft%nr2
               map_scatter_fw( j + it ) = icompact 
-              icompact = icompact + plac%nr1
+              icompact = icompact + tfft%nr1
            ENDDO
         ENDDO
         !$omp end parallel do
@@ -991,14 +991,14 @@ CONTAINS
       
         DO iproc = 1, parai%nproc
            DO i = 1, nss( iproc )
-              it = ( iproc - 1 ) * small_chunks + plac%nr3px * (i-1)
-              mc = plac%ismap( i + plac%iss( iproc ) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
-              m1 = mod(mc-1,plac%nr1) + 1
-              m2 = (mc-1)/plac%nr1 + 1
-              i1 = m2 + ( ir1s( m1 ) - 1 ) * plac%nr2
-              DO k = 1, plac%my_nr3p
+              it = ( iproc - 1 ) * small_chunks + tfft%nr3px * (i-1)
+              mc = tfft%ismap( i + tfft%iss( iproc ) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
+              m1 = mod(mc-1,tfft%nr1) + 1
+              m2 = (mc-1)/tfft%nr1 + 1
+              i1 = m2 + ( ir1s( m1 ) - 1 ) * tfft%nr2
+              DO k = 1, tfft%my_nr3p
                  map_pcfw( k + it ) = i1
-                 i1 = i1 + plac%nr2 * my_nr1s
+                 i1 = i1 + tfft%nr2 * my_nr1s
               ENDDO
            ENDDO
         ENDDO

@@ -7,7 +7,7 @@ MODULE loadpa_utils
                                              dist_entity
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
-  USE fft,                             ONLY: plac,&
+  USE fft,                             ONLY: tfft,&
                                              FFT_TYPE_DESCRIPTOR
   USE geq0mod,                         ONLY: geq0
   USE gvec,                            ONLY: epsg,&
@@ -153,41 +153,41 @@ CONTAINS
     CALL dist_entity2(crge%n,parai%nproc,parap%nst12,nblocal=norbpe,iloc=parai%me)
     ! ==--------------------------------------------------------------==
 
-    ALLOCATE(plac%nr3_ranges(0:parai%nproc-1,2),STAT=ierr)
+    ALLOCATE(tfft%nr3_ranges(0:parai%nproc-1,2),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%stownW(fpar%kr1s,fpar%kr2s),STAT=ierr)
+    ALLOCATE(tfft%stownW(fpar%kr1s,fpar%kr2s),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%stownP(fpar%kr1s,fpar%kr2s),STAT=ierr)
+    ALLOCATE(tfft%stownP(fpar%kr1s,fpar%kr2s),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%indx_map(fpar%kr1s,fpar%kr2s),STAT=ierr)
+    ALLOCATE(tfft%indx_map(fpar%kr1s,fpar%kr2s),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%indx(fpar%kr1s*fpar%kr2s),STAT=ierr)
+    ALLOCATE(tfft%indx(fpar%kr1s*fpar%kr2s),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%ind1(fpar%kr1s*fpar%kr2s),STAT=ierr)
+    ALLOCATE(tfft%ind1(fpar%kr1s*fpar%kr2s),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%ind2(fpar%kr1s*fpar%kr2s),STAT=ierr)
+    ALLOCATE(tfft%ind2(fpar%kr1s*fpar%kr2s),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
 
-    plac%indx_map = 0
-    plac%indx = 0
-    plac%ind1 = 0
-    plac%ind2 = 0
-    plac%nr1 = fpar%kr1s
-    plac%nr2 = fpar%kr2s
-    plac%nr3 = fpar%kr3s
+    tfft%indx_map = 0
+    tfft%indx = 0
+    tfft%ind1 = 0
+    tfft%ind2 = 0
+    tfft%nr1 = fpar%kr1s
+    tfft%nr2 = fpar%kr2s
+    tfft%nr3 = fpar%kr3s
 
     ! ==--------------------------------------------------------------==
     ! DISTRIBUTE REAL SPACE XY-PLANES
     ! ==--------------------------------------------------------------==
 ! Currently not used, maybe activated again at a later time
-!    CALL dist_entity2(spar%nr3s,parai%nproc,plac%nr3_ranges)
+!    CALL dist_entity2(spar%nr3s,parai%nproc,tfft%nr3_ranges)
     CALL zeroing(parap%nrzpl)!,2*(maxcpu+1))
     IF (isos1%tclust.AND.isos3%ps_type.EQ.1) THEN      
        ! DISTRIBUTE REAL SPACE XY-PLANES
@@ -197,14 +197,14 @@ CONTAINS
     ! DISTRIBUTE G-VECTORS AND MARK ASSOCIATED RAYS
     ! ==--------------------------------------------------------------==
     CALL tiset(procedureN//'_c',isub4)
-    CALL zfft(plac%stownW,gcutwmax)
-    CALL zfft(plac%stownP,gvec_com%gcut)
+    CALL zfft(tfft%stownW,gcutwmax)
+    CALL zfft(tfft%stownP,gvec_com%gcut)
 
-    CALL Distribute_Sticks( fpar%kr1s, fpar%kr2s, plac%stownW )
-    CALL Distribute_Sticks( fpar%kr1s, fpar%kr2s, plac%stownP, plac%stownW )
+    CALL Distribute_Sticks( fpar%kr1s, fpar%kr2s, tfft%stownW )
+    CALL Distribute_Sticks( fpar%kr1s, fpar%kr2s, tfft%stownP, tfft%stownW )
 
-    CALL czfft(plac%stownW,gcutwmax)
-    CALL czfft(plac%stownP,gvec_com%gcut)
+    CALL czfft(tfft%stownW,gcutwmax)
+    CALL czfft(tfft%stownP,gvec_com%gcut)
 
     CALL tihalt(procedureN//'_c',isub4)
     ! ==--------------------------------------------------------------==
@@ -274,7 +274,7 @@ CONTAINS
                 in3=nh3+k
                 IF (compare_lt(g2,gcutwmax)) THEN
 !                IF (g2.LT.gcutwmax) THEN
-                   icpu=plac%stownW(in1,in2)
+                   icpu=tfft%stownW(in1,in2)
                    IF (-icpu.EQ.parai%mepos+1) THEN
                       ncpw%ngw=ncpw%ngw+1
                    ENDIF
@@ -282,7 +282,7 @@ CONTAINS
                 ELSE
                    sign=1._real_8
                 ENDIF
-                icpu=plac%stownP(in1,in2)
+                icpu=tfft%stownP(in1,in2)
                 IF (-icpu.EQ.parai%mepos+1) THEN
                    ncpw%nhg=ncpw%nhg+1
                    ! HG(NHG)=G2+SQRT(real(IG-1,kind=real_8))*EPSG*SIGN
@@ -298,16 +298,16 @@ CONTAINS
        ENDDO
     ENDDO
 
-    plac%nhg = ncpw%nhg
-    plac%ngw = ncpw%ngw
+    tfft%nhg = ncpw%nhg
+    tfft%ngw = ncpw%ngw
 
     CALL zeroing(mgpa)!,kr2s*kr3s)
     parai%nhrays=0
     parai%ngrays=0
     DO j1=1,fpar%kr1s
        DO j2=1,fpar%kr2s
-          IF (plac%stownP(j2,j1).EQ.-(parai%mepos+1)) parai%nhrays=parai%nhrays+1
-          IF (plac%stownW(j2,j1).EQ.-(parai%mepos+1)) THEN
+          IF (tfft%stownP(j2,j1).EQ.-(parai%mepos+1)) parai%nhrays=parai%nhrays+1
+          IF (tfft%stownW(j2,j1).EQ.-(parai%mepos+1)) THEN
              parai%ngrays=parai%ngrays+1
              mgpa(j2,j1)=parai%ngrays
           ENDIF
@@ -316,7 +316,7 @@ CONTAINS
     img=parai%ngrays
     DO j1=1,fpar%kr1s
        DO j2=1,fpar%kr2s
-          IF (plac%stownP(j2,j1).EQ.-(parai%mepos+1).AND.mgpa(j2,j1).EQ.0) THEN
+          IF (tfft%stownP(j2,j1).EQ.-(parai%mepos+1).AND.mgpa(j2,j1).EQ.0) THEN
              img=img+1
              mgpa(j2,j1)=img
           ENDIF
@@ -409,59 +409,59 @@ CONTAINS
     parai%nnode = parai%nproc / parai%node_nproc
     parai%my_node = parai%me / parai%node_nproc
 
-    ALLOCATE( plac%thread_z_sticks( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_z_sticks( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_z_start( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_z_start( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_z_end( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_z_end( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_y_sticks( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_y_sticks( parai%ncpus, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_y_start( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_y_start( parai%ncpus, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_y_end( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_y_end( parai%ncpus, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_x_sticks( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_x_sticks( parai%ncpus, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_x_start( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_x_start( parai%ncpus, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_x_end( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_x_end( parai%ncpus, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_ngms( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_ngms( parai%ncpus ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_ngms_start( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_ngms_start( parai%ncpus ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_ngms_end( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_ngms_end( parai%ncpus ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_rspace( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_rspace( parai%ncpus ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_rspace_start( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_rspace_start( parai%ncpus ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( plac%thread_rspace_end( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_rspace_end( parai%ncpus ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
   
     CALL SetupArrays()
 
-    ALLOCATE( plac%time_adding( 100 ), STAT=ierr )
+    ALLOCATE( tfft%time_adding( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
 
-    fpar%kr1 = plac%nr3p( parai%me+1 )
+    fpar%kr1 = tfft%nr3p( parai%me+1 )
 
     IF (paral%io_parent) THEN
        WRITE(6,'(A,A)') '  NCPU     NGW',&
@@ -470,7 +470,7 @@ CONTAINS
           iorb=parap%nst12(i,2)-parap%nst12(i,1)+1
           izpl=parap%nrzpl(i,2)-parap%nrzpl(i,1)+1
           WRITE(6,'(I6,8I8)') i,parap%sparm(3,i),parap%sparm(1,i),parap%sparm(5,i),&
-               parap%sparm(9,i),parap%sparm(8,i),iorb,izpL,plac%nr3p(i+1)
+               parap%sparm(9,i),parap%sparm(8,i),iorb,izpL,tfft%nr3p(i+1)
           ! IF(SPARM(3,I).LE.0) CALL stopgm(procedureN,
           ! *            'NGW .LE. 0')
        ENDDO
@@ -907,30 +907,30 @@ CONTAINS
           ENDDO
        ENDDO
 
-       plac%npst = plac%nwst
-       k = plac%nwst
+       tfft%npst = tfft%nwst
+       k = tfft%nwst
        DO ifa = 1, n2
           i = MOD( m2 + ifa - 1 - 1, n2 ) + 1
           DO jfa = 1, n1
              j = MOD( m1 + jfa - 1 - 1, n1 ) + 1
              IF( stown( j, i ) .gt. 0 ) THEN
-                plac%npst = plac%npst + 1
-                plac%indx_map( j, i ) = plac%npst
+                tfft%npst = tfft%npst + 1
+                tfft%indx_map( j, i ) = tfft%npst
              END IF
           ENDDO
        ENDDO
 
     ELSE
 
-       plac%nwst = 0
+       tfft%nwst = 0
        k = 0
        DO ifa = 1, n2
           i = MOD( m2 + ifa - 1 - 1, n2 ) + 1
           DO jfa = 1, n1
              j = MOD( m1 + jfa - 1 - 1, n1 ) + 1
              IF( stown( j, i ) .gt. 0 ) THEN
-                plac%nwst = plac%nwst + 1
-                plac%indx_map( j, i ) = plac%nwst
+                tfft%nwst = tfft%nwst + 1
+                tfft%indx_map( j, i ) = tfft%nwst
              END IF
           ENDDO
        ENDDO
@@ -968,9 +968,9 @@ CONTAINS
           stown( indx1, indx2 ) = - c_proc
           ngv(c_proc) = ngv(c_proc) + highest
           nst(c_proc) = nst(c_proc) + 1
-          plac%indx( k ) = plac%indx_map( indx1, indx2 )
-          plac%ind1( plac%indx( k ) ) = indx1
-          plac%ind2( plac%indx( k ) ) = indx2
+          tfft%indx( k ) = tfft%indx_map( indx1, indx2 )
+          tfft%ind1( tfft%indx( k ) ) = indx1
+          tfft%ind2( tfft%indx( k ) ) = indx2
        ELSE
           finished = .true.
        END IF
@@ -1104,119 +1104,119 @@ CONTAINS
 
     INTEGER                                     :: ierr, i, istick, i1, i2, ix, iy, ixM, i1M, i2M, k, f, j, ifa, jfa
 
-    plac%which = 1
+    tfft%which = 1
 
-    ALLOCATE(plac%nr3p(parai%nproc),STAT=ierr)
+    ALLOCATE(tfft%nr3p(parai%nproc),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%nr3p_offset(parai%nproc),STAT=ierr)
+    ALLOCATE(tfft%nr3p_offset(parai%nproc),STAT=ierr)
 
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
 
 ! Currently not used, maybe activated again at a later time
 !    DO i = 1, parai%nproc
-!       plac%nr3p(i) = plac%nr3_ranges( i-1, 2 ) - plac%nr3_ranges( i-1, 1 ) + 1
+!       tfft%nr3p(i) = tfft%nr3_ranges( i-1, 2 ) - tfft%nr3_ranges( i-1, 1 ) + 1
 !       IF( i .eq. 1 ) THEN
-!          plac%nr3p_offset(i) = 0
+!          tfft%nr3p_offset(i) = 0
 !       ELSE
-!          plac%nr3p_offset(i) = plac%nr3p_offset(i-1) + plac%nr3p(i-1)
+!          tfft%nr3p_offset(i) = tfft%nr3p_offset(i-1) + tfft%nr3p(i-1)
 !       END IF
 !    ENDDO
-!    plac%my_nr3p = plac%nr3p( parai%me+1 )
+!    tfft%my_nr3p = tfft%nr3p( parai%me+1 )
 
-    plac%nr3p = 0
-    plac%nr3p_offset = 0
+    tfft%nr3p = 0
+    tfft%nr3p_offset = 0
     j = 0
-    DO i = 1, plac%nr3
+    DO i = 1, tfft%nr3
        j = mod( j, parai%nproc ) + 1
-       plac%nr3p( j ) = plac%nr3p( j ) + 1
+       tfft%nr3p( j ) = tfft%nr3p( j ) + 1
     ENDDO
     DO i = 1, parai%nproc
        IF( i .eq. 1 ) THEN
-          plac%nr3p_offset(i) = 0
+          tfft%nr3p_offset(i) = 0
        ELSE
-          plac%nr3p_offset(i) = plac%nr3p_offset(i-1) + plac%nr3p(i-1)
+          tfft%nr3p_offset(i) = tfft%nr3p_offset(i-1) + tfft%nr3p(i-1)
        END IF
     ENDDO
-    plac%my_nr3p = plac%nr3p( parai%me+1 )
-    plac%nr3px   = MAXVAL ( plac%nr3p )
+    tfft%my_nr3p = tfft%nr3p( parai%me+1 )
+    tfft%nr3px   = MAXVAL ( tfft%nr3p )
 
-    ALLOCATE(plac%ir1w(plac%nr1),STAT=ierr)
+    ALLOCATE(tfft%ir1w(tfft%nr1),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%ir1p(plac%nr1),STAT=ierr)
+    ALLOCATE(tfft%ir1p(tfft%nr1),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%indw(plac%nr1),STAT=ierr)
+    ALLOCATE(tfft%indw(tfft%nr1),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%indp(plac%nr1),STAT=ierr)
+    ALLOCATE(tfft%indp(tfft%nr1),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%nsw(parai%nproc),STAT=ierr)
+    ALLOCATE(tfft%nsw(parai%nproc),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(plac%nsp(parai%nproc),STAT=ierr)
+    ALLOCATE(tfft%nsp(parai%nproc),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
 
-    plac%nsw = 0
-    plac%nsp = 0
-    plac%ir1w = 0
-    plac%ir1p = 0
-    plac%nr1w = 0
-    plac%nr1p = 0
-    DO i = 1, plac%npst
-       istick = plac%indx( i )
-       i1 = plac%ind1( istick )
-       i2 = plac%ind2( istick )
+    tfft%nsw = 0
+    tfft%nsp = 0
+    tfft%ir1w = 0
+    tfft%ir1p = 0
+    tfft%nr1w = 0
+    tfft%nr1p = 0
+    DO i = 1, tfft%npst
+       istick = tfft%indx( i )
+       i1 = tfft%ind1( istick )
+       i2 = tfft%ind2( istick )
 
-       ix = i1 - ( plac%nr1 / 2 )
-!       IF( ix .lt. 1 ) ix = ix + plac%nr1
-!       iy = i2 - ( plac%nr2 / 2 )
-!       IF( iy .lt. 1 ) iy = iy + plac%nr2
+       ix = i1 - ( tfft%nr1 / 2 )
+!       IF( ix .lt. 1 ) ix = ix + tfft%nr1
+!       iy = i2 - ( tfft%nr2 / 2 )
+!       IF( iy .lt. 1 ) iy = iy + tfft%nr2
 
-       IF( plac%stownP( i1, i2 ) .ne. 0 ) THEN
+       IF( tfft%stownP( i1, i2 ) .ne. 0 ) THEN
 
-          IF( plac%stownW( i1, i2 ) .ne. 0 ) THEN
+          IF( tfft%stownW( i1, i2 ) .ne. 0 ) THEN
    
-             IF( plac%ir1w( ix ) .eq. 0 ) THEN
-                plac%ir1w(ix) = -1
-                plac%ir1p(ix) = -1
+             IF( tfft%ir1w( ix ) .eq. 0 ) THEN
+                tfft%ir1w(ix) = -1
+                tfft%ir1p(ix) = -1
              END IF
-             plac%nsw( - plac%stownW( i1, i2 ) ) = plac%nsw( - plac%stownW( i1, i2 ) ) + 1
-             plac%nsp( - plac%stownW( i1, i2 ) ) = plac%nsp( - plac%stownW( i1, i2 ) ) + 1
+             tfft%nsw( - tfft%stownW( i1, i2 ) ) = tfft%nsw( - tfft%stownW( i1, i2 ) ) + 1
+             tfft%nsp( - tfft%stownW( i1, i2 ) ) = tfft%nsp( - tfft%stownW( i1, i2 ) ) + 1
 
           ELSE
 
-             IF( plac%ir1p( ix ) .eq. 0 ) THEN
-                plac%ir1p(ix) = -1
+             IF( tfft%ir1p( ix ) .eq. 0 ) THEN
+                tfft%ir1p(ix) = -1
              END IF
-             plac%nsp( - plac%stownP( i1, i2 ) ) = plac%nsp( - plac%stownP( i1, i2 ) ) + 1
+             tfft%nsp( - tfft%stownP( i1, i2 ) ) = tfft%nsp( - tfft%stownP( i1, i2 ) ) + 1
    
           END IF
 
 
-          i1M = 2 * ( plac%nr1 / 2 ) + 2 - i1
-          i2M = 2 * ( plac%nr2 / 2 ) + 2 - i2
+          i1M = 2 * ( tfft%nr1 / 2 ) + 2 - i1
+          i2M = 2 * ( tfft%nr2 / 2 ) + 2 - i2
           IF( i1M .eq. i1 .and. i2M .eq. i2 ) CYCLE
-          ixM = i1M - ( plac%nr1 / 2 ) + plac%nr1
-          IF( plac%stownW( i1M , i2M ) .ne. 0 ) THEN
+          ixM = i1M - ( tfft%nr1 / 2 ) + tfft%nr1
+          IF( tfft%stownW( i1M , i2M ) .ne. 0 ) THEN
    
-             IF( plac%ir1w( ixM ) .eq. 0 ) THEN
-                plac%ir1w(ixM) = -1
-                plac%ir1p(ixM) = -1
+             IF( tfft%ir1w( ixM ) .eq. 0 ) THEN
+                tfft%ir1w(ixM) = -1
+                tfft%ir1p(ixM) = -1
              END IF
-             plac%nsw( - plac%stownW( i1M, i2M ) ) = plac%nsw( - plac%stownW( i1M, i2M ) ) + 1
-             plac%nsp( - plac%stownW( i1M, i2M ) ) = plac%nsp( - plac%stownW( i1M, i2M ) ) + 1
+             tfft%nsw( - tfft%stownW( i1M, i2M ) ) = tfft%nsw( - tfft%stownW( i1M, i2M ) ) + 1
+             tfft%nsp( - tfft%stownW( i1M, i2M ) ) = tfft%nsp( - tfft%stownW( i1M, i2M ) ) + 1
 
           ELSE
 
-             IF( plac%ir1p( ixM ) .eq. 0 ) THEN
-                plac%ir1p(ixM) = -1
+             IF( tfft%ir1p( ixM ) .eq. 0 ) THEN
+                tfft%ir1p(ixM) = -1
              END IF
-             plac%nsp( - plac%stownP( i1M, i2M ) ) = plac%nsp( - plac%stownP( i1M, i2M ) ) + 1
+             tfft%nsp( - tfft%stownP( i1M, i2M ) ) = tfft%nsp( - tfft%stownP( i1M, i2M ) ) + 1
    
           END IF
 
@@ -1225,81 +1225,81 @@ CONTAINS
 
     ENDDO
 
-    DO i = 1, plac%nr1
+    DO i = 1, tfft%nr1
      
-       IF( plac%ir1w( i ) .lt. 0 ) THEN
-          plac%nr1w = plac%nr1w + 1
-          plac%ir1w( i ) = plac%nr1w
-          plac%ir1p( i ) = plac%nr1w
-          plac%indw( plac%nr1w ) = i
-          plac%indp( plac%nr1w ) = i
+       IF( tfft%ir1w( i ) .lt. 0 ) THEN
+          tfft%nr1w = tfft%nr1w + 1
+          tfft%ir1w( i ) = tfft%nr1w
+          tfft%ir1p( i ) = tfft%nr1w
+          tfft%indw( tfft%nr1w ) = i
+          tfft%indp( tfft%nr1w ) = i
        END IF
 
     ENDDO
-    plac%nr1p = plac%nr1w
-    DO i = 1, plac%nr1
+    tfft%nr1p = tfft%nr1w
+    DO i = 1, tfft%nr1
      
-       IF( plac%ir1p( i ) .lt. 0 ) THEN
-          plac%nr1p = plac%nr1p + 1
-          plac%ir1p( i ) = plac%nr1p
-          plac%indp( plac%nr1p ) = i
+       IF( tfft%ir1p( i ) .lt. 0 ) THEN
+          tfft%nr1p = tfft%nr1p + 1
+          tfft%ir1p( i ) = tfft%nr1p
+          tfft%indp( tfft%nr1p ) = i
        END IF
 
     ENDDO
 
 
-    ALLOCATE(plac%iss(parai%nproc),STAT=ierr)
+    ALLOCATE(tfft%iss(parai%nproc),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
 
     DO i = 1, parai%nproc
       IF( i .eq. 1 ) THEN
-        plac%iss( i ) = 0
+        tfft%iss( i ) = 0
       ELSE
-        plac%iss( i ) = plac%iss( i - 1 ) + plac%nsp( i - 1 )
+        tfft%iss( i ) = tfft%iss( i - 1 ) + tfft%nsp( i - 1 )
       ENDIF
     ENDDO
 
 
-    ALLOCATE(plac%ismap(plac%nr1*plac%nr2),STAT=ierr)
+    ALLOCATE(tfft%ismap(tfft%nr1*tfft%nr2),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
 
-    plac%ismap = 0
-    plac%nsp = 0
+    tfft%ismap = 0
+    tfft%nsp = 0
     k = 0
     f = 0
-    DO ifa = 1, plac%nr2
-       i = MOD( ( plac%nr2 / 2 ) + 1 + ifa - 1 - 1, plac%nr2 ) + 1
-       DO jfa = 1, plac%nr1
-          j = MOD( ( plac%nr1 / 2 ) + 1 + jfa - 1 - 1, plac%nr1 ) + 1
+    DO ifa = 1, tfft%nr2
+       i = MOD( ( tfft%nr2 / 2 ) + 1 + ifa - 1 - 1, tfft%nr2 ) + 1
+       DO jfa = 1, tfft%nr1
+          j = MOD( ( tfft%nr1 / 2 ) + 1 + jfa - 1 - 1, tfft%nr1 ) + 1
           f = f + 1
-          IF( plac%stownW( j, i ) .lt. 0 ) THEN
-             plac%nsp( - plac%stownW( j, i ) ) = plac%nsp( - plac%stownW( j, i ) ) + 1
-             plac%ismap( plac%nsp( - plac%stownW( j, i ) ) + plac%iss( - plac%stownW( j, i ) ) ) = f
+          IF( tfft%stownW( j, i ) .lt. 0 ) THEN
+             tfft%nsp( - tfft%stownW( j, i ) ) = tfft%nsp( - tfft%stownW( j, i ) ) + 1
+             tfft%ismap( tfft%nsp( - tfft%stownW( j, i ) ) + tfft%iss( - tfft%stownW( j, i ) ) ) = f
           END IF
        ENDDO
     ENDDO
 
     k = 0
     f = 0
-    DO ifa = 1, plac%nr2
-       i = MOD( ( plac%nr2 / 2 ) + 1 + ifa - 1 - 1, plac%nr2 ) + 1
-       DO jfa = 1, plac%nr1
-          j = MOD( ( plac%nr1 / 2 ) + 1 + jfa - 1 - 1, plac%nr1 ) + 1
+    DO ifa = 1, tfft%nr2
+       i = MOD( ( tfft%nr2 / 2 ) + 1 + ifa - 1 - 1, tfft%nr2 ) + 1
+       DO jfa = 1, tfft%nr1
+          j = MOD( ( tfft%nr1 / 2 ) + 1 + jfa - 1 - 1, tfft%nr1 ) + 1
           f = f + 1
-          IF( plac%stownW( j, i ) .eq. 0 .and. plac%stownP( j, i ) .lt. 0 ) THEN
-             plac%nsp( - plac%stownP( j, i ) ) = plac%nsp( - plac%stownP( j, i ) ) + 1
-             plac%ismap( plac%nsp( - plac%stownP( j, i ) ) + plac%iss( - plac%stownP( j, i ) ) ) = f
+          IF( tfft%stownW( j, i ) .eq. 0 .and. tfft%stownP( j, i ) .lt. 0 ) THEN
+             tfft%nsp( - tfft%stownP( j, i ) ) = tfft%nsp( - tfft%stownP( j, i ) ) + 1
+             tfft%ismap( tfft%nsp( - tfft%stownP( j, i ) ) + tfft%iss( - tfft%stownP( j, i ) ) ) = f
           END IF
        ENDDO
     ENDDO
 
-    plac%small_chunks(1) = plac%nr3px * MAXVAL( plac%nsw )
-    plac%small_chunks(2) = plac%nr3px * MAXVAL( plac%nsp )
-    plac%big_chunks(1)   = plac%small_chunks(1) * parai%node_nproc * parai%node_nproc
-    plac%big_chunks(2)   = plac%small_chunks(2) * parai%node_nproc * parai%node_nproc
-    plac%tscale = 1.0d0 / dble( plac%nr1 * plac%nr2 * plac%nr3 )
+    tfft%small_chunks(1) = tfft%nr3px * MAXVAL( tfft%nsw )
+    tfft%small_chunks(2) = tfft%nr3px * MAXVAL( tfft%nsp )
+    tfft%big_chunks(1)   = tfft%small_chunks(1) * parai%node_nproc * parai%node_nproc
+    tfft%big_chunks(2)   = tfft%small_chunks(2) * parai%node_nproc * parai%node_nproc
+    tfft%tscale = 1.0d0 / dble( tfft%nr1 * tfft%nr2 * tfft%nr3 )
 
   END SUBROUTINE SetupArrays
 

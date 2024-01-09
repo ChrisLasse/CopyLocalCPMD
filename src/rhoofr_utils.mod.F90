@@ -61,7 +61,7 @@ MODULE rhoofr_utils
                                              NZFS,&
                                              INZS,&
                                              locks_inv,&
-                                             plac,&
+                                             tfft,&
                                              fft_buffsize
   USE fftmain_utils,                   ONLY: fwfftn,&
                                              invfftn,&
@@ -1434,7 +1434,7 @@ CONTAINS
     CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, ispin, coef3, coef4 )
   
     locks_calc_inv = .true.
-    IF( plac%do_comm(1) ) THEN
+    IF( tfft%do_comm(1) ) THEN
        locks_com_inv( parai%node_me+1, : ) = .true.
     ELSE
        locks_com_inv( parai%node_me+1, : ) = .false.
@@ -1446,15 +1446,15 @@ CONTAINS
     ENDDO
     locks_sing_1   = .true.
     locks_omp   = .true.
-    IF( cntl%overlapp_comm_comp .and. plac%do_comm(1) ) locks_omp( 1, :, : ) = .false.
+    IF( cntl%overlapp_comm_comp .and. tfft%do_comm(1) ) locks_omp( 1, :, : ) = .false.
 
 !    write(6,*) fft_batchsize, fft_residual
 
     CALL MPI_BARRIER(parai%allgrp, ierr)
 
-    il_aux_array(1) = plac%nr1w * plac%my_nr3p * plac%nr2
+    il_aux_array(1) = tfft%nr1w * tfft%my_nr3p * tfft%nr2
     il_aux_array(2) = fft_batchsize
-    il_psi_nors (1) = plac%my_nr3p * plac%nr2 * plac%nr1
+    il_psi_nors (1) = tfft%my_nr3p * tfft%nr2 * tfft%nr1
     il_psi_nors (2) = (nstate/2)+1
 
 #ifdef _USE_SCRATCHLIBRARY
@@ -1496,7 +1496,7 @@ CONTAINS
 
     !Loop over batches
     DO ibatch=1,fft_numbatches+2
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           IF(ibatch.LE.fft_numbatches+1)THEN
              IF(ibatch.LE.fft_numbatches)THEN
@@ -1509,7 +1509,7 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 counter(1) = counter(1) + 1
                 ! Loop over the electronic states of this batch
-                CALL Prepare_Psi( plac, c0( :, 1+(counter(1)-1)*fft_batchsize*2 : bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread )
+                CALL Prepare_Psi( tfft, c0( :, 1+(counter(1)-1)*fft_batchsize*2 : bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread )
 !                ! ==--------------------------------------------------------------==
 !                ! ==  Fourier transform the wave functions to real space.         ==
 !                ! ==  In the array PSI was used also the fact that the wave       ==
@@ -1525,11 +1525,11 @@ CONTAINS
 !                ! ==  to swap                                                     ==
 !                ! ==--------------------------------------------------------------==
                 swap=mod(ibatch,fft_buffsize)+1
-                CALL invfft_batch( plac, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
+                CALL invfft_batch( tfft, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
              END IF
           END IF
        END IF
-       IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN !.and. parai%node_me .eq. 0 ) THEN
+       IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. tfft%do_comm(1) ) THEN !.and. parai%node_me .eq. 0 ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           !communication phase
           IF(ibatch.LE.fft_numbatches+1)THEN
@@ -1543,7 +1543,7 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch,fft_buffsize)+1
                 counter(2) = counter(2) + 1
-                CALL invfft_batch( plac, 2, bsize, remswitch, mythread, counter(2), swap )
+                CALL invfft_batch( tfft, 2, bsize, remswitch, mythread, counter(2), swap )
              END IF
           END IF
        END IF
@@ -1556,7 +1556,7 @@ CONTAINS
           !$omp flush( locks_sing_1 )
           !$  END DO
        END IF
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
           !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
           IF(ibatch.GT.start_loop.AND.ibatch.LE.end_loop)THEN
              IF (ibatch-start_loop.LE.fft_numbatches)THEN
@@ -1571,9 +1571,9 @@ CONTAINS
                 counter(3) = counter(3) + 1
                 start = (1+((counter(3)-1)*fft_batchsize))
                 ending = (1+(counter(3)-1)*fft_batchsize)+bsize-1
-                CALL invfft_batch( plac, 3, bsize, remswitch, mythread, counter(3), swap, &
+                CALL invfft_batch( tfft, 3, bsize, remswitch, mythread, counter(3), swap, &
                                    f_inout1=psi_work( : , start : ending ), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
-                CALL invfft_batch( plac, 4, bsize, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : ending ) )
+                CALL invfft_batch( tfft, 4, bsize, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : ending ) )
 
                 ! Compute the charge density from the wave functions
                 ! in real space
@@ -1599,7 +1599,7 @@ CONTAINS
                       coef4(count)=crge%f(is2,1)*inv_omega
                    END IF
                 END DO
-                CALL build_density_sum_Man( plac, coef3, coef4, psi_work( : , start : ending ), rhoe, bsize, mythread, ispin, clsd%nlsd )
+                CALL build_density_sum_Man( tfft, coef3, coef4, psi_work( : , start : ending ), rhoe, bsize, mythread, ispin, clsd%nlsd )
 
 !                !some extra loop in case of lse
 !                IF (lspin2%tlse) THEN

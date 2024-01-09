@@ -160,7 +160,7 @@ MODULE fft
      INTEGER :: comm_sendrecv(2,2)
 
   END TYPE
-  Type( FFT_TYPE_DESCRIPTOR ) :: plac
+  Type( FFT_TYPE_DESCRIPTOR ) :: tfft
 
 END MODULE fft
 

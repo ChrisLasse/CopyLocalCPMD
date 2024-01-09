@@ -57,7 +57,7 @@ MODULE vpsi_utils
                                              yf,&
                                              locks_inv,&
                                              locks_fw,&
-                                             plac,&
+                                             tfft,&
                                              fft_buffsize
   USE fftmain_utils,                   ONLY: fwfftn,&
                                              invfftn,&
@@ -1830,7 +1830,7 @@ CONTAINS
     INTEGER, INTENT(IN) :: batch_size, mythread, counter, njump, nostat
     COMPLEX(DP), INTENT(IN), OPTIONAL :: c0( : , : )
     COMPLEX(DP), INTENT(INOUT) :: c2( : , : )
-    COMPLEX(DP), INTENT(IN)  :: psi( plac%nr3 * plac%nsw(parai%me+1), * ) !z_group_size )
+    COMPLEX(DP), INTENT(IN)  :: psi( tfft%nr3 * tfft%nsw(parai%me+1), * ) !z_group_size )
     REAL(real_8), INTENT(IN)                 :: f( : )
   
     COMPLEX(DP) :: fp, fm
@@ -1856,7 +1856,7 @@ CONTAINS
     !$  END DO
   
     IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 28 ) = plac%time_adding( 28 ) + ( time(2) - time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 28 ) = tfft%time_adding( 28 ) + ( time(2) - time(1) )
   !------------------------------------------------------
   !--------Accumulate_Psi Start--------------------------
 
@@ -1877,9 +1877,9 @@ CONTAINS
        IF (fip1.EQ.0._real_8.AND..NOT.cntl%tksham) fip1=1._real_8
        IF (fip1.EQ.0._real_8.AND.cntl%tksham) fip1=0.5_real_8
   
-       DO j = plac%thread_ngms_start( mythread+1 ), plac%thread_ngms_end( mythread+1 )
-          fp = ( psi( nzh(j), ibatch ) + psi( indz(j), ibatch ) ) * (- plac%tscale )
-          fm = ( psi( nzh(j), ibatch ) - psi( indz(j), ibatch ) ) * (- plac%tscale )
+       DO j = tfft%thread_ngms_start( mythread+1 ), tfft%thread_ngms_end( mythread+1 )
+          fp = ( psi( nzh(j), ibatch ) + psi( indz(j), ibatch ) ) * (- tfft%tscale )
+          fm = ( psi( nzh(j), ibatch ) - psi( indz(j), ibatch ) ) * (- tfft%tscale )
           c2 ( j, (2*ibatch)-1 ) = -fi * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
           c2 ( j, (2*ibatch)   ) = -fip1 * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch) ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
        END DO
@@ -1888,7 +1888,7 @@ CONTAINS
   !---------Accumulate_Psi End---------------------------
   !------------------------------------------------------
     IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 15 ) = plac%time_adding( 15 ) + ( time(3) - time(2) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 15 ) = tfft%time_adding( 15 ) + ( time(3) - time(2) )
   
     !$  locks_omp( mythread+1, counter, 5 ) = .false. 
     !$omp flush( locks_omp )
@@ -1897,7 +1897,7 @@ CONTAINS
     !$  END DO 
   
     IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 29 ) = plac%time_adding( 29 ) + ( time(4) - time(3) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 29 ) = tfft%time_adding( 29 ) + ( time(4) - time(3) )
   
   !  IF( cntl%fft_tune_batchsize ) THEN
   !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
@@ -1911,8 +1911,8 @@ CONTAINS
   SUBROUTINE Apply_V( f, v, spins, batch_size, mythread )
     IMPLICIT NONE
   
-    COMPLEX(DP), INTENT(INOUT) :: f( plac%my_nr3p * plac%nr2 * plac%nr1 , * ) !x_group_size
-    REAL(DP), INTENT(IN) :: v( plac%my_nr3p * plac%nr2 * plac%nr1 , * )
+    COMPLEX(DP), INTENT(INOUT) :: f( tfft%my_nr3p * tfft%nr2 * tfft%nr1 , * ) !x_group_size
+    REAL(DP), INTENT(IN) :: v( tfft%my_nr3p * tfft%nr2 * tfft%nr1 , * )
     INTEGER, INTENT(IN)  :: batch_size, mythread
     INTEGER, INTENT(IN)  :: spins(2,batch_size)
   
@@ -1925,7 +1925,7 @@ CONTAINS
   !-----------Apply V Start------------------------------
   
     DO ibatch = 1, batch_size
-       DO j = plac%thread_rspace_start( mythread+1 ), plac%thread_rspace_end( mythread+1 )
+       DO j = tfft%thread_rspace_start( mythread+1 ), tfft%thread_rspace_end( mythread+1 )
           f( j, ibatch )= - ( REAL( f( j, ibatch ) ) * v( j, spins(1,ibatch) ) + uimag * AIMAG( f( j, ibatch ) ) * v( j, spins(2,ibatch) ) )
        END DO
     END DO
@@ -1933,7 +1933,7 @@ CONTAINS
   !------------Apply V End-------------------------------
   !------------------------------------------------------
     IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) plac%time_adding( 8 ) = plac%time_adding( 8 ) + ( time(2) - time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 8 ) = tfft%time_adding( 8 ) + ( time(2) - time(1) )
   
   END SUBROUTINE Apply_V
 
@@ -2091,7 +2091,7 @@ CONTAINS
   
     locks_calc_inv = .true.
     locks_calc_fw  = .true.
-    IF( plac%do_comm(1) ) THEN
+    IF( tfft%do_comm(1) ) THEN
        locks_com_inv( parai%node_me+1, : ) = .true.
        locks_com_fw ( parai%node_me+1, : ) = .true.
     ELSE
@@ -2113,11 +2113,11 @@ CONTAINS
     locks_sing_1   = .true.
     locks_sing_2   = .true.
     locks_omp   = .true.
-    IF( cntl%overlapp_comm_comp .and. plac%do_comm(1) ) locks_omp( 1, :, : ) = .false.
+    IF( cntl%overlapp_comm_comp .and. tfft%do_comm(1) ) locks_omp( 1, :, : ) = .false.
 
-    il_aux_array(1) = plac%nr1w * plac%my_nr3p * plac%nr2
+    il_aux_array(1) = tfft%nr1w * tfft%my_nr3p * tfft%nr2
     il_aux_array(2) = fft_batchsize
-    il_rs_array(1)  = plac%nr1 * plac%my_nr3p * plac%nr2
+    il_rs_array(1)  = tfft%nr1 * tfft%my_nr3p * tfft%nr2
     il_rs_array(2)  = fft_batchsize
 
 #ifdef _USE_SCRATCHLIBRARY
@@ -2142,7 +2142,7 @@ CONTAINS
 
     CALL MPI_BARRIER(parai%allgrp, ierr)
 
-    plac%time_adding=0
+    tfft%time_adding=0
     CALL SYSTEM_CLOCK( count_rate = cr )
     IF(.NOT.rsactive) rs_wave=>rs_array(:,1:1)
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
@@ -2157,7 +2157,7 @@ CONTAINS
     !Loop over batches
     DO ibatch=1,fft_numbatches+3
        IF(.NOT.rsactive)THEN
-          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
+          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              IF(ibatch.LE.fft_numbatches+1)THEN
                 IF(ibatch.LE.fft_numbatches)THEN
@@ -2170,7 +2170,7 @@ CONTAINS
                 IF(bsize.NE.0)THEN
                    counter(1) = counter(1) + 1
                    ! Loop over the electronic states of this batch
-                   CALL Prepare_Psi( plac, c0( :, 1+(counter(1)-1)*fft_batchsize*2 : bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread )
+                   CALL Prepare_Psi( tfft, c0( :, 1+(counter(1)-1)*fft_batchsize*2 : bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread )
                    ! ==--------------------------------------------------------------==
                    ! ==  Fourier transform the wave functions to real space.         ==
                    ! ==  In the array PSI was used also the fact that the wave       ==
@@ -2186,11 +2186,11 @@ CONTAINS
                    ! ==  to swap                                                     ==
                    ! ==--------------------------------------------------------------==
                    swap=mod(ibatch,fft_buffsize)+1
-                   CALL invfft_batch( plac, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
+                   CALL invfft_batch( tfft, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
                 END IF
              END IF
           END IF
-          IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN ! .and. parai%node_me .eq. 0 ) THEN
+          IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. tfft%do_comm(1) ) THEN ! .and. parai%node_me .eq. 0 ) THEN
              !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
              !communication phase
              IF(ibatch.LE.fft_numbatches+1)THEN
@@ -2204,7 +2204,7 @@ CONTAINS
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch,fft_buffsize)+1
                    counter(2) = counter(2) + 1
-                   CALL invfft_batch( plac, 2, bsize, remswitch, mythread, counter(2), swap )
+                   CALL invfft_batch( tfft, 2, bsize, remswitch, mythread, counter(2), swap )
                 END IF
              END IF
           END IF
@@ -2217,7 +2217,7 @@ CONTAINS
              !$omp flush( locks_sing_1 )
              !$  END DO
           END IF
-          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
+          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
              !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
              !data related to ibatch-1!
 !             IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
@@ -2232,9 +2232,9 @@ CONTAINS
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop1,fft_buffsize)+1
                    counter(3) = counter(3) + 1
-                   CALL invfft_batch( plac, 3, bsize, remswitch, mythread, counter(3), swap, &
+                   CALL invfft_batch( tfft, 3, bsize, remswitch, mythread, counter(3), swap, &
                                       f_inout1=rs_wave(:,1:1), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
-                   CALL invfft_batch( plac, 4, bsize, remswitch, mythread, counter(3), swap, f_inout1=rs_wave(:,1:1) )
+                   CALL invfft_batch( tfft, 4, bsize, remswitch, mythread, counter(3), swap, f_inout1=rs_wave(:,1:1) )
                 END IF
              END IF
           END IF
@@ -2242,7 +2242,7 @@ CONTAINS
        ! ==------------------------------------------------------------==
        ! == Apply the potential (V), which acts in real space.         ==
 
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
 !          IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
@@ -2297,13 +2297,13 @@ CONTAINS
              ! == Back transform to reciprocal space the product V.PSI       ==
              ! ==------------------------------------------------------------==
                  counter(4) = counter(4) + 1
-                 CALL fwfft_batch( plac, 1, bsize, remswitch, mythread, counter(4), swap, f_inout1=rs_wave, f_inout2=aux_array( : , 1 : 1 ) )
-                 CALL fwfft_batch( plac, 2, bsize, remswitch, mythread, counter(4), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv )
+                 CALL fwfft_batch( tfft, 1, bsize, remswitch, mythread, counter(4), swap, f_inout1=rs_wave, f_inout2=aux_array( : , 1 : 1 ) )
+                 CALL fwfft_batch( tfft, 2, bsize, remswitch, mythread, counter(4), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv )
                  i_start2=i_start2+bsize*njump
              END IF
           END IF
        END IF
-       IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. plac%do_comm(1) ) THEN !.and. parai%node_me .eq. 0 ) THEN
+       IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. tfft%do_comm(1) ) THEN !.and. parai%node_me .eq. 0 ) THEN
 !       IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
           IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
              IF(ibatch-start_loop1.LE.fft_numbatches)THEN
@@ -2316,7 +2316,7 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop1,fft_buffsize)+1
                 counter(5) = counter(5) + 1
-                CALL fwfft_batch( plac, 3, bsize, remswitch, mythread, counter(5), swap )
+                CALL fwfft_batch( tfft, 3, bsize, remswitch, mythread, counter(5), swap )
              END IF
           END IF
        END IF
@@ -2329,7 +2329,7 @@ CONTAINS
           !$omp flush( locks_sing_2 )
           !$  END DO
        END IF
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. plac%do_comm(1) ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
 !          IF(ibatch.GE.3.AND.ibatch.LE.fft_numbatches+3)THEN
           IF(ibatch.GT.start_loop2.AND.ibatch.LE.end_loop2)THEN
 !             IF(ibatch-2.LE.fft_numbatches)THEN
@@ -2343,7 +2343,7 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop2,fft_buffsize)+1
                 counter(6) = counter(6) + 1
-                CALL fwfft_batch( plac, 4, bsize, remswitch, mythread, counter(6), swap, f_inout1=comm_recv, f_inout2=aux_array )
+                CALL fwfft_batch( tfft, 4, bsize, remswitch, mythread, counter(6), swap, f_inout1=comm_recv, f_inout2=aux_array )
                 CALL calc_c2_pw( aux_array, c2(:, 1+(counter(6)-1)*fft_batchsize*2 : bsize*2+(counter(6)-1)*fft_batchsize*2), &
                                      c0(:, 1+(counter(6)-1)*fft_batchsize*2 : bsize*2+(counter(6)-1)*fft_batchsize*2 ), f, mythread, bsize, counter(6), njump, nostat )
              END IF
@@ -2354,10 +2354,10 @@ CONTAINS
     !$omp end parallel
 
     CALL SYSTEM_CLOCK( time(2) )
-    plac%time_adding( 30 ) = time(2) - time(1)
+    tfft%time_adding( 30 ) = time(2) - time(1)
 
     DO i = 1, 30
-       timer( i ) = REAL( plac%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
+       timer( i ) = REAL( tfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
     ENDDO
 
     IF( .false. .and. parai%me .eq. 0 ) THEN
@@ -2562,19 +2562,19 @@ CONTAINS
        IF( cntl%krwfn ) fft_buffsize = 2
        IF( .not. ( cntl%overlapp_comm_comp .and. fft_numbatches .gt. 1 ) ) fft_buffsize = 1
      
-       IF( ALLOCATED( plac%map_acinv_wave ) )        DEALLOCATE( plac%map_acinv_wave )
-       ALLOCATE( plac%map_acinv_wave( plac%my_nr3p * plac%nr1w * plac%nr2 * fft_batchsize ) )
-       CALL Make_inv_yzCOM_Maps( plac, plac%map_acinv_wave, fft_batchsize, plac%ir1w, plac%nsw, plac%nr1w, plac%small_chunks(1), plac%big_chunks(1), plac%zero_acinv_start(:,1), plac%zero_acinv_end(:,1) ) 
+       IF( ALLOCATED( tfft%map_acinv_wave ) )        DEALLOCATE( tfft%map_acinv_wave )
+       ALLOCATE( tfft%map_acinv_wave( tfft%my_nr3p * tfft%nr1w * tfft%nr2 * fft_batchsize ) )
+       CALL Make_inv_yzCOM_Maps( tfft, tfft%map_acinv_wave, fft_batchsize, tfft%ir1w, tfft%nsw, tfft%nr1w, tfft%small_chunks(1), tfft%big_chunks(1), tfft%zero_acinv_start(:,1), tfft%zero_acinv_end(:,1) ) 
        
-       IF( ALLOCATED( plac%map_acinv_wave_rem ) )    DEALLOCATE( plac%map_acinv_wave_rem )
+       IF( ALLOCATED( tfft%map_acinv_wave_rem ) )    DEALLOCATE( tfft%map_acinv_wave_rem )
        IF( fft_residual .ne. 0 ) THEN
-          ALLOCATE( plac%map_acinv_wave_rem( plac%my_nr3p * plac%nr1w * plac%nr2 * fft_residual ) )
-          CALL Make_inv_yzCOM_Maps( plac, plac%map_acinv_wave_rem, fft_residual, plac%ir1w, plac%nsw, plac%nr1w, plac%small_chunks(1), plac%big_chunks(1) )
+          ALLOCATE( tfft%map_acinv_wave_rem( tfft%my_nr3p * tfft%nr1w * tfft%nr2 * fft_residual ) )
+          CALL Make_inv_yzCOM_Maps( tfft, tfft%map_acinv_wave_rem, fft_residual, tfft%ir1w, tfft%nsw, tfft%nr1w, tfft%small_chunks(1), tfft%big_chunks(1) )
        END IF   
        
-       sendsize     = MAXVAL( plac%nr3p ) * MAXVAL ( plac%nsw ) * parai%node_nproc * parai%node_nproc * fft_batchsize
-       sendsize_rem = MAXVAL( plac%nr3p ) * MAXVAL ( plac%nsw ) * parai%node_nproc * parai%node_nproc * fft_residual
-       sendsize_pot = MAXVAL( plac%nr3p ) * MAXVAL(  plac%nsp ) * parai%node_nproc * parai%node_nproc
+       sendsize     = MAXVAL( tfft%nr3p ) * MAXVAL ( tfft%nsw ) * parai%node_nproc * parai%node_nproc * fft_batchsize
+       sendsize_rem = MAXVAL( tfft%nr3p ) * MAXVAL ( tfft%nsw ) * parai%node_nproc * parai%node_nproc * fft_residual
+       sendsize_pot = MAXVAL( tfft%nr3p ) * MAXVAL(  tfft%nsp ) * parai%node_nproc * parai%node_nproc
        
        DO irun = 1, 2
 
@@ -2591,9 +2591,9 @@ CONTAINS
              comm_recv => Big_Com_Pointer(:,:,2) 
     
              CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, parai%nnode, parai%me, parai%my_node, parai%node_me, &
-                                parai%node_nproc, fft_buffsize, plac%comm_sendrecv(:,1), plac%do_comm(1), 1 )
+                                parai%node_nproc, fft_buffsize, tfft%comm_sendrecv(:,1), tfft%do_comm(1), 1 )
              CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, parai%nnode, parai%me, parai%my_node, parai%node_me, &
-                                parai%node_nproc, 1, plac%comm_sendrecv(:,2), plac%do_comm(2), 2 )
+                                parai%node_nproc, 1, tfft%comm_sendrecv(:,2), tfft%do_comm(2), 2 )
           END IF
 
           Com_in_locks = ( needed_size / REAL( ( parai%node_nproc * ( ( nstate / fft_batchsize ) + 1 ) ) / 4.0 ) ) + 1
@@ -2636,7 +2636,7 @@ CONTAINS
        IF( allocated( locks_omp ) ) DEALLOCATE( locks_omp )
        ALLOCATE( locks_omp( parai%ncpus, fft_numbatches+3, 20 ) )
      
-       CALL Make_Manual_Maps( plac, fft_batchsize, fft_residual, plac%nsw, plac%nr1w, plac%ngw, plac%which ) 
+       CALL Make_Manual_Maps( tfft, fft_batchsize, fft_residual, tfft%nsw, tfft%nr1w, tfft%ngw, tfft%which ) 
 
        first = .true.
 
