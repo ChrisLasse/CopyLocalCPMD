@@ -395,14 +395,6 @@ CONTAINS
        CALL prmem(procedureN)
     ENDIF
     ! ==--------------------------------------------------------------==
-    ! LEADING DIMENSIONS OF REAL SPACE ARRAYS
-    ! ==--------------------------------------------------------------==
-    CALL leadim(parm%nr1,parm%nr2,parm%nr3,fpar%kr1,fpar%kr2,fpar%kr3)
-    fpar%nnr1=fpar%kr1*fpar%kr2s*fpar%kr3s
-    DEALLOCATE(thread_buff,STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-         __LINE__,__FILE__)
-    ! ==--------------------------------------------------------------==
     ! SETUP ARRAYS NEEDED FOR IMPROVED FFT
     ! ==--------------------------------------------------------------==
 
@@ -461,7 +453,15 @@ CONTAINS
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
 
+    ! ==--------------------------------------------------------------==
+    ! LEADING DIMENSIONS OF REAL SPACE ARRAYS
+    ! ==--------------------------------------------------------------==
+    CALL leadim(parm%nr1,parm%nr2,parm%nr3,fpar%kr1,fpar%kr2,fpar%kr3)
     fpar%kr1 = tfft%nr3p( parai%me+1 )
+    fpar%nnr1=fpar%kr1*fpar%kr2s*fpar%kr3s
+    DEALLOCATE(thread_buff,STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
+         __LINE__,__FILE__)
 
     IF (paral%io_parent) THEN
        WRITE(6,'(A,A)') '  NCPU     NGW',&

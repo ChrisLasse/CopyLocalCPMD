@@ -1378,7 +1378,7 @@ CONTAINS
     COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: psi_nors (:,:)
 #endif
     INTEGER(int_8) :: il_aux_array(2)
-    INTEGER(int_8) :: il_psi_nors (2)
+    INTEGER(int_8) :: il_psi_both (2)
 
     IF(cntl%fft_tune_batchsize) THEN
        CALL tiset(procedureN//'_tuning',isub4)
@@ -1454,17 +1454,23 @@ CONTAINS
 
     il_aux_array(1) = tfft%nr1w * tfft%my_nr3p * tfft%nr2
     il_aux_array(2) = fft_batchsize
-    il_psi_nors (1) = tfft%my_nr3p * tfft%nr2 * tfft%nr1
-    il_psi_nors (2) = (nstate/2)+1
+    il_psi_both (1) = tfft%my_nr3p * tfft%nr2 * tfft%nr1
+    il_psi_both (2) = (nstate/2)+1
 
 #ifdef _USE_SCRATCHLIBRARY
     CALL request_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
          __LINE__,__FILE__)
     IF( .not. rsactive ) THEN
-       CALL request_scratch(il_psi_nors,psi_nors,procedureN//'psi_nors',ierr)
+       CALL request_scratch(il_psi_both,psi_nors,procedureN//'psi_nors',ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate psi_nors', &
             __LINE__,__FILE__)
+       psi_work => psi_nors
+    ELSE
+       CALL request_scratch(il_psi_both,wfn_r,'wfn_r',ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
+         __LINE__,__FILE__)
+       psi_work => wfn_r
     END IF
 #else
     ALLOCATE(aux_array(il_aux_array(1),il_aux_array(2)),STAT=ierr)
@@ -1476,12 +1482,6 @@ CONTAINS
             __LINE__,__FILE__)
     END IF
 #endif
-
-    IF( rsactive ) THEN
-       psi_work => wfn_r
-    ELSE
-       psi_work => psi_nors
-    END IF
 
     ! 
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
