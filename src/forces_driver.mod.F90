@@ -86,8 +86,7 @@ MODULE forces_driver
                                              zclean_k
   USE vpsi_utils,                      ONLY: vpsi,&
                                              vpsi_batchfft,&
-!                                             do_the_vpsi_thing,&
-                                             vpsi_pw_batchfft
+                                             vpsi_batchfft_improved
 !!use rotate_utils, only : rotate_c
 !!use ovlap_utils, only : ovlap_c
   USE zeroing_utils,                   ONLY: zeroing
@@ -352,7 +351,7 @@ CONTAINS
     DO ik=1,nkpoint
        IF(batch_fft.AND..NOT.tkpts%tkpnt)THEN
           CALL SYSTEM_CLOCK( time(1) )
-          CALL vpsi_pw_batchfft(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
+          CALL vpsi_batchfft_improved(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
                clsd%nlsd,redist_c2)
           CALL SYSTEM_CLOCK( time(2) )
           CALL SYSTEM_CLOCK( count_rate = cr )

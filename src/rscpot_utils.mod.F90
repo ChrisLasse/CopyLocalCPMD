@@ -24,8 +24,7 @@ MODULE rscpot_utils
   USE rhoofr_c_utils,                  ONLY: rhoofr_c
   USE rhoofr_utils,                    ONLY: rhoofr,&
                                              rhoofr_batchfft,&
-                                             rhoofr_pw_batchfft!,&
-!                                             do_the_rhoofr_thing
+                                             rhoofr_batchfft_improved
   USE rnlfor_utils,                    ONLY: rnlfor
   USE rnlrh_utils,                     ONLY: rnlrh
   USE ropt,                            ONLY: iteropt
@@ -118,11 +117,9 @@ CONTAINS
             .OR.(lqmmm%qmmm .AND. iqmmm%coupl_model.EQ.0)
        IF (dorho) THEN
           IF(batch_fft)THEN
-!             CALL rhoofr_batchfft(c0,rhoe,psi(:,1),nstate)
-             CALL rhoofr_pw_batchfft(c0,rhoe,psi(:,1),nstate)
+             CALL rhoofr_batchfft_improved(c0,rhoe,psi(:,1),nstate)
           ELSE
              CALL rhoofr(c0,rhoe,psi(:,1),nstate)
-!             CALL do_the_rhoofr_thing(c0,rhoe,psi(:,1),nstate)
           END IF
        ENDIF
     ENDIF
