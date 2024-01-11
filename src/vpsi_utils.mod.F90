@@ -2004,9 +2004,9 @@ CONTAINS
     INTEGER :: counter(6)
     INTEGER :: remswitch, mythread
     COMPLEX(DP), CONTIGUOUS, SAVE, POINTER :: rs_wave(:,:)
-    INTEGER :: start
+    INTEGER :: start, finish
     INTEGER, SAVE :: first_dim1, first_dim2, first_dim3
-    REAL(DP) :: timer(29)
+    REAL(DP) :: timer(30)
     INTEGER(INT64), SAVE :: cr
 
     INTEGER :: priv(10)
@@ -2256,8 +2256,9 @@ CONTAINS
              END IF
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop1,fft_buffsize)+1
-                start = 1+(ibatch-1)*fft_batchsize-start_loop1
-                IF(rsactive) rs_wave=>wfn_r(:,start:start)
+                start  = 1+(ibatch-1)*fft_batchsize
+                finish = bsize+(ibatch-1)*fft_batchsize
+                IF(rsactive) rs_wave=>wfn_r(:,start:finish)
                 
                 lspin=1
                 offset_state=i_start2
@@ -2276,7 +2277,7 @@ CONTAINS
                    END IF
                    !njump states per single fft
                 END DO
-                CALL Apply_V( rs_wave(:,1:1), vpot, lspin, bsize, mythread )
+                CALL Apply_V( rs_wave(:,1:bsize), vpot, lspin, bsize, mythread )
 !                IF (td_prop%td_extpot.AND.cntl%tlsd.AND.ispin.EQ.2) THEN
 !                   offset_state=i_start2
 !                   DO count=1,bsize
@@ -2572,6 +2573,8 @@ CONTAINS
        IF( fft_residual .ne. 0 ) THEN
           ALLOCATE( tfft%map_acinv_wave_rem( tfft%my_nr3p * tfft%nr1w * tfft%nr2 * fft_residual ) )
           CALL Make_inv_yzCOM_Maps( tfft, tfft%map_acinv_wave_rem, fft_residual, tfft%ir1w, tfft%nsw, tfft%nr1w, tfft%small_chunks(1), tfft%big_chunks(1) )
+       ELSE
+          ALLOCATE( tfft%map_acinv_wave_rem( 1 ) )
        END IF   
        
        sendsize     = MAXVAL( tfft%nr3p ) * MAXVAL ( tfft%nsw ) * parai%node_nproc * parai%node_nproc * fft_batchsize

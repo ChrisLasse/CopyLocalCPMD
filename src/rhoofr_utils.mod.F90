@@ -1479,7 +1479,11 @@ CONTAINS
     IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
          __LINE__,__FILE__)
     IF( .not. rsactive ) THEN
-       ALLOCATE(psi_nors(il_psi_nors(1),il_psi_nors(2)),STAT=ierr)
+       ALLOCATE(psi_nors(il_psi_both(1),il_psi_both(2)),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate psi_nors', &
+            __LINE__,__FILE__)
+    ELSE
+       ALLOCATE(wfn_r(il_psi_both(1),il_psi_both(2)),STAT=ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate psi_nors', &
             __LINE__,__FILE__)
     END IF

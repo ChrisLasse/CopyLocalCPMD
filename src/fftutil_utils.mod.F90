@@ -1411,7 +1411,7 @@ CONTAINS
   !  INTEGER :: isub, isub4
   !  CHARACTER(*), PARAMETER :: procedureN = 'fwfft_z_section'
   
-    INTEGER(INT64) :: time(3)
+    INTEGER(INT64) :: time(4)
   
   !  IF( cntl%fft_tune_batchsize ) THEN
   !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
