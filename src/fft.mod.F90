@@ -150,7 +150,9 @@ MODULE fft
      INTEGER :: ngw
      INTEGER :: nwst
      INTEGER :: npst
-     INTEGER :: which
+
+     INTEGER :: which ! 1 -> wave sticks ; 2 -> pot sticks
+     INTEGER :: which_wave ! 1 -> rho ; -> 2 -> vpsi
 
      DOUBLE PRECISION :: tscale
 

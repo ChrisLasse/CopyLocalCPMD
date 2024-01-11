@@ -1028,13 +1028,13 @@ CONTAINS
           CALL invfft_x_section( tfft, f_inout1, remswitch, mythread )
 
           IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) THEN
-             IF( tfft%which .eq. 1 ) THEN
-                !$  locks_calc_2( parai%node_me+1, 1+current:fft_batchsize+current ) = .false.
-                !$omp flush( locks_calc_2 )
-             ELSE
+             IF( tfft%which_wave .eq. 1 ) THEN
                 !$  locks_calc_1( parai%node_me+1, 1+current+(fft_batchsize*fft_buffsize): &
                 !$                fft_batchsize+current+(fft_batchsize*fft_buffsize) ) = .false.
                 !$omp flush( locks_calc_1 )
+             ELSE
+                !$  locks_calc_2( parai%node_me+1, 1+current:fft_batchsize+current ) = .false.
+                !$omp flush( locks_calc_2 )
              END IF
           END IF
 
@@ -1124,13 +1124,13 @@ CONTAINS
           CALL fwfft_z_section( tfft, f_inout1(:,work_buffer), f_inout2, counter, batch_size, remswitch, mythread, tfft%nsw )
 
           IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) THEN
-             !$  IF( cntl%krwfn ) THEN
-             !$     locks_calc_2( parai%node_me+1, 1+(counter+fft_buffsize-1)*fft_batchsize:batch_size+(counter+fft_buffsize-1)*fft_batchsize ) = .false.
+             IF( cntl%krwfn ) THEN
+             !$   locks_calc_2( parai%node_me+1, 1+(counter+fft_buffsize-1)*fft_batchsize:batch_size+(counter+fft_buffsize-1)*fft_batchsize ) = .false.
              !$omp flush( locks_calc_2 )
-             !$  ELSE 
-             !$     locks_calc_1( parai%node_me+1, 1+(counter+fft_buffsize-1)*fft_batchsize:fft_batchsize+(counter+fft_buffsize-1)*fft_batchsize ) = .false.
+             ELSE 
+             !$   locks_calc_1( parai%node_me+1, 1+(counter+fft_buffsize-1)*fft_batchsize:fft_batchsize+(counter+fft_buffsize-1)*fft_batchsize ) = .false.
              !$omp flush( locks_calc_1 )
-             !$  END IF
+             END IF
           END IF
  
        END IF

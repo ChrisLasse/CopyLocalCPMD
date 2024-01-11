@@ -2088,6 +2088,8 @@ CONTAINS
     i_start2=part_1d_get_el_in_blk(1,nostat,me_grp,n_grp)-1
 
     CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, lspin )
+
+    tfft%which_wave = 2
   
     locks_calc_inv = .true.
     locks_calc_fw  = .true.
