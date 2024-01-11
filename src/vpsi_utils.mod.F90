@@ -2336,7 +2336,7 @@ CONTAINS
        timer( i ) = REAL( tfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
     ENDDO
 
-    IF( .false. .and. parai%me .eq. 0 ) THEN
+    IF( tfft%timing_specific .and. parai%me .eq. 0 ) THEN
 
        WRITE(6,*)" "
        WRITE(6,*)"Some extra VPSI times"

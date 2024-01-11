@@ -16,7 +16,8 @@ MODULE forces_driver
   USE fft_maxfft,                      ONLY: maxfft
   USE fft,                             ONLY: batch_fft,&
                                              fft_tune_max_it,&
-                                             jgw
+                                             jgw,&
+                                             tfft
   USE fftprp_utils,                    ONLY: autotune_fftbatchsize
   USE fnonloc_utils,                   ONLY: fnonloc
   USE func,                            ONLY: func1
@@ -355,7 +356,7 @@ CONTAINS
                clsd%nlsd,redist_c2)
           CALL SYSTEM_CLOCK( time(2) )
           CALL SYSTEM_CLOCK( count_rate = cr )
-!          IF ( paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
+          IF ( tfft%timing .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
        ELSE
           CALL vpsi(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,&
                redist_c2)
