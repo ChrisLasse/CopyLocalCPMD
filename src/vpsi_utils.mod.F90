@@ -2559,7 +2559,7 @@ CONTAINS
           IF( irun .eq. 2 ) CALL mp_win_alloc_shared_mem( 'c', needed_size, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
 
 
-          arrayshape(1) = sendsize*parai%nnode
+          arrayshape(1) = MAX( sendsize*parai%nnode, sendsize_pot*parai%nnode )
           arrayshape(2) = fft_buffsize
           arrayshape(3) = 2
           needed_size = MAX( arrayshape(1) * arrayshape(2) * arrayshape(3), sendsize_pot*parai%nnode * 2 )
