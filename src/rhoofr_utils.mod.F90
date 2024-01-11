@@ -1431,6 +1431,8 @@ CONTAINS
 
     CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, ispin, coef3, coef4 )
   
+    tfft%which_wave = 1
+
     locks_calc_inv = .true.
     IF( tfft%do_comm(1) ) THEN
        locks_com_inv( parai%node_me+1, : ) = .true.
