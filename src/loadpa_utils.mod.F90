@@ -1202,6 +1202,7 @@ CONTAINS
           i2M = 2 * ( tfft%nr2 / 2 ) + 2 - i2
           IF( i1M .eq. i1 .and. i2M .eq. i2 ) CYCLE
           ixM = i1M - ( tfft%nr1 / 2 ) + tfft%nr1
+          IF( ixM .gt. tfft%nr1 ) ixM = ixM - tfft%nr1
           IF( tfft%stownW( i1M , i2M ) .ne. 0 ) THEN
    
              IF( tfft%ir1w( ixM ) .eq. 0 ) THEN

@@ -902,7 +902,7 @@ CONTAINS
     TYPE(C_PTR), ALLOCATABLE, SAVE           :: plans(:,:)
     INTEGER                                  :: params_req(7)
     INTEGER                                  :: fftw_dir, ierr, i
-    INTEGER, PARAMETER                       :: num_plans = 50
+    INTEGER, PARAMETER                       :: num_plans = 500
     INTEGER, SAVE, ALLOCATABLE               :: icurrent(:)
     INTEGER(int_8)                           :: il_asave(2)
     complex(real_8), POINTER __CONTIGUOUS    :: asave(:,:)
