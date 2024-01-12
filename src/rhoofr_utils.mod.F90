@@ -1467,9 +1467,12 @@ CONTAINS
             __LINE__,__FILE__)
        psi_work => psi_nors
     ELSE
-       CALL request_scratch(il_psi_both,wfn_r,'wfn_r',ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
-         __LINE__,__FILE__)
+       IF( first ) THEN
+          first = .false.
+          CALL request_scratch(il_psi_both,wfn_r,'wfn_r',ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
+            __LINE__,__FILE__)
+       END IF
        psi_work => wfn_r
     END IF
 #else
@@ -1482,7 +1485,7 @@ CONTAINS
             __LINE__,__FILE__)
     ELSE
        ALLOCATE(wfn_r(il_psi_both(1),il_psi_both(2)),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate psi_nors', &
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
             __LINE__,__FILE__)
     END IF
 #endif
@@ -1646,10 +1649,20 @@ CONTAINS
     CALL free_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
          __LINE__,__FILE__)
+    IF( .not. rsactive ) THEN
+       CALL free_scratch(il_psi_both,psi_nors,procedureN//'psi_nors',ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate psi_nors', &
+            __LINE__,__FILE__)
+    END IF
 #else
     DEALLOCATE(aux_array,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
          __LINE__,__FILE__)
+    IF( .not. rsactive ) THEN
+       DEALLOCATE(psi_nors,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate psi_nors', &
+            __LINE__,__FILE__)
+    END IF
 #endif
 
     ! ==--------------------------------------------------------------==
