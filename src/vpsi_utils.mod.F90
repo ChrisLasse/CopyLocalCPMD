@@ -1998,6 +1998,7 @@ CONTAINS
 #endif
     INTEGER(int_8) :: il_aux_array(2)
     INTEGER(int_8) :: il_rs_array(2)
+    INTEGER(int_8) :: il_wfn_r(2)
 
     LOGICAL, SAVE :: first = .true.
     INTEGER :: sendsize, sendsize_rem
@@ -2443,6 +2444,12 @@ CONTAINS
        CALL free_scratch(il_rs_array,rs_array,procedureN//'rs_array',ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate rs_array', &
             __LINE__,__FILE__)
+    ELSE
+       il_wfn_r (1) = tfft%my_nr3p * tfft%nr2 * tfft%nr1
+       il_wfn_r (2) = (nstate/2)+1
+!       CALL free_scratch(il_wfn_r,wfn_r,procedureN//'wfn_r',ierr)
+!       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
+!            __LINE__,__FILE__)
     END IF
 #else
     DEALLOCATE(aux_array,STAT=ierr)
@@ -2451,6 +2458,10 @@ CONTAINS
     IF( .not. cntl%krwfn ) THEN
        DEALLOCATE(rs_array,STAT=ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate rs_array', &
+            __LINE__,__FILE__)
+    ELSE
+       DEALLOCATE(wfn_r,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
             __LINE__,__FILE__)
     END IF
 #endif
