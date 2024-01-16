@@ -459,6 +459,7 @@ CONTAINS
     CALL leadim(parm%nr1,parm%nr2,parm%nr3,fpar%kr1,fpar%kr2,fpar%kr3)
     fpar%kr1 = tfft%nr3p( parai%me+1 )
     fpar%nnr1=fpar%kr1*fpar%kr2s*fpar%kr3s
+    fpar%nng1=tfft%nsp( parai%me+1 ) * fpar%kr3s
     DEALLOCATE(thread_buff,STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
          __LINE__,__FILE__)

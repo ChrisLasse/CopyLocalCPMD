@@ -281,10 +281,10 @@ CONTAINS
        ENDDO
     ENDDO
     ! REDEFINE NZH AND INDZ FOR COMPRESSED STORAGE
-    ALLOCATE(nzh_r(fpar%nnr1),STAT=ierr)
+    ALLOCATE(nzh_r(MAX(fpar%nnr1,fpar%nng1)),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE(indz_r(fpar%nnr1),STAT=ierr)
+    ALLOCATE(indz_r(MAX(fpar%nnr1,fpar%nng1)),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
     nn2=1
@@ -344,6 +344,7 @@ CONTAINS
        nclu = parai%nproc * nr1m*fpar%kr2s*nr3m
        maxfft = MAX(nclu,maxfft)
     ENDIF
+    maxfft = MAX(maxfft,fpar%nng1)
     IF( cp_cuda_env%use_fft ) THEN
 #if defined(_HAS_CUDA)
        block         
