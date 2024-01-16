@@ -172,6 +172,7 @@ MODULE system
      INTEGER :: kry = HUGE(0)
      INTEGER :: krz = HUGE(0)
      INTEGER :: nnr1 = HUGE(0)
+     INTEGER :: nng1 = HUGE(0)
   END TYPE fpar_t
   TYPE(fpar_t), SAVE, PUBLIC :: fpar
   ! ==--------------------------------------------------------------==
