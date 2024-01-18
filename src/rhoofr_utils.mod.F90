@@ -1459,7 +1459,7 @@ CONTAINS
     il_psi_both (1) = tfft%my_nr3p * tfft%nr2 * tfft%nr1
     il_psi_both (2) = (nstate/2)+1
 
-#ifdef _USE_SCRATCHLIBRARY
+!#ifdef _USE_SCRATCHLIBRARY
     CALL request_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
          __LINE__,__FILE__)
@@ -1469,28 +1469,32 @@ CONTAINS
             __LINE__,__FILE__)
        psi_work => psi_nors
     ELSE
+!       IF( first ) THEN
+!          first = .false.
+!          CALL request_scratch(il_psi_both,wfn_r,'wfn_r',ierr)
+!          IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
+!            __LINE__,__FILE__)
+!       END IF
+!       psi_work => wfn_r
+    END IF
+!#else
+!    ALLOCATE(aux_array(il_aux_array(1),il_aux_array(2)),STAT=ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
+!         __LINE__,__FILE__)
+!    IF( .not. rsactive ) THEN
+!       ALLOCATE(psi_nors(il_psi_both(1),il_psi_both(2)),STAT=ierr)
+!       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate psi_nors', &
+!            __LINE__,__FILE__)
+!    ELSE
        IF( first ) THEN
           first = .false.
-          CALL request_scratch(il_psi_both,wfn_r,'wfn_r',ierr)
+          ALLOCATE(wfn_r(il_psi_both(1),il_psi_both(2)),STAT=ierr)
           IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
-            __LINE__,__FILE__)
+               __LINE__,__FILE__)
        END IF
        psi_work => wfn_r
-    END IF
-#else
-    ALLOCATE(aux_array(il_aux_array(1),il_aux_array(2)),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
-         __LINE__,__FILE__)
-    IF( .not. rsactive ) THEN
-       ALLOCATE(psi_nors(il_psi_both(1),il_psi_both(2)),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate psi_nors', &
-            __LINE__,__FILE__)
-    ELSE
-       ALLOCATE(wfn_r(il_psi_both(1),il_psi_both(2)),STAT=ierr)
-       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
-            __LINE__,__FILE__)
-    END IF
-#endif
+!    END IF
+!#endif
 
     ! 
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
