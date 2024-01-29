@@ -7,6 +7,11 @@ MODULE loadpa_utils
                                              dist_entity
   USE elct,                            ONLY: crge
   USE error_handling,                  ONLY: stopgm
+  USE fftpw_base,                      ONLY: dfft
+  USE fftpw_converting,                ONLY: Create_PwFFT_datastructure
+  USE fftpw_ggen,                      ONLY: fft_set_nl
+  USE fftpw_param,                     ONLY: DP
+  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE geq0mod,                         ONLY: geq0
   USE gvec,                            ONLY: epsg,&
                                              epsgx,&
@@ -62,6 +67,8 @@ CONTAINS
     LOGICAL                                  :: oldstatus
     REAL(real_8)                             :: g2, sign, t
 
+    INTEGER :: win
+    REAL(DP), ALLOCATABLE :: g_pw(:,:)
 ! ==--------------------------------------------------------------==
 ! ==  DISTRIBUTION OF PARALLEL WORK                               ==
 ! ==--------------------------------------------------------------==
@@ -238,11 +245,15 @@ CONTAINS
     ALLOCATE(inyh(3,ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
+    ALLOCATE(g_pw(3,ncpw%nhg),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
     ALLOCATE(mapgp(ncpw%nhg),STAT=ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
     CALL zeroing(hg)!,nhg)
     CALL zeroing(inyh)!,3*nhg)
+    CALL zeroing(g_pw)!,3*nhg)
     CALL zeroing(mapgp)!,nhg)
     ! ==--------------------------------------------------------------==
     ! SYSTEM PARAMETER PER CPU
@@ -385,6 +396,7 @@ CONTAINS
     ! SORTING OF G-VECTORS
     ! ==--------------------------------------------------------------==
     CALL gsort(hg,inyh,ncpw%nhg)
+    g_pw = inyh - 17
     DO ig=1,ncpw%nhg
        mapgp(ig)=ig
     ENDDO
@@ -414,6 +426,13 @@ CONTAINS
          __LINE__,__FILE__)
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==
+
+
+
+    CALL Create_PwFFT_datastructure( dfft )
+    CALL fft_set_nl( dfft, dfft%bg, g_pw )
+
+
     RETURN
   END SUBROUTINE loadpa
   ! ==================================================================
