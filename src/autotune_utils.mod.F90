@@ -433,7 +433,7 @@ CONTAINS
 
   INTEGER, SAVE  :: mbuff, mbatch, repeats, omit, set_repeats
   REAL(DP), SAVE, ALLOCATABLE :: final_time(:), z_group_time(:), y_group_time(:), x_group_time(:)
-  LOGICAL, SAVE, ALLOCATABLE :: group_mask(:,:)
+  LOGICAL, SAVE, ALLOCATABLE :: group_mask(:,:), final_mask(:)
   LOGICAL, SAVE :: first = .true.
   LOGICAL, SAVE :: alloc = .true.
   LOGICAL, SAVE :: group_timing = .true.
@@ -455,10 +455,11 @@ CONTAINS
   IF( first ) THEN 
      mbuff = dfft%max_buffer_size
      mbatch = dfft%max_batch_size
-     repeats = 5
-     group_repeats = 3
+     repeats = 20 !5
+     group_repeats = 10 !3
      omit = 3
      ALLOCATE( final_time( mbuff*mbatch ) )
+     ALLOCATE( final_mask( mbuff ) )
      ALLOCATE( z_group_time( mbatch ) )
      ALLOCATE( y_group_time( mbatch ) )
      ALLOCATE( x_group_time( mbatch ) )
@@ -468,6 +469,7 @@ CONTAINS
      y_group_time = 0.d0
      x_group_time = 0.d0
      first = .false.
+     final_mask = .false.
      CALL SYSTEM_CLOCK( count_rate = cr )
   END IF
 
@@ -477,7 +479,7 @@ CONTAINS
   ELSE
      bb_counter = (dfft%buffer_size_save-1) * dfft%max_batch_size + dfft%batch_size_save
      alloc = .false.
-     IF( group_timing .and. dfft%batch_size_save .eq. dfft%max_batch_size ) THEN
+     IF( group_timing .and. ( dfft%batch_size_save .eq. dfft%max_batch_size ) ) THEN
         z_group_time( dfft%z_group_autosize ) = z_group_time( dfft%z_group_autosize ) + REAL( REAL( dfft%auto_4Stimings(1) / ( dfft%z_divider * dfft%z_group_autosize ) ) / REAL( cr ) )
         y_group_time( dfft%y_group_autosize ) = y_group_time( dfft%y_group_autosize ) + REAL( REAL( dfft%auto_4Stimings(2) / ( dfft%y_divider * dfft%y_group_autosize ) ) / REAL( cr ) )
         y_z_repeats = y_z_repeats + 1
@@ -548,28 +550,42 @@ CONTAINS
   IF( next_batch ) THEN
  
      final_time( bb_counter ) = final_time( bb_counter ) / ( repeats ) !+ set_repeats )
+     final_mask( bb_counter ) = .true.
      IF( dfft%mype .eq. 0 ) write(6,'(A21,I3,A7,I3,A6,E15.8)') "vpsi tunning buffer:", dfft%buffer_size_save, "batch:", dfft%batch_size_save, "TIME:", final_time( bb_counter )
 
-     IF( dfft%batch_size_save .eq. 1 ) THEN
-        IF( dfft%buffer_size_save .ne. mbuff ) THEN
-           dfft%batch_size_save = dfft%max_batch_size
-           dfft%buffer_size_save = dfft%buffer_size_save + 1
-           dfft%x_group_autosize = dfft%max_batch_size
-           dfft%y_group_autosize = dfft%max_batch_size
-           dfft%z_group_autosize = dfft%max_batch_size
-           dfft%x_optimal = .false.
-           dfft%y_z_optimal = .false.
+     IF( .not. dfft%exact_batchsize ) THEN
+        IF( dfft%batch_size_save .eq. 1 ) THEN
+           IF( dfft%buffer_size_save .ne. mbuff ) THEN
+              dfft%batch_size_save = dfft%max_batch_size
+              dfft%buffer_size_save = dfft%buffer_size_save + 1
+              dfft%x_group_autosize = dfft%max_batch_size
+              dfft%y_group_autosize = dfft%max_batch_size
+              dfft%z_group_autosize = dfft%max_batch_size
+              dfft%x_optimal = .false.
+              dfft%y_z_optimal = .false.
+           ELSE
+              dfft%buffer_size_save = dfft%buffer_size_save + 1
+           END IF
         ELSE
-           dfft%buffer_size_save = dfft%buffer_size_save + 1
+           dfft%batch_size_save = dfft%batch_size_save - 1
         END IF
      ELSE
-        dfft%batch_size_save = dfft%batch_size_save - 1
+        dfft%buffer_size_save = dfft%buffer_size_save + 1
+        dfft%x_group_autosize = dfft%max_batch_size
+        dfft%y_group_autosize = dfft%max_batch_size
+        dfft%z_group_autosize = dfft%max_batch_size
+        dfft%x_optimal = .false.
+        dfft%y_z_optimal = .false.
      END IF
   
      IF( dfft%buffer_size_save .eq. mbuff+1 ) THEN
         IF( dfft%mype .eq. 0 ) THEN
-           dfft%buffer_size_save = ( ( MINLOC( final_time, 1 ) - 1 ) / mbatch ) + 1
-           dfft%batch_size_save  = mod( MINLOC( final_time, 1 ) - 1, mbatch ) + 1
+           IF( .not. dfft%exact_batchsize ) THEN
+              dfft%buffer_size_save = ( ( MINLOC( final_time, 1 ) - 1 ) / mbatch ) + 1
+              dfft%batch_size_save  = mod( MINLOC( final_time, 1 ) - 1, mbatch ) + 1
+           ELSE
+              dfft%buffer_size_save = ( ( MINLOC( final_time, 1, final_mask ) - 1 ) / mbatch ) + 1
+           END IF
            write(6,*) " "
            write(6,*) "VPSI TUNNING FINISHED"
            write(6,*) " "

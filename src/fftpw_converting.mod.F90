@@ -76,13 +76,22 @@ CONTAINS
 
     CALL fft_type_init( dfft, which, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
 
-    IF( dfft%nstate/2 .lt. dfft%max_batch_size ) dfft%max_batch_size = dfft%nstate/2
-
-    dfft%batch_size_save = dfft%max_batch_size
+    IF( dfft%exact_batchsize ) THEN
+       dfft%batch_size_save = dfft%given_batchsize
+       dfft%max_batch_size = dfft%given_batchsize
+    ELSE
+       dfft%batch_size_save = dfft%max_batch_size
+    END IF
+    IF( dfft%nstate/2 .lt. dfft%max_batch_size ) THEN
+       dfft%max_batch_size = dfft%nstate/2
+       dfft%batch_size_save = dfft%max_batch_size
+    END IF
     dfft%buffer_size_save = 1
     dfft%x_group_autosize = dfft%max_batch_size
     dfft%y_group_autosize = dfft%max_batch_size
     dfft%z_group_autosize = dfft%max_batch_size
+
+    dfft%overlapp = cntl%overlapp_comm_comp
 
     dfft%z_set_size_save = 1
     dfft%y_set_size_save = 1

@@ -132,9 +132,10 @@ MODULE fftpw_types
     LOGICAL :: uneven = .false.
     LOGICAL :: singl = .false.
     LOGICAL :: make_first = .true.
+    LOGICAL :: exact_batchsize = .false.
 
-    LOGICAL :: tunning = .true.
-    LOGICAL :: overlapp = .false.
+    LOGICAL :: tunning = .false.
+    LOGICAL :: overlapp != .false. deprecated
     LOGICAL :: rsactive != .false. deprecated
     LOGICAL :: timings = .true.
     LOGICAL :: timings2 = .false.
@@ -164,6 +165,7 @@ MODULE fftpw_types
     INTEGER :: y_group_autosize
     INTEGER :: x_group_autosize
     INTEGER :: max_batch_size = 70
+    INTEGER :: given_batchsize
     INTEGER :: max_buffer_size = 3
     INTEGER, ALLOCATABLE :: optimal_groups(:,:,:)
 

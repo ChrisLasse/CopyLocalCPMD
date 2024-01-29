@@ -15,6 +15,7 @@ MODULE control_bcast_utils
   USE cp_cuda_types,                   ONLY: cp_cuda_env
   USE error_handling,                  ONLY: stopgm
   USE fft,                             ONLY: batch_fft, a2a_msgsize
+  USE fftpw_base,                      ONLY: dfft
   USE fileopenmod,                     ONLY: fo_info
   USE g_loc,                           ONLY: gloc_list,&
                                              glocal,&
@@ -315,6 +316,9 @@ CONTAINS
       ENDIF
       !
 !     ==--------------------------------------------------------------==
+    !PW FFT
+    CALL mp_bcast(dfft%exact_batchsize,parai%io_source,parai%cp_grp)
+    CALL mp_bcast(dfft%given_batchsize,parai%io_source,parai%cp_grp)
     RETURN
   END SUBROUTINE control_bcast
   ! ==================================================================
