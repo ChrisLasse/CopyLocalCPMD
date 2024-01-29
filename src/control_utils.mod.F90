@@ -28,6 +28,7 @@ MODULE control_utils
                                              maxbetap,&
                                              maxtrot
   USE fft,                             ONLY: a2a_msgsize,batch_fft
+  USE fftpw_base,                      ONLY: dfft
   USE g_loc,                           ONLY: gloc_list,&
                                              glocal,&
                                              gloci,&
@@ -3735,6 +3736,17 @@ CONTAINS
                 ELSE
                    cntl%use_elpa_autotune=.TRUE.
                 ENDIF
+
+             ELSEIF ( keyword_contains(line,'EXACT_BATCHSIZE') ) THEN
+                IF ( keyword_contains(line,'OFF') ) THEN
+                   dfft%exact_batchsize=.FALSE.
+                ELSE
+                   dfft%exact_batchsize=.TRUE.
+                   READ(iunit,'(A)',iostat=ierr) line
+                   CALL readsi(line,1,last,dfft%given_batchsize,erread)
+                ENDIF
+
+
              ELSEIF ( keyword_contains(line,'USE_BATCHFFT') ) THEN
                 IF ( keyword_contains(line,'OFF') ) THEN
                    batch_fft=.FALSE.
