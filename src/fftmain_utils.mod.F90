@@ -678,11 +678,7 @@ CONTAINS
        CALL fftnew_cuda(isign,f,sparse, comm, thread_view=thread_view, &
             & copy_data_to_device=copy_data_to_device, copy_data_to_host=copy_data_to_host )
     ELSE
-       IF( .true. ) THEN
-          CALL fftnew(isign,f,sparse, parai%allgrp )
-       ELSE
-!          CALL fftpw( isign, f )
-       END IF
+       CALL fftnew(isign,f,sparse, parai%allgrp )
     ENDIF
     CALL tihalt(procedureN,isub)
     ! ==--------------------------------------------------------------==
@@ -697,6 +693,7 @@ CONTAINS
     ! == FUNCTION F. THE FOURIER TRANSFORM IS                         ==
     ! == RETURNED IN F (THE INPUT F IS OVERWRITTEN).                  ==
     ! ==--------------------------------------------------------------==
+    USE fftpw_base,                             ONLY: dfftp
 #ifdef __PARALLEL
     USE mpi_f08
 #endif
@@ -726,7 +723,7 @@ CONTAINS
        IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
-          CALL fftpw( isign, g, f )
+          CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp, g )
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -739,6 +736,7 @@ CONTAINS
     ! == FUNCTION F. THE FOURIER TRANSFORM IS                         ==
     ! == RETURNED IN F IN OUTPUT (THE INPUT F IS OVERWRITTEN).        ==
     ! ==--------------------------------------------------------------==
+    USE fftpw_base,                             ONLY: dfftp
 #ifdef __PARALLEL
     USE mpi_f08
 #endif
@@ -754,7 +752,7 @@ CONTAINS
     LOGICAL, INTENT(IN), OPTIONAL            :: copy_data_to_device, &
                                                 copy_data_to_host
 
-    CHARACTER(*), PARAMETER                  :: procedureN = 'fwfftn'
+    CHARACTER(*), PARAMETER                  :: procedureN = 'fwfftu'
 
     INTEGER                                  :: isign, isub
 
@@ -764,10 +762,10 @@ CONTAINS
        CALL fftnew_cuda(isign,f,sparse, comm, thread_view=thread_view, &
             & copy_data_to_device=copy_data_to_device, copy_data_to_host=copy_data_to_host )
     ELSE
-       IF( .true. ) THEN
+       IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
-!          CALL fftpw( isign, f )
+          CALL fftpw( isign, dfftp, f, dfftp%ngm, dfftp%nr1p, dfftp%ir1p, dfftp%nsp )
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -948,7 +946,6 @@ CONTAINS
   END SUBROUTINE fwfft_pwbatch
 
   SUBROUTINE fftpw_batch( dfft, isign, step, batch_size, counter, work_buffer, f_in, f_inout1, f_inout2 )
-    USE state_utils,                            ONLY: set_psi_batch_g
     IMPLICIT NONE
   
     TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
@@ -981,11 +978,11 @@ CONTAINS
              END IF
   
              IF( counter .eq. dfft%max_nbnd .and. ibatch .eq. batch_size .and. dfft%uneven ) THEN
-                CALL Prepare_Psi_overlapp( dfft, f_in(:,1+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 1 )
+                CALL Prepare_Psi_overlapp( dfft, f_in(:,1+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 1, dfft%nsw )
              ELSE
-                CALL Prepare_Psi_overlapp( dfft, f_in(:,1+((ibatch-1)+current)*2:2+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 2 )
+                CALL Prepare_Psi_overlapp( dfft, f_in(:,1+((ibatch-1)+current)*2:2+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 2, dfft%nsw )
              END IF
-             CALL invfft_pre_com( dfft, f_inout1(:,work_buffer), f_inout2, ibatch, batch_size )
+             CALL invfft_pre_com( dfft, f_inout1(:,work_buffer), f_inout2, ibatch, batch_size, dfft%nsw )
           ENDDO
   
           !$  locks_calc_inv( dfft%my_node_rank+1, counter ) = .false.
@@ -1013,7 +1010,7 @@ CONTAINS
   
           DO ibatch = 1, batch_size
   !           CALL invfft_after_com( dfft, dfft%bench_aux(:,ibatch), comm_recv, ibatch )
-             CALL invfft_after_com( dfft, f_inout1(:,ibatch), f_in(:,work_buffer), dfft%map_acinv, dfft%map_acinv_rem, ibatch )
+             CALL invfft_after_com( dfft, f_inout1(:,ibatch), f_in(:,work_buffer), dfft%map_acinv, dfft%map_acinv_rem, ibatch, dfft%nr1w )
   
              !$  locks_calc_2( dfft%my_node_rank+1, ibatch+current ) = .false.
              !$omp flush( locks_calc_2 )
@@ -1041,7 +1038,7 @@ CONTAINS
              END IF
   
   !           CALL fwfft_pre_com( dfft, f_in(:,ibatch), f_inout1(:,1), f_inout2, ibatch, batch_size )
-             CALL fwfft_pre_com( dfft, dfft%bench_aux(:,ibatch), f_inout1(:,work_buffer), f_inout2, ibatch, batch_size )
+             CALL fwfft_pre_com( dfft, dfft%bench_aux(:,ibatch), f_inout1(:,work_buffer), f_inout2, ibatch, batch_size, dfft%nr1w, dfft%nsw )
           ENDDO
   
           !$  locks_calc_fw( dfft%my_node_rank+1, counter ) = .false.
@@ -1068,12 +1065,12 @@ CONTAINS
           !$  END DO
   
           DO ibatch = 1, batch_size
-             CALL fwfft_after_com( dfft, f_inout2, ibatch, batch_size )
+             CALL fwfft_after_com( dfft, f_inout2, ibatch, batch_size, dfft%nsw )
              IF( counter .eq. dfft%max_nbnd .and. ibatch .eq. batch_size .and. dfft%uneven ) THEN
-                CALL Accumulate_Psi_overlapp( dfft, f_in(:,1+((ibatch-1)+current)*2), f_inout1(:,1+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 1 )
+                CALL Accumulate_Psi_overlapp( dfft, f_inout1(:,1+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 1, f_in(:,1+((ibatch-1)+current)*2) )
              ELSE
-                CALL Accumulate_Psi_overlapp( dfft, f_in(:,1+((ibatch-1)+current)*2:2+((ibatch-1)+current)*2) &
-                        ,f_inout1(:,1+((ibatch-1)+current)*2:2+((ibatch-1)+current)*2), ibatch, dfft%ngms, batch_size, 2 )
+                CALL Accumulate_Psi_overlapp( dfft, f_inout1(:,1+((ibatch-1)+current)*2:2+((ibatch-1)+current)*2), ibatch, dfft%ngms, &
+                                              batch_size, 2, f_in(:,1+((ibatch-1)+current)*2:2+((ibatch-1)+current)*2) )
              END IF
   
              IF( .not. dfft%rsactive ) THEN
@@ -1093,30 +1090,40 @@ CONTAINS
   
   END SUBROUTINE fftpw_batch
 
-  SUBROUTINE fftpw( isign, g, f )
-    USE fftpw_base,                             ONLY: dfft
+  SUBROUTINE fftpw( isign, dfft, f, ng, nr1s, ir1, ns, g )
+    USE cppt,                                   ONLY: indz,&
+                                                      nzh
+    USE fftpw_converting,                       ONLY: ConvertFFT_Coeffs
     USE fftpw_make_maps,                        ONLY: Prep_copy_Maps,&
                                                       Set_Req_Vals
     USE fftpw_types,                            ONLY: create_shared_memory_window_1d
+    USE system,                                 ONLY: ncpw
     IMPLICIT NONE
   
-    INTEGER, INTENT(IN) :: isign
-    COMPLEX(DP), INTENT(IN)  :: g(:)
-    COMPLEX(DP), INTENT(OUT) :: f(:)
+    TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+    INTEGER, INTENT(IN) :: isign, ng
+    COMPLEX(DP), INTENT(IN), OPTIONAL  :: g(:)
+    COMPLEX(DP), INTENT(INOUT) :: f(:)
+    INTEGER, INTENT(IN) :: ir1(:), ns(:), nr1s(:)
+
+    COMPLEX(DP), ALLOCATABLE, SAVE :: temp(:)
 
     COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared1(:)
     COMPLEX(DP), POINTER, SAVE, CONTIGUOUS :: shared2(:)
 
     INTEGER :: i
 
-!    dfft%singl = .true. 
+    dfft%singl = .true. 
+
 
     IF( .not. allocated( dfft%aux ) ) THEN
   
-       CALL Set_Req_Vals( dfft, dfft%nstate, 1, dfft%rem_size, 1 )
-       CALL Prep_Copy_Maps( dfft, dfft%ngw, 1, dfft%rem_size )
+       ALLOCATE( temp( dfft%nnr ) )
+
+       CALL Set_Req_Vals( dfft, dfft%nstate, 1, dfft%rem_size, 1, ir1, ns )
+       CALL Prep_Copy_Maps( dfft, ng, 1, dfft%rem_size, ir1, ns )
   
-       dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * 1
+       dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsp ) * dfft%node_task_size * dfft%node_task_size * 1
      
        CALL create_shared_memory_window_1d( shared1, 10, dfft, dfft%sendsize*dfft%nodes_numb ) 
        CALL create_shared_memory_window_1d( shared2, 11, dfft, dfft%sendsize*dfft%nodes_numb ) 
@@ -1124,28 +1131,38 @@ CONTAINS
     END IF
  
     IF( isign .eq. -1 ) THEN !!  invfft
-  
-       CALL Prepare_Psi_overlapp( dfft, g, 1, dfft%ngw, 1, 1 ) 
-       CALL invfft_pre_com( dfft, shared1, shared2, 1, 1 )
+
+       CALL ConvertFFT_Coeffs( dfft, -1, g, f, ncpw%nhg, dfft%ngm )
+ 
+       CALL Prepare_Psi_overlapp( dfft, f, 1, ng, 1, 1, ns ) 
+       CALL invfft_pre_com( dfft, shared1, shared2, 1, 1, ns )
   
        IF( .not. dfft%single_node ) CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
                      dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
 
-       CALL invfft_after_com( dfft, f, shared2, dfft%map_acinv_one, dfft%map_acinv_rem_one, 1 )
+       CALL invfft_after_com( dfft, f, shared2, dfft%map_acinv_one, dfft%map_acinv_rem_one, 1, nr1s )
   
     ELSE !! fw fft
   
-       CALL fwfft_pre_com( dfft, f, shared1, shared2, 1, 1 )
+       CALL fwfft_pre_com( dfft, f, shared1, shared2, 1, 1, nr1s, ns )
   
        IF( .not. dfft%single_node ) CALL fft_com( dfft, shared1, shared2, dfft%sendsize, dfft%my_node_rank, &
                      dfft%inter_node_comm, dfft%nodes_numb, dfft%my_inter_node_rank, dfft%non_blocking )
   
-       CALL fwfft_after_com( dfft, shared2, 1, 1 )
-!       CALL Accumulate_Psi_overlapp( dfft, f, 1, dfft%ngw, 1, 1 )
+       CALL fwfft_after_com( dfft, shared2, 1, 1, ns )
+       CALL Accumulate_Psi_overlapp( dfft, f, 1, ng, 1, 1 )
+
+       CALL ConvertFFT_Coeffs( dfft, 1, f, temp, ncpw%nhg, dfft%ngm )
+
+       DO i= 1, ncpw%nhg
+          f( indz(i) ) = CONJG( temp(i) )
+          f( nzh(i) )  = temp(i)
+       ENDDO
+    
   
     END IF
   
-!    dfft%singl = .false. 
+    dfft%singl = .false. 
   
   END SUBROUTINE fftpw
 

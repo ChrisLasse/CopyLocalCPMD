@@ -5,7 +5,6 @@ MODULE fftpw_make_maps
   USE fft,                            ONLY: wfn_r,&
                                             fft_batchsize,&
                                             fft_numbatches
-  USE fftpw_base,                     ONLY: dfft
   USE fftpw_param
   USE rswfmod,                        ONLY: rsactive
   USE fftpw_types,                    ONLY: PW_fft_type_descriptor
@@ -17,12 +16,14 @@ MODULE fftpw_make_maps
 
 CONTAINS
 
-SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff )
+SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff, ir1, ns )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN)  :: batch_size, nbnd, num_buff
   INTEGER, INTENT(OUT) :: rem_size
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+
+  INTEGER, INTENT(IN)  :: ir1(:), ns(:)
 
   INTEGER, SAVE :: last_batch  = 0
   INTEGER, SAVE :: last_buffer = 0
@@ -32,8 +33,8 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff )
 
      dfft%rsactive = rsactive
      dfft%nr3px = MAXVAL ( dfft%nr3p )
-     dfft%my_nr1p = count ( dfft%ir1w > 0 )
-     dfft%small_chunks = dfft%nr3px * MAXVAL( dfft%nsw )
+     dfft%my_nr1p = count ( ir1 > 0 )
+     dfft%small_chunks = dfft%nr3px * MAXVAL( ns )
      dfft%big_chunks = dfft%small_chunks * dfft%node_task_size * dfft%node_task_size
    
      dfft%tscale = 1.0d0 / dble( dfft%nr1 * dfft%nr2 * dfft%nr3 )
@@ -81,11 +82,13 @@ SUBROUTINE Set_Req_Vals( dfft, nbnd, batch_size, rem_size, num_buff )
 
 END SUBROUTINE Set_Req_Vals
 
-SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size )
+SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size, ir1, ns )
   IMPLICIT NONE
 
-  INTEGER, INTENT(IN) :: ngms, batch_size, rem_size
+  INTEGER, INTENT(IN)  :: ngms, batch_size, rem_size
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+
+  INTEGER, INTENT(IN)  :: ir1(:), ns(:)
 
   INTEGER, SAVE :: last_batch = 0
   LOGICAL, SAVE :: one_done = .false.
@@ -93,9 +96,9 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size )
   IF( .not. allocated( dfft%zero_prep_start ) ) THEN
 
      !Prepare_Psi
-     ALLOCATE( dfft%zero_prep_start( dfft%nsw( dfft%mype+1), 3 ) )
-     ALLOCATE( dfft%zero_prep_end( dfft%nsw( dfft%mype+1), 3 ) )
-     CALL Make_PrepPsi_Maps( dfft%zero_prep_start, dfft%zero_prep_end, dfft%nr3, dfft%nsw(dfft%mype+1), ngms, dfft%nl, dfft%nlm )
+     ALLOCATE( dfft%zero_prep_start( ns( dfft%mype+1), 4 ) )
+     ALLOCATE( dfft%zero_prep_end( ns( dfft%mype+1), 4 ) )
+     CALL Make_PrepPsi_Maps( dfft%zero_prep_start, dfft%zero_prep_end, dfft%nr3, ns(dfft%mype+1), ngms, dfft%nl, dfft%nlm )
    
      !INV_After_Com
      ALLOCATE( dfft%zero_acinv_start( dfft%my_nr1p ) ) 
@@ -103,7 +106,7 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size )
    
      !FW_Pre_Com
      ALLOCATE( dfft%map_pcfw( dfft%nproc3 * dfft%small_chunks ) )
-     CALL Make_fw_yzCOM_Map( dfft )
+     CALL Make_fw_yzCOM_Map( dfft, ir1, ns )
 
   END IF
 
@@ -111,7 +114,7 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size )
 
      ALLOCATE( dfft%map_acinv_one( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * batch_size ) )
      ALLOCATE( dfft%map_acinv_rem_one( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * rem_size ) )
-     CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_one, dfft%map_acinv_rem_one, batch_size, rem_size )
+     CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv_one, dfft%map_acinv_rem_one, batch_size, rem_size, ir1, ns )
      one_done = .true.
 
   END IF
@@ -124,7 +127,7 @@ SUBROUTINE Prep_Copy_Maps( dfft, ngms, batch_size, rem_size )
      IF( ALLOCATED( dfft%map_acinv_rem ) )    DEALLOCATE( dfft%map_acinv_rem )
      ALLOCATE( dfft%map_acinv( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * batch_size ) )
      ALLOCATE( dfft%map_acinv_rem( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 * rem_size ) )
-     CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, dfft%map_acinv_rem, batch_size, rem_size )
+     CALL Make_inv_yzCOM_Maps( dfft, dfft%map_acinv, dfft%map_acinv_rem, batch_size, rem_size, ir1, ns )
 
   END IF
 
@@ -137,7 +140,7 @@ SUBROUTINE Make_PrepPsi_Maps( zero_start, zero_end, nr3, my_nsw, ngms, nl, nlm )
   INTEGER, INTENT(IN)  :: nr3, my_nsw, ngms
   INTEGER, INTENT(IN)  :: nl( : )
   INTEGER, OPTIONAL, INTENT(IN)  :: nlm( : )
-  INTEGER, INTENT(OUT) :: zero_start( my_nsw, 3 ), zero_end( my_nsw, 3 )
+  INTEGER, INTENT(OUT) :: zero_start( :, : ), zero_end( :, : )
 
   LOGICAL :: l_map( nr3 * my_nsw )
   LOGICAL :: l_map_m( nr3 * my_nsw )
@@ -236,14 +239,21 @@ SUBROUTINE Make_PrepPsi_Maps( zero_start, zero_end, nr3, my_nsw, ngms, nl, nlm )
 
   END IF
 
+  DO i = 1, my_nsw
+     zero_start( i, 4 ) = MAXVAL( zero_start( i, 1:3 ), 1 )
+     zero_end  ( i, 4 ) = MINVAL( zero_end  ( i, 1:3 ), 1 )
+  ENDDO
+
 END SUBROUTINE Make_PrepPsi_Maps
 
-SUBROUTINE Make_inv_yzCOM_Maps( dfft, map_acinv, map_acinv_rem, batch_size, rem_size )
+SUBROUTINE Make_inv_yzCOM_Maps( dfft, map_acinv, map_acinv_rem, batch_size, rem_size, ir1, ns )
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  INTEGER, INTENT(IN) :: batch_size, rem_size
+  INTEGER, INTENT(IN)  :: batch_size, rem_size
   INTEGER, INTENT(OUT) :: map_acinv(:), map_acinv_rem(:)
+
+  INTEGER, INTENT(IN)  :: ir1(:), ns(:)
 
   LOGICAL :: l_map( dfft%my_nr3p * dfft%my_nr1p * dfft%nr2 )
   LOGICAL :: first
@@ -263,12 +273,12 @@ SUBROUTINE Make_inv_yzCOM_Maps( dfft, map_acinv, map_acinv_rem, batch_size, rem_
            iproc3 = (j-1)*dfft%node_task_size + l
            offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * dfft%big_chunks
            !$omp do    
-           DO i = 1, dfft%nsw( iproc3 )
+           DO i = 1, ns( iproc3 )
               it = offset + dfft%nr3px * (i-1) 
               mc = dfft%ismap( i + dfft%iss(iproc3) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
               m1 = mod ( mc-1, dfft%nr1 ) + 1
               m2 = (mc-1)/dfft%nr1 + 1
-              i1 = m2 + ( dfft%ir1w(m1) - 1 ) * dfft%nr2 + (ibatch-1)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
+              i1 = m2 + ( ir1(m1) - 1 ) * dfft%nr2 + (ibatch-1)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
               DO k = 1, dfft%my_nr3p
                  IF( ibatch .eq. 1 ) l_map( i1 ) = .true.
                  map_acinv( i1 ) = k + it
@@ -293,12 +303,12 @@ SUBROUTINE Make_inv_yzCOM_Maps( dfft, map_acinv, map_acinv_rem, batch_size, rem_
            iproc3 = (j-1)*dfft%node_task_size + l
            offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*rem_size + (ibatch-1) ) * dfft%big_chunks
            !$omp do    
-           DO i = 1, dfft%nsw( iproc3 )
+           DO i = 1, ns( iproc3 )
               it = offset + dfft%nr3px * (i-1) 
               mc = dfft%ismap( i + dfft%iss(iproc3) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
               m1 = mod ( mc-1, dfft%nr1 ) + 1
               m2 = (mc-1)/dfft%nr1 + 1
-              i1 = m2 + ( dfft%ir1w(m1) - 1 ) * dfft%nr2 + (ibatch-1)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
+              i1 = m2 + ( ir1(m1) - 1 ) * dfft%nr2 + (ibatch-1)*dfft%my_nr3p*dfft%my_nr1p*dfft%nr2
               DO k = 1, dfft%my_nr3p
                  map_acinv_rem( i1 ) = k + it
                  i1 = i1 + dfft%nr2*dfft%my_nr1p
@@ -343,10 +353,12 @@ SUBROUTINE Make_inv_yzCOM_Maps( dfft, map_acinv, map_acinv_rem, batch_size, rem_
   
 END SUBROUTINE Make_inv_yzCOM_Maps
 
-SUBROUTINE Make_fw_yzCOM_Map( dfft )
+SUBROUTINE Make_fw_yzCOM_Map( dfft, ir1, ns )
   IMPLICIT NONE
 
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+
+  INTEGER, INTENT(IN)  :: ir1(:), ns(:)
 
   INTEGER :: iproc3, i, k, it, mc, m1, m2, i1 
 
@@ -355,12 +367,12 @@ SUBROUTINE Make_fw_yzCOM_Map( dfft )
   !$omp parallel private( iproc3, i, it, mc, m1, m2, i1, k )
   DO iproc3 = 1, dfft%nproc3
      !$omp do
-     DO i = 1, dfft%nsw( iproc3 )
+     DO i = 1, ns( iproc3 )
         it = ( iproc3 - 1 ) * dfft%small_chunks + dfft%nr3px * (i-1)
         mc = dfft%ismap( i + dfft%iss( iproc3 ) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
         m1 = mod (mc-1,dfft%nr1) + 1
         m2 = (mc-1)/dfft%nr1 + 1
-        i1 = m2 + ( dfft%ir1w(m1) - 1 ) * dfft%nr2
+        i1 = m2 + ( ir1(m1) - 1 ) * dfft%nr2
         DO k = 1, dfft%my_nr3p
            dfft%map_pcfw( k + it ) = i1
            i1 = i1 + dfft%nr2 * dfft%my_nr1p

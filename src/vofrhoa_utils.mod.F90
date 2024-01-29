@@ -7,7 +7,8 @@ MODULE vofrhoa_utils
   USE elct,                            ONLY: crge
   USE ener,                            ONLY: ener_com
   USE error_handling,                  ONLY: stopgm
-  USE fftmain_utils,                   ONLY: fwfftn
+  USE fftmain_utils,                   ONLY: fwfftn,&
+                                             fwfftu
   USE htrstr_utils,                    ONLY: htrstr
   USE kinds,                           ONLY: real_8,&
                                              int_8
@@ -111,7 +112,7 @@ CONTAINS
     !DO ir=1,fpar%nnr1
     !   v(ir)=CMPLX(rhoe(ir),0._real_8,kind=real_8)
     !ENDDO
-    CALL  fwfftn(v,.FALSE.,parai%allgrp)
+    CALL  fwfftu(v,.FALSE.,parai%allgrp)
     ! ==--------------------------------------------------------------==
     ! ==                       PERIODIC SYSTEMS                       ==
     ! ==--------------------------------------------------------------==

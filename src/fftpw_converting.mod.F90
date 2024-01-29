@@ -4,6 +4,8 @@ MODULE fftpw_converting
 
   USE elct,                          ONLY: crge
   USE fftpw_base,                    ONLY: smap
+  USE fftpw_ggen,                      ONLY: ggen_pw,&
+                                             fft_set_nl
   USE fftpw_param
   USE fftpw_stick_base,              ONLY: sticks_map
   USE fftpw_types,                   ONLY: fft_type_init,&
@@ -12,7 +14,9 @@ MODULE fftpw_converting
   USE gvec,                          ONLY: gvec_com
   USE mp_interface,                  ONLY: mp_sum
   USE parac,                         ONLY: parai
-  USE system,                        ONLY: spar 
+  USE system,                        ONLY: spar,&
+                                           ncpw 
+  USE zeroing_utils,                 ONLY: zeroing
 
   IMPLICIT NONE
   PRIVATE
@@ -25,13 +29,17 @@ MODULE fftpw_converting
 
 CONTAINS
 
-  SUBROUTINE Create_PwFFT_datastructure( dfft )
+  SUBROUTINE Create_PwFFT_datastructure( dfft, which )
     IMPLICIT NONE
   
     TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
+    CHARACTER(LEN=*), INTENT(IN) :: which
 
     TYPE( sticks_map ) :: smap
-    INTEGER :: i
+    INTEGER :: i, gstart, offset, offset2, ierr
+    INTEGER, ALLOCATABLE  :: ig_l2g_pw(:)
+    REAL(DP), ALLOCATABLE :: g_pw(:,:)
+    REAL(DP), ALLOCATABLE :: g_pw_all(:,:)
     REAL(DP) :: gcutw, gcutp
   
     dfft%nr1 = spar%nr1s
@@ -60,7 +68,7 @@ CONTAINS
        dfft%bg(i,3) = gvec_com%b3(i)
     ENDDO
 
-    CALL fft_type_init( dfft, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
+    CALL fft_type_init( dfft, which, smap, .true., parai%cp_grp, dfft%bg, gcutw, gcutp )
 
     ALLOCATE( dfft%time_adding( 100 ) )
     ALLOCATE( dfft%averaged_times( 100 ) )
@@ -73,33 +81,89 @@ CONTAINS
   
     CALL create_mpi_communicators( dfft )
 
-!    IF( dfft%rsactive ) THEN
-!       DO i = 1, dfft%nr1
-!          DO j = 1, dfft%nr2 * dfft%nr3
-!             
-!          ENDDO
-!       ENDDO
+    dfft%ngm_l  = ( dfft%ngl( dfft%mype + 1 ) + 1 ) / 2
+
+    ALLOCATE( dfft%ngm_all( dfft%nproc ),STAT=ierr )
+    CALL zeroing( dfft%ngm_all )
+    dfft%ngm_all( dfft%mype + 1 ) = dfft%ngm_l
+    CALL mp_sum( dfft%ngm_all, dfft%nproc, dfft%comm )
+
+    dfft%ngm_gl = SUM( dfft%ngm_all )
+    dfft%ngm_max = MAXVAL( dfft%ngm_all )
+
+    ALLOCATE(g_pw(3,dfft%ngm_gl),STAT=ierr)
+    ALLOCATE(dfft%gg_pw(dfft%ngm_gl),STAT=ierr)
+    ALLOCATE(ig_l2g_pw(dfft%ngm_gl),STAT=ierr)
+    CALL zeroing(g_pw)
+    CALL zeroing(dfft%gg_pw)
+    CALL zeroing(ig_l2g_pw)
+    
+    CALL ggen_pw( dfft, dfft%bg, dfft%bg, gvec_com%gcut, dfft%ngm_gl, dfft%ngm_l, & 
+                  g_pw, dfft%gg_pw, ig_l2g_pw, gstart )
+
+    ALLOCATE( dfft%ng_all( dfft%nproc ) ,STAT=ierr)
+    CALL zeroing( dfft%ng_all )
+    IF( which == 'wave' ) THEN
+       dfft%ng_all( dfft%mype + 1 ) = dfft%ngw
+    ELSE IF( which == 'rho' ) THEN
+       dfft%ng_all( dfft%mype + 1 ) = dfft%ngm
+    END IF
+    CALL mp_sum( dfft%ng_all, dfft%nproc, dfft%comm )
+    dfft%ng_total = SUM( dfft%ng_all )
+    dfft%ng_max   = MAXVAL( dfft%ng_all )
+
+    ALLOCATE( g_pw_all( 3, dfft%ng_total ) ,STAT=ierr)
+    CALL zeroing( g_pw_all )
+    offset  = SUM( dfft%ng_all( 1:dfft%mype ) )
+    offset2 = SUM( dfft%ng_all( 1:dfft%mype+1 ) )
+    IF( which == 'wave' ) THEN
+       DO i = 1, dfft%ngw
+          g_pw_all( 1:3, i + offset ) = NINT(g_pw( 1:3, i ))
+       ENDDO
+    ELSE IF( which == 'rho' ) THEN
+       DO i = 1, dfft%ngm
+          g_pw_all( 1:3, i + offset ) = NINT(g_pw( 1:3, i ))
+       ENDDO
+    END IF
+    CALL mp_sum( g_pw_all, dfft%ng_total*3, dfft%comm )
+
+    ALLOCATE( dfft%conv_inv( dfft%ng_total ),STAT=ierr )
+    ALLOCATE( dfft%conv_fw(  dfft%ng_total ),STAT=ierr )
+    CALL zeroing( dfft%conv_inv )
+    CALL zeroing( dfft%conv_fw  )
+
+    IF( which == 'wave' ) THEN
+       CALL ConvertFFT_array( dfft, g_pw_all, dfft%g_cpmd, ncpw%ngw, dfft%ngw ) 
+    ELSE IF( which == 'rho' ) THEN
+       CALL ConvertFFT_array( dfft, g_pw_all, dfft%g_cpmd, ncpw%nhg, dfft%ngm ) 
+    END IF
+
+    DEALLOCATE( g_pw )
+!    DEALLOCATE( dfft%gg_pw )
+    DEALLOCATE( ig_l2g_pw )
+    DEALLOCATE( dfft%ngm_all )
+    DEALLOCATE( g_pw_all )
   
   END SUBROUTINE Create_PwFFT_datastructure
 
-  SUBROUTINE ConvertFFT_array( dfft, g_pw, g_cpmd, ngw_cpmd )
+  SUBROUTINE ConvertFFT_array( dfft, g_pw, g_cpmd, ng_cpmd, ng_pw )
     IMPLICIT NONE
 
     TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
     
     REAL(DP), INTENT(IN) :: g_pw(:,:), g_cpmd(:,:)
-    INTEGER, INTENT(IN)  :: ngw_cpmd
+    INTEGER, INTENT(IN)  :: ng_cpmd, ng_pw
 
-    INTEGER :: c0_total( 3, dfft%ngw_total )
+    INTEGER :: c0_total( 3, dfft%ng_total )
     REAL(DP), PARAMETER :: eps8=1.0E-8_DP
     INTEGER :: i,j, offset
     LOGICAL :: found 
    
-    iloop: DO i = 1, dfft%ngw_total
+    iloop: DO i = 1, dfft%ng_total
 
        found = .false.
 
-       jloop: DO j = 1, ngw_cpmd
+       jloop: DO j = 1, ng_cpmd
 
           IF( abs(g_pw(1,i) - g_cpmd(1,j)) .le. eps8 .and. &
               abs(g_pw(2,i) - g_cpmd(2,j)) .le. eps8 .and. &
@@ -115,7 +179,7 @@ CONTAINS
 
     ENDDO iloop
 
-    DO i = 1, dfft%ngw_total
+    DO i = 1, dfft%ng_total
        IF( dfft%conv_inv( i ) .gt. 0 ) THEN
           c0_total( :, i ) = g_cpmd( :, dfft%conv_inv( i ) )
        ELSE
@@ -123,10 +187,10 @@ CONTAINS
        END IF
     ENDDO
    
-    Call mp_sum( c0_total, 3*dfft%ngw_total, dfft%comm )
+    Call mp_sum( c0_total, 3*dfft%ng_total, dfft%comm )
 
-    offset = SUM( dfft%ngw_all( 1:dfft%mype ) )
-    DO i = 1, dfft%ngw
+    offset = SUM( dfft%ng_all( 1:dfft%mype ) )
+    DO i = 1, ng_pw
        DO j = 1, 3
           IF( c0_total( j, i + offset ) .ne. g_pw( j, i + offset ) ) write(6,*) "warning missing gvec"
        ENDDO
@@ -142,20 +206,20 @@ CONTAINS
 
   END SUBROUTINE ConvertFFT_array
 
-  SUBROUTINE ConvertFFT_Coeffs( dfft, isign, c0_in, c0_out, ngw )
+  SUBROUTINE ConvertFFT_Coeffs( dfft, isign, c0_in, c0_out, ng_cpmd, ng_pw )
     IMPLICIT NONE
 
     TYPE( PW_fft_type_descriptor ), INTENT(INOUT) :: dfft
     COMPLEX(DP), INTENT(IN)  :: c0_in(:)
     COMPLEX(DP), INTENT(OUT) :: c0_out(:)
-    INTEGER, INTENT(IN) :: ngw, isign
+    INTEGER, INTENT(IN) :: ng_cpmd, ng_pw, isign
 
-    COMPLEX(DP) :: c0_total( dfft%ngw_total )
+    COMPLEX(DP) :: c0_total( dfft%ng_total )
     INTEGER     :: i, offset
     
     IF( isign .eq. -1 ) THEN ! CPMD in ; PW out
 
-       DO i = 1, dfft%ngw_total
+       DO i = 1, dfft%ng_total
           IF( dfft%conv_inv( i ) .gt. 0 ) THEN
              c0_total( i ) = c0_in( dfft%conv_inv( i ) )
           ELSE
@@ -163,10 +227,10 @@ CONTAINS
           END IF
        ENDDO
    
-       Call mp_sum( c0_total, dfft%ngw_total, dfft%comm )
+       Call mp_sum( c0_total, dfft%ng_total, dfft%comm )
    
-       offset = SUM( dfft%ngw_all( 1:dfft%mype ) )
-       DO i = 1, dfft%ngw
+       offset = SUM( dfft%ng_all( 1:dfft%mype ) )
+       DO i = 1, ng_pw
           c0_out( i ) = c0_total( i + offset )
        ENDDO
 
@@ -174,14 +238,14 @@ CONTAINS
 
        c0_total = (0.0_DP,0.0_DP)       
 
-       offset = SUM( dfft%ngw_all( 1:dfft%mype ) )
-       DO i = 1, dfft%ngw
+       offset = SUM( dfft%ng_all( 1:dfft%mype ) )
+       DO i = 1, ng_pw
           c0_total( i + offset ) = c0_in( i )
        ENDDO
 
-       Call mp_sum( c0_total, dfft%ngw_total, dfft%comm )
+       Call mp_sum( c0_total, dfft%ng_total, dfft%comm )
 
-       DO i = 1, ngw
+       DO i = 1, ng_cpmd
           c0_out( i ) = c0_total( dfft%conv_fw( i ) )
        ENDDO
 

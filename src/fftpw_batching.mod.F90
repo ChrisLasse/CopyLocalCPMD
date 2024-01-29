@@ -24,12 +24,13 @@ MODULE fftpw_batching
 
 CONTAINS
 
-SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany )
+SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany, ns )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: ibatch, ngms, batch_size, howmany
   COMPLEX(DP), INTENT(IN)  :: psi ( ngms, howmany )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN) :: ns(:)
 
   INTEGER :: j, i
   INTEGER :: offset
@@ -42,28 +43,28 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany )
 !------------------------------------------------------
 !----------Prepare_Psi Start---------------------------
 
-  IF( dfft%singl ) THEN
-     !$omp parallel do private( i, j, offset )
-     DO i = 1, dfft%nsw( dfft%mype+1 )
-        offset = (i-1)*dfft%nr3
-        !$omp simd
-        DO j = 1, dfft%zero_prep_start(i,1)-1
-           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
+  IF( .false. ) THEN !dfft%singl ) THEN
+        !$omp parallel do private( i, j, offset )
+        DO i = 1, ns( dfft%mype+1 )
+           offset = (i-1)*dfft%nr3
+           !$omp simd
+           DO j = 1, dfft%zero_prep_start(i,4)-1
+              dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
+           ENDDO
+           !$omp simd
+           DO j = dfft%zero_prep_start(i,2), dfft%zero_prep_end(i,2)
+              dfft%aux( offset + j ) = (0.d0, 0.d0)
+           ENDDO
+           !$omp simd
+           DO j = dfft%zero_prep_end(i,4)+1, dfft%nr3
+              dfft%aux( offset + j ) = conjg( psi( dfft%nl_r( offset + (dfft%zero_prep_start(i,4)-1) - ( j - (dfft%zero_prep_end(i,4)+1) ) ), 1 ) )
+           ENDDO
         ENDDO
-        !$omp simd
-        DO j = dfft%zero_prep_start(i,1), dfft%zero_prep_end(i,1)
-           dfft%aux( offset + j ) = (0.d0, 0.d0)
-        ENDDO
-        !$omp simd
-        DO j = dfft%zero_prep_end(i,1)+1, dfft%nr3
-           dfft%aux( offset + j ) = psi( dfft%nl_r( offset + j ), 1 )
-        ENDDO
-     ENDDO
-     !$omp end parallel do
+        !$omp end parallel do
   ELSE
      IF( howmany .eq. 2 ) THEN
         !$omp parallel do private( i, j, offset )
-        DO i = 1, dfft%nsw( dfft%mype+1 )
+        DO i = 1, ns( dfft%mype+1 )
            offset = (i-1)*dfft%nr3
            !$omp simd
            DO j = 1, dfft%zero_prep_start(i,1)-1
@@ -81,7 +82,7 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany )
         !$omp end parallel do
      
         !$omp parallel do private( i, j, offset )
-        DO i = 1, dfft%nsw( dfft%mype+1 )
+        DO i = 1, ns( dfft%mype+1 )
            offset = (i-1)*dfft%nr3
            !$omp simd
            DO j = 1, dfft%zero_prep_start(i,3)-1
@@ -95,7 +96,7 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany )
         !$omp end parallel do
      ELSE
         !$omp parallel do private( i, j, offset )
-        DO i = 1, dfft%nsw( dfft%mype+1 )
+        DO i = 1, ns( dfft%mype+1 )
            offset = (i-1)*dfft%nr3
            !$omp simd
            DO j = 1, dfft%zero_prep_start(i,1)-1
@@ -113,7 +114,7 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany )
         !$omp end parallel do
      
         !$omp parallel do private( i, j, offset )
-        DO i = 1, dfft%nsw( dfft%mype+1 )
+        DO i = 1, ns( dfft%mype+1 )
            offset = (i-1)*dfft%nr3
            !$omp simd
            DO j = 1, dfft%zero_prep_start(i,3)-1
@@ -136,12 +137,13 @@ SUBROUTINE Prepare_Psi_overlapp( dfft, psi, ibatch, ngms, batch_size, howmany )
 
 END SUBROUTINE Prepare_Psi_overlapp
 
-SUBROUTINE invfft_pre_com( dfft, comm_mem_send, comm_mem_recv, ibatch, batch_size )
+SUBROUTINE invfft_pre_com( dfft, comm_mem_send, comm_mem_recv, ibatch, batch_size, ns )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: ibatch, batch_size
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   COMPLEX(DP), INTENT(INOUT) :: comm_mem_send( : ), comm_mem_recv( : )
+  INTEGER, INTENT(IN) :: ns(:)
 
   INTEGER :: l, m, j, k, i
   INTEGER :: offset, kfrom, kdest, ierr
@@ -152,7 +154,7 @@ SUBROUTINE invfft_pre_com( dfft, comm_mem_send, comm_mem_recv, ibatch, batch_siz
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
-  CALL fft_1D( dfft%aux, dfft%nsw(dfft%mype+1), dfft%nr3, 2 )
+  CALL fft_1D( dfft%aux, ns(dfft%mype+1), dfft%nr3, 2 )
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
@@ -197,7 +199,7 @@ SUBROUTINE invfft_pre_com( dfft, comm_mem_send, comm_mem_recv, ibatch, batch_siz
         j = dfft%my_node*dfft%node_task_size + m
         offset = ( dfft%my_node_rank + (j-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (ibatch-1) ) * dfft%big_chunks
         !$omp do
-        DO k = 0, dfft%nsw(dfft%mype+1)-1
+        DO k = 0, ns(dfft%mype+1)-1
            kdest = offset + dfft%nr3px * k 
            kfrom = dfft%nr3p_offset( j ) + dfft%nr3 * k
            !omp simd
@@ -278,7 +280,7 @@ SUBROUTINE fft_com( dfft, comm_mem_send, comm_mem_recv, sendsize, intra_me, inte
 END SUBROUTINE fft_com
 
 
-SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, ibatch )
+SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, ibatch, nr1s )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: ibatch
@@ -286,6 +288,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, i
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   COMPLEX(DP), INTENT(OUT) :: f( : )
   INTEGER, INTENT(IN) :: map_acinv(:), map_acinv_rem(:)
+  INTEGER, INTENT(IN) :: nr1s(:)
 
   INTEGER :: i, j, k
   INTEGER :: offset1, offset2, ierr
@@ -354,7 +357,7 @@ SUBROUTINE invfft_after_com( dfft, f, comm_mem_recv, map_acinv, map_acinv_rem, i
 !------------------------------------------------------
 !------------y-FFT Start-------------------------------
 
-  CALL fft_1D( dfft%aux, dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p, dfft%nr2, 2 )
+  CALL fft_1D( dfft%aux, nr1s(dfft%mype2+1) * dfft%my_nr3p, dfft%nr2, 2 )
 
 !-------------y-FFT End--------------------------------
 !------------------------------------------------------
@@ -421,7 +424,7 @@ SUBROUTINE Apply_V( dfft, f, v, ibatch )
 
 END SUBROUTINE Apply_V
 
-SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_size )
+SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_size, nr1s, ns )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: ibatch, batch_size
@@ -429,6 +432,7 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
   COMPLEX(DP), INTENT(OUT) :: comm_mem_send( : )
   COMPLEX(DP), INTENT(INOUT) :: comm_mem_recv( : )
+  INTEGER, INTENT(IN) :: nr1s(:), ns(:)
 
   INTEGER :: i, j, k, l, m
   INTEGER :: offset, ierr
@@ -455,7 +459,7 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
 !------------------------------------------------------
 !------------y-FFT Start-------------------------------
 
-  CALL fft_1D( dfft%aux, dfft%nr1w(dfft%mype2+1) * dfft%my_nr3p, dfft%nr2, -2 )
+  CALL fft_1D( dfft%aux, nr1s(dfft%mype2+1) * dfft%my_nr3p, dfft%nr2, -2 )
 
 !-------------y-FFT End--------------------------------
 !------------------------------------------------------
@@ -474,7 +478,7 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
            i = (l-1)*dfft%node_task_size + m
            offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( (l-1)*(batch_size-1) + (ibatch-1) ) * dfft%big_chunks
            !$omp do
-           DO j = 1, dfft%nsw( i )
+           DO j = 1, ns( i )
               !$omp simd
               DO k = 1, dfft%my_nr3p
                  comm_mem_send( offset + (j-1)*dfft%nr3px + k ) = &
@@ -499,7 +503,7 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
         i = dfft%my_node*dfft%node_task_size + m
         offset = ( dfft%my_node_rank + (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (ibatch-1) ) * dfft%big_chunks
         !$omp do
-        DO j = 1, dfft%nsw( i )
+        DO j = 1, ns( i )
            !$omp simd
            DO k = 1, dfft%my_nr3p
               comm_mem_recv( offset + (j-1)*dfft%nr3px + k ) = &
@@ -519,7 +523,7 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
         i = dfft%my_node*dfft%node_task_size + m
         offset = ( dfft%my_node_rank+ (i-1)*dfft%node_task_size ) * dfft%small_chunks + ( dfft%my_node*(batch_size-1) + (ibatch-1) ) * dfft%big_chunks
         !$omp do
-        DO j = 1, dfft%nsw( i )
+        DO j = 1, ns( i )
            !$omp simd
            DO k = 1, dfft%my_nr3p
               comm_mem_recv( offset + (j-1)*dfft%nr3px + k ) = &
@@ -545,12 +549,13 @@ SUBROUTINE fwfft_pre_com( dfft, f, comm_mem_send, comm_mem_recv, ibatch, batch_s
 
 END SUBROUTINE fwfft_pre_com
 
-SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size )
+SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size, ns )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: ibatch, batch_size
   COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( : )
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
+  INTEGER, INTENT(IN) :: ns(:)
 
   INTEGER :: j, l, k, i
   INTEGER :: offset, kfrom, kdest, ierr
@@ -568,7 +573,7 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size )
      DO l = 1, dfft%node_task_size
         offset = ( dfft%my_node_rank*dfft%node_task_size + (l-1) ) * dfft%small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * dfft%big_chunks
         !$omp do
-        DO k = 0, dfft%nsw(dfft%mype3+1)-1
+        DO k = 0, ns(dfft%mype3+1)-1
            kfrom = offset + dfft%nr3px * k
            kdest = dfft%nr3p_offset( (j-1)*dfft%node_task_size + l ) + dfft%nr3 * k
            !$omp simd
@@ -590,7 +595,7 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size )
 !------------------------------------------------------
 !------------z-FFT Start-------------------------------
 
-  CALL fft_1D( dfft%aux, dfft%nsw(dfft%mype+1), dfft%nr3, -2 )
+  CALL fft_1D( dfft%aux, ns(dfft%mype+1), dfft%nr3, -2 )
 
 !-------------z-FFT End--------------------------------
 !------------------------------------------------------
@@ -601,12 +606,12 @@ SUBROUTINE fwfft_after_com( dfft, comm_mem_recv, ibatch, batch_size )
 
 END SUBROUTINE fwfft_after_com
 
-SUBROUTINE Accumulate_Psi_overlapp( dfft, psi, hpsi, ibatch, ngms, batch_size, howmany )
+SUBROUTINE Accumulate_Psi_overlapp( dfft, hpsi, ibatch, ngms, batch_size, howmany, psi )
   IMPLICIT NONE
 
   INTEGER, INTENT(IN) :: ibatch, batch_size, ngms, howmany
   TYPE(PW_fft_type_descriptor), INTENT(INOUT) :: dfft
-  COMPLEX(DP), INTENT(IN) :: psi( ngms, howmany )
+  COMPLEX(DP), INTENT(IN), OPTIONAL :: psi( ngms, howmany )
   COMPLEX(DP), INTENT(INOUT) :: hpsi( ngms, howmany )
 
   COMPLEX(DP) :: fp, fm
@@ -619,7 +624,7 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, psi, hpsi, ibatch, ngms, batch_size, h
 !------------------------------------------------------
 !--------Accumulate_Psi Start--------------------------
 
-  IF( dfft%singl ) THEN
+  IF( .false. ) THEN !dfft%singl ) THEN
 
      !$omp parallel do private( j )
      DO j = 1, ngms
@@ -645,9 +650,11 @@ SUBROUTINE Accumulate_Psi_overlapp( dfft, psi, hpsi, ibatch, ngms, batch_size, h
      
      ELSE
      
+        dfft%aux = dfft%aux * dfft%tscale
         !$omp parallel do private( j )
         DO j = 1, ngms
-           hpsi( j, 1 ) = hpsi ( j, 1 ) + dfft%aux( dfft%nl( j ) ) * dfft%tscale
+!           hpsi( j, 1 ) = hpsi ( j, 1 ) + dfft%aux( dfft%nl( j ) ) * dfft%tscale
+           hpsi( j, 1 ) = dfft%aux( dfft%nl( j ) ) ! * dfft%tscale
         END DO
         !$omp end parallel do
        

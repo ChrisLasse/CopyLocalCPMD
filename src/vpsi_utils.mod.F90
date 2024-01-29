@@ -1895,8 +1895,8 @@ CONTAINS
        remember_buffer = buffer_size
        CALL Clean_up_shared( dfft, 1 ) 
 
-       CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size )
-       CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size )
+       CALL Set_Req_Vals( dfft, nbnd_source, batch_size, dfft%rem_size, buffer_size, dfft%ir1w, dfft%nsw )
+       CALL Prep_Copy_Maps( dfft, ngms, batch_size, dfft%rem_size, dfft%ir1w, dfft%nsw )
   
        dfft%sendsize = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * batch_size
        sendsize_rem = MAXVAL ( dfft%nr3p ) * MAXVAL( dfft%nsw ) * dfft%node_task_size * dfft%node_task_size * dfft%rem_size
@@ -1922,7 +1922,7 @@ CONTAINS
     END IF
 
     DO i = 1, nbnd_source
-       CALL ConvertFFT_Coeffs( dfft, -1, c0(:,i), psi(:,i), ncpw%ngw ) 
+       CALL ConvertFFT_Coeffs( dfft, -1, c0(:,i), psi(:,i), ncpw%ngw, dfft%ngw ) 
     ENDDO
     CALL ConvertFFT_v( dfft, v_cpmd, v )
   
@@ -2150,7 +2150,7 @@ CONTAINS
     dfft%time_adding( 100 ) = time(2) - time(1)
 
     DO i = 1, nbnd_source
-       CALL ConvertFFT_Coeffs( dfft, 1, hpsi(:,i), c2(:,i), ncpw%ngw )
+       CALL ConvertFFT_Coeffs( dfft, 1, hpsi(:,i), c2(:,i), ncpw%ngw, dfft%ngw )
     ENDDO
 
     CALL SYSTEM_CLOCK( time(4) )
