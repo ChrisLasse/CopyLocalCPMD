@@ -117,6 +117,7 @@ MODULE fftpw_types
     INTEGER :: batch_size = 1
     INTEGER :: nstate = 0
 
+    INTEGER :: what = 0
     LOGICAL :: overlapp = .true.
     LOGICAL :: tunned = .false.
     INTEGER :: rem_size = 0
@@ -153,9 +154,9 @@ MODULE fftpw_types
     INTEGER :: ngm_gl
     INTEGER :: ngm_max
     INTEGER, ALLOCATABLE :: ngm_all(:)
-    INTEGER :: ngw_total
-    INTEGER :: ngw_max
-    INTEGER, ALLOCATABLE :: ngw_all(:)
+    INTEGER :: ng_total
+    INTEGER :: ng_max
+    INTEGER, ALLOCATABLE :: ng_all(:)
     INTEGER :: ngm_l
     INTEGER :: cpus_per_task = 1
     INTEGER :: my_node_rank = 0
@@ -185,7 +186,7 @@ MODULE fftpw_types
     LOGICAL :: rem
     LOGICAL :: writ
     LOGICAL :: optimized = .true.
-    LOGICAL :: use_maps = .false.
+    LOGICAL :: use_maps = .true.
 
     INTEGER :: ngm  ! my no. of non zero charge density/potential components
                     !    ngm = dfftp%ngl( dfftp%mype + 1 )
@@ -908,10 +909,11 @@ CONTAINS
 !
 !!=----------------------------------------------------------------------------=!
 !
-  SUBROUTINE fft_type_init( dfft, smap, lpara, comm, bg, gcutw, gcutp )
+  SUBROUTINE fft_type_init( dfft, which, smap, lpara, comm, bg, gcutw, gcutp )
 
      TYPE (PW_fft_type_descriptor), INTENT(INOUT) :: dfft
      TYPE (sticks_map), INTENT(INOUT) :: smap
+     CHARACTER(LEN=*), INTENT(IN) :: which
      LOGICAL, INTENT(IN) :: lpara
      TYPE(MPI_COMM), INTENT(IN) :: comm
      REAL(DP), INTENT(IN) :: gcutw, gcutp
@@ -946,7 +948,7 @@ CONTAINS
      !write (6,*) ' inside fft_type_init' ; FLUSH(6)
 
      gkcut = gcutw
-     gcut = gcutp
+     gcut  = gcutp
 
      IF( .NOT. ALLOCATED( dfft%nsp ) ) THEN
         CALL fft_type_allocate( dfft, bg, gcutp, comm )

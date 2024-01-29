@@ -3,7 +3,6 @@
 !=----------------------------------------------------------------------=!
 !! iso_c_binding provides C_PTR, C_NULL_PTR, C_ASSOCIATED
        USE, intrinsic :: iso_c_binding
-       USE fftpw_base,                          ONLY: dfft
        USE fftpw_param
        USE fftpw_types,                         ONLY: PW_fft_type_descriptor
        IMPLICIT NONE
@@ -154,9 +153,9 @@
      INTEGER :: nr1_temp(1)
    
      !
-     if ( abs (isgn) == 1 ) then          ! It's a potential FFT
+     if ( desc%what == 1 ) then          ! It's a potential FFT
         CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc2, desc%my_nr2p, desc%nr1p, desc%indp, desc%iplp )
-     else if ( abs (isgn) == 2 ) then     ! It's a wavefunction FFT
+     else if ( desc%what == 2 ) then     ! It's a wavefunction FFT
         CALL impl_xy( MAXVAL ( desc%nr2p ), desc%nproc2, desc%my_nr2p, desc%nr1w, desc%indw, desc%iplw )
      end if
      !

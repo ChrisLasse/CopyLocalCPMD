@@ -8,6 +8,7 @@ MODULE fftpw_base
   IMPLICIT NONE
 
   TYPE( PW_fft_type_descriptor ) :: dfft
+  TYPE( PW_fft_type_descriptor ) :: dfftp
 
   TYPE (sticks_map) :: smap
 
@@ -16,6 +17,7 @@ MODULE fftpw_base
   PRIVATE
 
   PUBLIC :: dfft
+  PUBLIC :: dfftp
   PUBLIC :: smap
 
 END MODULE fftpw_base

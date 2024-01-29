@@ -3111,7 +3111,7 @@ fftpw_batching.mod.o:fftpw_batching.mod.f90 fftpw_legacy_routines.mod \
                 fftpw_param.mod fftpw_types.mod
 
 fftpw_converting.mod.f90:$(SRCDIR)/fftpw_converting.mod.F90
-fftpw_converting.mod.o:fftpw_converting.mod.f90 fftpw_base.mod fftpw_make_maps.mod \
+fftpw_converting.mod.o:fftpw_converting.mod.f90 fftpw_base.mod fftpw_ggen.mod fftpw_make_maps.mod \
                 fftpw_param.mod fftpw_stick_base.mod fftpw_types.mod gvec.mod \
                 parac.mod system.mod
 
