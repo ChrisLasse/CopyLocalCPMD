@@ -1,6 +1,6 @@
 AR     = /usr/bin/ar ruv
 RANLIB = /usr/bin/ranlib
-FFLAGS =  -g -traceback -fopenmp -axCORE-AVX2,CORE-AVX512 -mavx -unroll -funroll-loops -O2
+FFLAGS =  -g -traceback -fopenmp -axCORE-AVX2,CORE-AVX512 -mavx -unroll -funroll-loops -O0
 CPPFLAGS =
 
 FC = mpiifort 

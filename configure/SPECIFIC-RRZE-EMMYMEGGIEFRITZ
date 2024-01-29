@@ -1,0 +1,33 @@
+#INFO#
+#INFO# Configuration to build a  parrallel cpmd executable for Meggie
+#INFO# using the INTEL compilers (version 19, intel MPI 2019)
+#INFO# T. Kloeffel
+#INFO#
+
+
+     IRAT=2
+     FC='mpif90'
+     CC='mpicc'
+     LD='mpif90'
+     CPP='/lib/cpp -P -traditional'
+     CPPFLAGS="-D__HAS_BF_STREAM_IO -D__Linux  -D__PARALLEL -DLINUX_IFC -D__NO_MEMSIZE -D__HASNT_F08_ISO_FORTRAN_ENV"
+     CPPFLAGS=""${CPPFLAGS}" -D__HAS_LIBGRIMMEVDW"
+     CPPFLAGS=""${CPPFLAGS}" -D__HAS_FFT_FFTW3 -D__FFT_HAS_SPECIAL_COPY -D__FFT_HAS_LOW_LEVEL_TIMERS"
+     CPPFLAGS=""${CPPFLAGS}" -D__VECTOR  -D__USE_SCRATCHLIBRARY -D__INTEL_MKL"
+#     FFLAGS="-O0 -g -traceback -fopenmp  -axCORE-AVX512,CORE-AVX2 -qopt-zmm-usage=high -mavx -unroll -funroll-loops -I\${CPMDROOT}/../scratchmodule_lib -IPO -I\${MKLROOT}/include/intel64/lp64"
+     FFLAGS="-O0 -g -traceback -fopenmp  -axCORE-AVX2 -qopt-zmm-usage=high -mavx -unroll -funroll-loops -I\${CPMDROOT}/../scratchmodule_lib -IPO -I\${MKLROOT}/include/intel64/lp64"
+     LFLAGS="-O0 -g -traceback -fopenmp -mkl=parallel -lmkl_scalapack_lp64 -lmkl_blacs_openmpi_lp64  -L\${CPMDROOT}/../vdw_lib -lgrimmevdw  -L\${CPMDROOT}/../scratchmodule_lib -lscratch_module "
+     CFLAGS="-O0 -g -traceback -fopenmp -Wall -m64 "
+     OMP3_DISABLED=false
+#
+#     IRAT=2
+#     FC='mpif90'
+#     CC='mpicc'
+#     LD='mpif90'
+#     CPP='/lib/cpp -P -traditional'
+#     CPPFLAGS="-D__HAS_BF_STREAM_IO -D__Linux  -D__PARALLEL -DLINUX_IFC -D__NO_MEMSIZE -D__HASNT_F08_ISO_FORTRAN_ENV"
+#     CPPFLAGS=""${CPPFLAGS}" -D__HAS_FFT_FFTW3"
+#     FFLAGS="-O0 -C -check nocontiguous  -g -traceback   -xCORE-AVX2 -I\${CPMDROOT}/../scratchmodule_lib "
+#     LFLAGS="-O0 -g -traceback   -mkl=parallel -lmkl_scalapack_lp64 -lmkl_blacs_intelmpi_lp64  "
+#     CFLAGS="-O0 -g -traceback   -Wall -m64 "
+#     OMP3_DISABLED=false
