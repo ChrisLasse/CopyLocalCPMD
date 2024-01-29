@@ -61,6 +61,10 @@ MODULE vpsi_utils
                                              fwfftn_batch,&
                                              invfftn_batch
   USE fftnew_utils,                    ONLY: setfftn
+  USE fftpw_base,                      ONLY: dfft
+  USE fftpw_overlapp,                  ONLY: Compare_invffts
+  USE fftpw_param,                     ONLY: DP
+  USE fftpw_types,                     ONLY: PW_fft_type_descriptor
   USE geq0mod,                         ONLY: geq0
   USE kinds,                           ONLY: real_8,&
                                              int_8
@@ -1039,6 +1043,8 @@ CONTAINS
     REAL(real_8), ALLOCATABLE                :: vpotx3a(:,:,:), vpotx3b(:,:,:)
     REAL(real_8), POINTER __CONTIGUOUS       :: VPOTX(:),vpotdg(:,:,:),extf_p(:,:)
     INTEGER, ALLOCATABLE                     :: lspin(:,:)
+ 
+    INTEGER                                  :: rem
     ! ==--------------------------------------------------------------==
 
     IF(cntl%fft_tune_batchsize) THEN
