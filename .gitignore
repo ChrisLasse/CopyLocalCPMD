@@ -9,3 +9,4 @@ build
 *.mod
 *.x
 *.pyc
+*.a
