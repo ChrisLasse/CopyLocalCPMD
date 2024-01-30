@@ -904,40 +904,44 @@ CONTAINS
           tfft%thread_x_end( i, 2, which ) = tfft%thread_x_start( i, 2, which ) + tfft%thread_x_sticks( i, 2, which ) - 1
        ENDDO
     END IF
-  
-  ! gspace things
-  
-    DO i = 1+overlap_cor, parai%ncpus
-       tfft%thread_ngms( i ) = ( ngs ) / eff_nthreads
-    ENDDO
-    DO i = 1+overlap_cor, mod( ngs, eff_nthreads ) + overlap_cor
-       tfft%thread_ngms( i ) = tfft%thread_ngms( i ) + 1
-    ENDDO
-  
-    tfft%thread_ngms_start( 1+overlap_cor ) = 1
-    DO i = 2+overlap_cor, parai%ncpus
-       tfft%thread_ngms_start( i ) = tfft%thread_ngms_start( i-1 ) + tfft%thread_ngms( i-1 )
-    ENDDO
-    DO i = 1+overlap_cor, parai%ncpus
-       tfft%thread_ngms_end( i ) = tfft%thread_ngms_start( i ) + tfft%thread_ngms( i ) - 1
-    ENDDO
-  
-  ! rspace things
-    
-    DO i = 1+overlap_cor, parai%ncpus
-       tfft%thread_rspace( i ) = ( tfft%my_nr3p * tfft%nr2 * tfft%nr1 ) / eff_nthreads
-    ENDDO
-    DO i = 1+overlap_cor, mod( tfft%my_nr3p * tfft%nr2 * tfft%nr1, eff_nthreads ) + overlap_cor
-       tfft%thread_rspace( i ) = tfft%thread_rspace( i ) + 1
-    ENDDO
-  
-    tfft%thread_rspace_start( 1+overlap_cor ) = 1
-    DO i = 2+overlap_cor, parai%ncpus
-       tfft%thread_rspace_start( i ) = tfft%thread_rspace_start( i-1 ) + tfft%thread_rspace( i-1 )
-    ENDDO
-    DO i = 1+overlap_cor, parai%ncpus
-       tfft%thread_rspace_end( i ) = tfft%thread_rspace_start( i ) + tfft%thread_rspace( i ) - 1
-    ENDDO
+ 
+    IF( tfft%which .eq. 1 ) THEN
+ 
+     ! gspace things
+     
+       DO i = 1+overlap_cor, parai%ncpus
+          tfft%thread_ngms( i ) = ( ngs ) / eff_nthreads
+       ENDDO
+       DO i = 1+overlap_cor, mod( ngs, eff_nthreads ) + overlap_cor
+          tfft%thread_ngms( i ) = tfft%thread_ngms( i ) + 1
+       ENDDO
+     
+       tfft%thread_ngms_start( 1+overlap_cor ) = 1
+       DO i = 2+overlap_cor, parai%ncpus
+          tfft%thread_ngms_start( i ) = tfft%thread_ngms_start( i-1 ) + tfft%thread_ngms( i-1 )
+       ENDDO
+       DO i = 1+overlap_cor, parai%ncpus
+          tfft%thread_ngms_end( i ) = tfft%thread_ngms_start( i ) + tfft%thread_ngms( i ) - 1
+       ENDDO
+     
+     ! rspace things
+       
+       DO i = 1+overlap_cor, parai%ncpus
+          tfft%thread_rspace( i ) = ( tfft%my_nr3p * tfft%nr2 * tfft%nr1 ) / eff_nthreads
+       ENDDO
+       DO i = 1+overlap_cor, mod( tfft%my_nr3p * tfft%nr2 * tfft%nr1, eff_nthreads ) + overlap_cor
+          tfft%thread_rspace( i ) = tfft%thread_rspace( i ) + 1
+       ENDDO
+     
+       tfft%thread_rspace_start( 1+overlap_cor ) = 1
+       DO i = 2+overlap_cor, parai%ncpus
+          tfft%thread_rspace_start( i ) = tfft%thread_rspace_start( i-1 ) + tfft%thread_rspace( i-1 )
+       ENDDO
+       DO i = 1+overlap_cor, parai%ncpus
+          tfft%thread_rspace_end( i ) = tfft%thread_rspace_start( i ) + tfft%thread_rspace( i ) - 1
+       ENDDO
+
+    END IF
     
   END SUBROUTINE Make_Manual_Maps
   ! ==================================================================

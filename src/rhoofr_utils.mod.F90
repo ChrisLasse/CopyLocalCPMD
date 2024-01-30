@@ -1351,7 +1351,7 @@ CONTAINS
 
     INTEGER                                  :: i, ierr, ir, is1, is2, iwf, &
                                                 ibatch, isub, isub3, isub4, bsize, &
-                                                first_state, offset_state, i_start, i_end, &
+                                                first_state, offset_state, nstates(2,1), &
                                                 i_start2, i_start3,  me_grp, n_grp, &
                                                 methread, count, &
                                                 swap, start_loop, end_loop
@@ -1459,7 +1459,7 @@ CONTAINS
     il_psi_both (1) = tfft%my_nr3p * tfft%nr2 * tfft%nr1
     il_psi_both (2) = (nstate/2)+1
 
-!#ifdef _USE_SCRATCHLIBRARY
+#ifdef _USE_SCRATCHLIBRARY
     CALL request_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
          __LINE__,__FILE__)
@@ -1469,23 +1469,23 @@ CONTAINS
             __LINE__,__FILE__)
        psi_work => psi_nors
     ELSE
-!       IF( first ) THEN
-!          first = .false.
-!          CALL request_scratch(il_psi_both,wfn_r,'wfn_r',ierr)
-!          IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
-!            __LINE__,__FILE__)
-!       END IF
-!       psi_work => wfn_r
+       IF( first ) THEN
+          first = .false.
+          CALL request_scratch(il_psi_both,wfn_r,'wfn_r',ierr)
+          IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate wfn_r', &
+            __LINE__,__FILE__)
+       END IF
+       psi_work => wfn_r
     END IF
-!#else
-!    ALLOCATE(aux_array(il_aux_array(1),il_aux_array(2)),STAT=ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
-!         __LINE__,__FILE__)
-!    IF( .not. rsactive ) THEN
-!       ALLOCATE(psi_nors(il_psi_both(1),il_psi_both(2)),STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate psi_nors', &
-!            __LINE__,__FILE__)
-!    ELSE
+#else
+    ALLOCATE(aux_array(il_aux_array(1),il_aux_array(2)),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
+         __LINE__,__FILE__)
+    IF( .not. rsactive ) THEN
+       ALLOCATE(psi_nors(il_psi_both(1),il_psi_both(2)),STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate psi_nors', &
+            __LINE__,__FILE__)
+    ELSE
        IF( first ) THEN
           first = .false.
           ALLOCATE(wfn_r(il_psi_both(1),il_psi_both(2)),STAT=ierr)
@@ -1493,8 +1493,8 @@ CONTAINS
                __LINE__,__FILE__)
        END IF
        psi_work => wfn_r
-!    END IF
-!#endif
+    END IF
+#endif
 
     ! 
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
@@ -1687,27 +1687,27 @@ CONTAINS
     IF (pslo_com%tivan) THEN
        IF (cntl%tlsd) THEN
           ! ALPHA SPIN
-          i_start=1
-          i_end=spin_mod%nsup
-          CALL rhov(i_start,i_end,rsumv,psi)
+          nstates(1,1)=1
+          nstates(2,1)=spin_mod%nsup
+          CALL rhov(nstates,rsumv,psi,.FALSE.,.FALSE.)
           rsum=rsum+parm%omega*rsumv
           !$omp parallel do private(I)
           DO i=1,fpar%nnr1
              rhoe(i,1)=rhoe(i,1)+REAL(psi(i))
           ENDDO
           ! BETA SPIN
-          i_start=spin_mod%nsup+1
-          i_end=spin_mod%nsup+spin_mod%nsdown
-          CALL rhov(i_start,i_end,rsumv,psi)
+          nstates(1,1)=spin_mod%nsup+1
+          nstates(2,1)=spin_mod%nsup+spin_mod%nsdown
+          CALL rhov(nstates,rsumv,psi,.FALSE.,.FALSE.)
           rsum=rsum+parm%omega*rsumv
           !$omp parallel do private(I)
           DO i=1,fpar%nnr1
              rhoe(i,2)=rhoe(i,2)+REAL(psi(i))
           ENDDO
        ELSE
-          i_start=1
-          i_end=nstate
-          CALL rhov(i_start,i_end,rsumv,psi)
+          nstates(1,1)=1
+          nstates(2,1)=nstate
+          CALL rhov(nstates,rsumv,psi,.FALSE.,.FALSE.)
           rsum=rsum+parm%omega*rsumv
           !$omp parallel do private(I)
           DO i=1,fpar%nnr1
@@ -1718,25 +1718,6 @@ CONTAINS
        !TK This part here is meaningless, only calculated to print at the very first and very last step
        !VDB Charges are calculated in rhov and newd
        !optimized and parallelized routine: calc_rho
-!       IF (paral%parent) THEN
-!          ALLOCATE(qa(ions1%nat),STAT=ierr)
-!          IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-!               __LINE__,__FILE__)
-!          CALL zeroing(qa)!,ions1%nat)
-!          CALL augchg(fnl,crge%f,qa,nstate)
-!          iat=0
-!          DO is=1,ions1%nsp
-!             chrg%vdbchg(is)=0._real_8
-!             DO ia=1,ions0%na(is)
-!                iat=iat+1
-!                chrg%vdbchg(is)=chrg%vdbchg(is)+qa(iat)
-!             ENDDO
-!             chrg%vdbchg(is)=chrg%vdbchg(is)/REAL(ions0%na(is),kind=real_8)
-!          ENDDO
-!          DEALLOCATE(qa,STAT=ierr)
-!          IF(ierr/=0) CALL stopgm(procedureN,'deallocation problem', &
-!               __LINE__,__FILE__)
-!       ENDIF
     ENDIF
 
     ! ALPHA+BETA DENSITY IN RHOE(*,1), BETA DENSITY IN RHOE(*,2)

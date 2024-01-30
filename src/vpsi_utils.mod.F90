@@ -154,6 +154,7 @@ MODULE vpsi_utils
   use mkl_service
 #endif
 
+ USE iso_c_binding
  USE iso_fortran_env
 
  
@@ -1967,7 +1968,7 @@ CONTAINS
     INTEGER                                  :: nstate, ikind, ispin
     LOGICAL                                  :: redist_c2
     LOGICAL                                  :: lg_vpotx3a, lg_vpotx3b
-    CHARACTER(*), PARAMETER                  :: procedureN = 'vpsi_pw_batchfft'
+    CHARACTER(*), PARAMETER                  :: procedureN = 'vpsi_batchfft_improved'
     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
 
     COMPLEX(real_8)                          :: fm, fp, psii, psin
@@ -2436,7 +2437,7 @@ CONTAINS
 
     IF(cntl%fft_tune_batchsize) fft_time_total(fft_tune_num_it)=fft_time_total(fft_tune_num_it)+m_walltime()-temp_time
 
-!#ifdef _USE_SCRATCHLIBRARY
+#ifdef _USE_SCRATCHLIBRARY
     CALL free_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
     IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
          __LINE__,__FILE__)
@@ -2451,20 +2452,20 @@ CONTAINS
 !       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
 !            __LINE__,__FILE__)
     END IF
-!#else
-!    DEALLOCATE(aux_array,STAT=ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
-!         __LINE__,__FILE__)
-!    IF( .not. cntl%krwfn ) THEN
-!       DEALLOCATE(rs_array,STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate rs_array', &
-!            __LINE__,__FILE__)
-!    ELSE
-!       DEALLOCATE(wfn_r,STAT=ierr)
-!       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
-!            __LINE__,__FILE__)
-!    END IF
-!#endif
+#else
+    DEALLOCATE(aux_array,STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
+         __LINE__,__FILE__)
+    IF( .not. cntl%krwfn ) THEN
+       DEALLOCATE(rs_array,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate rs_array', &
+            __LINE__,__FILE__)
+    ELSE
+       DEALLOCATE(wfn_r,STAT=ierr)
+       IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate wfn_r', &
+            __LINE__,__FILE__)
+    END IF
+#endif
     IF( allocated( lspin ) ) DEALLOCATE( lspin, STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate rs_array', &
          __LINE__,__FILE__)

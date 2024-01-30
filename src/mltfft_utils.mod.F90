@@ -929,10 +929,10 @@ CONTAINS
     END IF
 
     DO i = 1, num_plans
-       IF(  params_req(1) .EQ. params(1,i,mythread+1) .AND. params_req(2) .EQ. params(2,i,mythread+1) .AND. &
-            params_req(3) .EQ. params(3,i,mythread+1) .AND. params_req(4) .EQ. params(4,i,mythread+1) .AND. &
-            params_req(5) .EQ. params(5,i,mythread+1) .AND. params_req(6) .EQ. params(6,i,mythread+1) .AND. &
-            params_req(7) .EQ. params(7,i,mythread+1) )EXIT
+       IF( ( params_req(1) .EQ. params(1,i,mythread+1) ) .AND. ( params_req(2) .EQ. params(2,i,mythread+1) ) .AND. &
+           ( params_req(3) .EQ. params(3,i,mythread+1) ) .AND. ( params_req(4) .EQ. params(4,i,mythread+1) ) .AND. &
+           ( params_req(5) .EQ. params(5,i,mythread+1) ) .AND. ( params_req(6) .EQ. params(6,i,mythread+1) ) .AND. &
+           ( params_req(7) .EQ. params(7,i,mythread+1) ) )EXIT
     END DO
     IF( i .LE. num_plans ) THEN
        plan = plans(i,mythread+1)
