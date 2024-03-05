@@ -1431,8 +1431,6 @@ CONTAINS
        end_loop=fft_numbatches+1
     END IF
 
-    write(6,*) me_grp, parai%me, fft_batchsize, fft_numbatches, nstate, i_start3
-
     CALL part_1d_get_blk_bounds( nstate, parai%cp_inter_me, parai%cp_nogrp, fir, las )
     nstate_local = las - fir + 1
 
