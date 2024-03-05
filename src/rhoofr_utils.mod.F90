@@ -98,7 +98,8 @@ MODULE rhoofr_utils
   USE parac,                           ONLY: parai,&
                                              paral
   USE part_1d,                         ONLY: part_1d_get_el_in_blk,&
-                                             part_1d_nbr_el_in_blk
+                                             part_1d_nbr_el_in_blk,&
+                                             part_1d_get_blk_bounds
   USE pslo,                            ONLY: pslo_com
   USE reshaper,                        ONLY: reshape_inplace
   USE rho1ofr_utils,                   ONLY: rhoabofr
@@ -1362,7 +1363,7 @@ CONTAINS
     INTEGER, SAVE, ALLOCATABLE               :: ispin(:,:)
     LOGICAL, SAVE :: first = .true.
     INTEGER :: sendsize, sendsize_rem
-    INTEGER :: start, ending
+    INTEGER :: start, ending, nstate_local, fir, las
     INTEGER :: counter(3)
     INTEGER :: remswitch, mythread
     INTEGER, SAVE :: first_dim1, first_dim2, first_dim3
@@ -1371,12 +1372,13 @@ CONTAINS
     INTEGER :: ip, jp
 
 #ifdef _USE_SCRATCHLIBRARY
-    COMPLEX(DP), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux_array(:,:)
+!    COMPLEX(DP), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux_array(:,:)
     COMPLEX(DP), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: psi_nors (:,:)
 #else
     COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux_array(:,:)
     COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: psi_nors (:,:)
 #endif
+    COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux_array(:,:)
     INTEGER(int_8) :: il_aux_array(2)
     INTEGER(int_8) :: il_psi_both (2)
 
@@ -1431,7 +1433,12 @@ CONTAINS
        end_loop=fft_numbatches+1
     END IF
 
-    CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, ispin, coef3, coef4 )
+    write(6,*) me_grp, parai%me, fft_batchsize, fft_numbatches, nstate, i_start3
+
+    CALL part_1d_get_blk_bounds( nstate, parai%cp_inter_me, parai%cp_nogrp, fir, las )
+    nstate_local = las - fir + 1
+
+    CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate_local, sendsize, sendsize_rem, ispin, coef3, coef4 )
   
     tfft%which_wave = 1
 
@@ -1457,12 +1464,13 @@ CONTAINS
     il_aux_array(1) = tfft%nr1w * tfft%my_nr3p * tfft%nr2
     il_aux_array(2) = fft_batchsize
     il_psi_both (1) = tfft%my_nr3p * tfft%nr2 * tfft%nr1
-    il_psi_both (2) = (nstate/2)+1
+    il_psi_both (2) = (nstate_local/2)+1
+
 
 #ifdef _USE_SCRATCHLIBRARY
-    CALL request_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
-         __LINE__,__FILE__)
+!    CALL request_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
+!         __LINE__,__FILE__)
     IF( .not. rsactive ) THEN
        CALL request_scratch(il_psi_both,psi_nors,procedureN//'psi_nors',ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate psi_nors', &
@@ -1495,6 +1503,11 @@ CONTAINS
        psi_work => wfn_r
     END IF
 #endif
+IF( .not. allocated(aux_array) ) THEN
+    ALLOCATE(aux_array(il_aux_array(1),il_aux_array(2)),STAT=ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
+         __LINE__,__FILE__)
+END IF
 
     ! 
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
@@ -1503,6 +1516,8 @@ CONTAINS
     !$omp private(mythread,ibatch,bsize,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
+
+!mythread = 0
 
     counter = 0
     i_start2 = 0
@@ -1522,7 +1537,7 @@ CONTAINS
              IF(bsize.NE.0)THEN
                 counter(1) = counter(1) + 1
                 ! Loop over the electronic states of this batch
-                CALL Prepare_Psi( tfft, c0( :, 1+(counter(1)-1)*fft_batchsize*2 : bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread )
+                CALL Prepare_Psi( tfft, c0( :, i_start3+1+(counter(1)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(1)-1+i_start3)*fft_batchsize*2 ), aux_array, remswitch, mythread )
 !                ! ==--------------------------------------------------------------==
 !                ! ==  Fourier transform the wave functions to real space.         ==
 !                ! ==  In the array PSI was used also the fact that the wave       ==
@@ -1652,9 +1667,9 @@ CONTAINS
 
     IF(cntl%fft_tune_batchsize) fft_time_total(fft_tune_num_it)=m_walltime()-temp_time
 #ifdef _USE_SCRATCHLIBRARY
-    CALL free_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
-         __LINE__,__FILE__)
+!    CALL free_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
+!         __LINE__,__FILE__)
     IF( .not. rsactive ) THEN
        CALL free_scratch(il_psi_both,psi_nors,procedureN//'psi_nors',ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate psi_nors', &
@@ -1670,6 +1685,9 @@ CONTAINS
             __LINE__,__FILE__)
     END IF
 #endif
+!    DEALLOCATE(aux_array,STAT=ierr)
+!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
+!         __LINE__,__FILE__)
 
     ! ==--------------------------------------------------------------==
     ! redistribute RHOE over the groups if needed

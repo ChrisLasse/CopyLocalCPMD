@@ -937,7 +937,11 @@ CONTAINS
     IF( i .LE. num_plans ) THEN
        plan = plans(i,mythread+1)
     ELSE
-       icurrent( mythread+1 ) = icurrent( mythread+1 ) + 1
+       IF( icurrent( mythread+1 ) .ge. num_plans ) THEN
+          icurrent( mythread+1 ) = 1
+       ELSE
+          icurrent( mythread+1 ) = icurrent( mythread+1 ) + 1
+       END IF
        params(:,icurrent(mythread+1),mythread+1)=params_req
        
        !$omp critical
