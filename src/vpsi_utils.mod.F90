@@ -99,7 +99,8 @@ MODULE vpsi_utils
                                              mp_win_alloc_shared_mem
   USE parac,                           ONLY: parai
   USE part_1d,                         ONLY: part_1d_get_el_in_blk,&
-                                             part_1d_nbr_el_in_blk
+                                             part_1d_nbr_el_in_blk,&
+                                             part_1d_get_blk_bounds
   USE prcp,                            ONLY: prcp_com
   USE reshaper,                        ONLY: reshape_inplace
   USE rswfmod,                         ONLY: maxstates,&
@@ -1951,7 +1952,7 @@ CONTAINS
       ir, is1, is2, isub, isub2, isub3, isub4, iwf, ixx, ixxs, iyy, izz, jj, &
       leadx, njump, nnrx, nostat, nrxyz1s, nrxyz2, start_loop2, &
       ist,states_fft,  bsize, ibatch, istate, ir1, first_state, end_loop2, &
-      i_start2, me_grp, n_grp, start_loop1, end_loop1,&
+      i_start2, i_start3, me_grp, n_grp, start_loop1, end_loop1,&
       offset_state, nthreads, nested_threads, methread, count, swap
     INTEGER(int_8)                           :: il_wfng(2), il_wfnr(2), il_wfnr1(1), il_xf(2)
     REAL(real_8)                             :: chksum, csmult, fi, fip1,&
@@ -1975,7 +1976,7 @@ CONTAINS
     INTEGER(int_8) :: il_wfn_r(2)
 
     LOGICAL, SAVE :: first = .true.
-    INTEGER :: sendsize, sendsize_rem
+    INTEGER :: sendsize, sendsize_rem, fir, las, nstate_local
     INTEGER :: counter(6)
     INTEGER :: remswitch, mythread
     COMPLEX(DP), CONTIGUOUS, SAVE, POINTER :: rs_wave(:,:)
@@ -2061,8 +2062,12 @@ CONTAINS
     me_grp=parai%cp_inter_me
     n_grp=parai%cp_nogrp
     i_start2=part_1d_get_el_in_blk(1,nostat,me_grp,n_grp)-1
+    i_start3=part_1d_get_el_in_blk(1,nstate,me_grp,n_grp)-1
 
-    CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate, sendsize, sendsize_rem, lspin )
+    CALL part_1d_get_blk_bounds( nstate, parai%cp_inter_me, parai%cp_nogrp, fir, las )
+    nstate_local = las - fir + 1
+
+    CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate_local, sendsize, sendsize_rem, lspin )
 
     tfft%which_wave = 2
   
@@ -2147,7 +2152,7 @@ CONTAINS
                 IF(bsize.NE.0)THEN
                    counter(1) = counter(1) + 1
                    ! Loop over the electronic states of this batch
-                   CALL Prepare_Psi( tfft, c0( :, 1+(counter(1)-1)*fft_batchsize*2 : bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread )
+                   CALL Prepare_Psi( tfft, c0( :, i_start3+1+(counter(1)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread )
                    ! ==--------------------------------------------------------------==
                    ! ==  Fourier transform the wave functions to real space.         ==
                    ! ==  In the array PSI was used also the fact that the wave       ==
@@ -2322,8 +2327,8 @@ CONTAINS
                 swap=mod(ibatch-start_loop2,fft_buffsize)+1
                 counter(6) = counter(6) + 1
                 CALL fwfft_batch( tfft, 4, bsize, remswitch, mythread, counter(6), swap, f_inout1=comm_recv, f_inout2=aux_array )
-                CALL calc_c2_pw( aux_array, c2(:, 1+(counter(6)-1)*fft_batchsize*2 : bsize*2+(counter(6)-1)*fft_batchsize*2), &
-                                     c0(:, 1+(counter(6)-1)*fft_batchsize*2 : bsize*2+(counter(6)-1)*fft_batchsize*2 ), f, mythread, bsize, counter(6), njump, nostat )
+                CALL calc_c2_pw( aux_array, c2(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2), &
+                                     c0(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2 ), f, mythread, bsize, counter(6), njump, nostat )
              END IF
           END IF
        END IF
@@ -2531,19 +2536,20 @@ CONTAINS
     INTEGER, ALLOCATABLE, INTENT(INOUT) :: spin(:,:)
     REAL(real_8), ALLOCATABLE, OPTIONAL, INTENT(INOUT) :: coef3(:), coef4(:)
 
-    INTEGER :: ierr, needed_size, Com_in_locks, sendsize_pot, irun
+    INTEGER :: ierr, Com_in_locks, sendsize_pot, irun, i, j
     INTEGER, SAVE :: remember_batch = 0
-    LOGICAL, SAVE :: first
+    LOGICAL, SAVE :: first, DEBUG_shared_mem = .false.
     TYPE(C_PTR) :: baseptr( 0:parai%node_nproc-1 )
-    INTEGER :: arrayshape(3)
+    INTEGER :: arrayshape(3,4), needed_size(4)
     CHARACTER(*), PARAMETER                  :: procedureN = 'Pre_fft_setup'
     COMPLEX(DP), SAVE, POINTER, CONTIGUOUS   :: Big_Com_Pointer(:,:,:)
     LOGICAL,     SAVE, POINTER, CONTIGUOUS   :: Big_1Log_Pointer(:,:,:)
     LOGICAL,     SAVE, POINTER, CONTIGUOUS   :: Big_2Log_Pointer(:,:,:)
     LOGICAL,     SAVE, POINTER, CONTIGUOUS   :: Big_3Log_Pointer(:,:,:)
+    LOGICAL :: war(4)
 
     IF( remember_batch .ne. fft_batchsize ) THEN
-  
+
        remember_batch = fft_batchsize
 
        fft_buffsize = 3
@@ -2568,15 +2574,15 @@ CONTAINS
        
        DO irun = 1, 2
 
-          IF( irun .eq. 2 ) CALL mp_win_alloc_shared_mem( 'c', needed_size, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
+          IF( irun .eq. 2 ) CALL mp_win_alloc_shared_mem( 'c', needed_size(4), 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
 
 
-          arrayshape(1) = MAX( sendsize*parai%nnode, sendsize_pot*parai%nnode )
-          arrayshape(2) = fft_buffsize
-          arrayshape(3) = 2
-          needed_size = MAX( arrayshape(1) * arrayshape(2) * arrayshape(3), sendsize_pot*parai%nnode * 2 )
+          arrayshape(1,1) = MAX( sendsize*parai%nnode, sendsize_pot*parai%nnode )
+          arrayshape(2,1) = fft_buffsize
+          arrayshape(3,1) = 2
+          needed_size(1) = MAX( arrayshape(1,1) * arrayshape(2,1) * arrayshape(3,1), sendsize_pot*parai%nnode * 2 )
           IF( irun .eq. 2 ) THEN
-             CALL C_F_POINTER( baseptr(0), Big_Com_Pointer, arrayshape )
+             CALL C_F_POINTER( baseptr(0), Big_Com_Pointer, arrayshape(:,1) )
              comm_send => Big_Com_Pointer(:,:,1) 
              comm_recv => Big_Com_Pointer(:,:,2) 
     
@@ -2586,37 +2592,37 @@ CONTAINS
                                 parai%node_nproc, 1, tfft%comm_sendrecv(:,2), tfft%do_comm(2), 2 )
           END IF
 
-          Com_in_locks = ( needed_size / REAL( ( parai%node_nproc * ( ( nstate / fft_batchsize ) + 1 ) ) / 4.0 ) ) + 1
-          arrayshape(1) = parai%node_nproc
-          arrayshape(2) = ( nstate / fft_batchsize ) + 1
-          arrayshape(3) = Com_in_locks + 4
-          needed_size = ( arrayshape(1) * arrayshape(2) * arrayshape(3) / 4 ) + 1
+          Com_in_locks = ( needed_size(1) / REAL( ( parai%node_nproc * ( ( nstate / fft_batchsize ) + 1 ) ) / 4.0 ) ) + 1
+          arrayshape(1,2) = parai%node_nproc
+          arrayshape(2,2) = ( nstate / fft_batchsize ) + 1
+          arrayshape(3,2) = Com_in_locks + 4
+          needed_size(2) = ( arrayshape(1,2) * arrayshape(2,2) * arrayshape(3,2) / 4 ) + 1
           IF( irun .eq. 2. ) THEN
-             CALL C_F_POINTER( baseptr(0), Big_1Log_Pointer, arrayshape )
+             CALL C_F_POINTER( baseptr(0), Big_1Log_Pointer, arrayshape(:,2) )
              locks_calc_inv => Big_1Log_Pointer(:,:,Com_in_locks+1)
              locks_calc_fw  => Big_1Log_Pointer(:,:,Com_in_locks+2)
              locks_com_inv  => Big_1Log_Pointer(:,:,Com_in_locks+3)
              locks_com_fw   => Big_1Log_Pointer(:,:,Com_in_locks+4)
           END IF
 
-          Com_in_locks = ( needed_size / REAL( ( parai%node_nproc * ( nstate + fft_batchsize + (fft_buffsize-1)*fft_batchsize ) ) / 4.0 ) ) + 1
-          arrayshape(1) = parai%node_nproc
-          arrayshape(2) = nstate + fft_batchsize + (fft_buffsize-1)*fft_batchsize
-          arrayshape(3) = Com_in_locks + 2
-          needed_size = ( arrayshape(1) * arrayshape(2) * arrayshape(3) / 4 ) + 1
+          Com_in_locks = ( needed_size(2) / REAL( ( parai%node_nproc * ( nstate + fft_batchsize + (fft_buffsize-1)*fft_batchsize ) ) / 4.0 ) ) + 1
+          arrayshape(1,3) = parai%node_nproc
+          arrayshape(2,3) = nstate + fft_batchsize + (fft_buffsize-1)*fft_batchsize
+          arrayshape(3,3) = Com_in_locks + 2
+          needed_size(3) = ( arrayshape(1,3) * arrayshape(2,3) * arrayshape(3,3) / 4 ) + 1
           IF( irun .eq. 2 ) THEN
-             CALL C_F_POINTER( baseptr(0), Big_2Log_Pointer, arrayshape )
+             CALL C_F_POINTER( baseptr(0), Big_2Log_Pointer, arrayshape(:,3) )
              locks_calc_1   => Big_2Log_Pointer(:,:,Com_in_locks+1)
              locks_calc_2   => Big_2Log_Pointer(:,:,Com_in_locks+2)
           END IF 
    
-          Com_in_locks = ( needed_size / REAL( ( parai%node_nproc * ( fft_numbatches + 3 ) ) / 4.0 ) ) + 1
-          arrayshape(1) = parai%node_nproc
-          arrayshape(2) = fft_numbatches + 3
-          arrayshape(3) = Com_in_locks + 2
-          needed_size = ( arrayshape(1) * arrayshape(2) * arrayshape(3) / 4 ) + 1
+          Com_in_locks = ( needed_size(3) / REAL( ( parai%node_nproc * ( fft_numbatches + 3 ) ) / 4.0 ) ) + 1
+          arrayshape(1,4) = parai%node_nproc
+          arrayshape(2,4) = fft_numbatches + 3
+          arrayshape(3,4) = Com_in_locks + 2
+          needed_size(4) = ( arrayshape(1,4) * arrayshape(2,4) * arrayshape(3,4) / 4 ) + 1
           IF( irun .eq. 2 ) THEN
-             CALL C_F_POINTER( baseptr(0), Big_3Log_Pointer, arrayshape )
+             CALL C_F_POINTER( baseptr(0), Big_3Log_Pointer, arrayshape(:,4) )
              locks_sing_1   => Big_3Log_Pointer(:,:,Com_in_locks+1)
              locks_sing_2   => Big_3Log_Pointer(:,:,Com_in_locks+2)
           END IF
@@ -2629,6 +2635,151 @@ CONTAINS
        CALL Make_Manual_Maps( tfft, fft_batchsize, fft_residual, tfft%nsw, tfft%nr1w, tfft%ngw, tfft%which ) 
 
        first = .true.
+
+       IF( DEBUG_shared_mem ) THEN
+
+          IF( parai%me .eq. 0 ) THEN
+
+             write(6,*) "*********************************************"
+             write(6,*) "DEBUG SHARED MEMORY OUTPUT"
+             write(6,*) "---------------------------------------------"
+             write(6,*) "COM_SEND / COM_RECV"
+             write(6,'(A7,23X,I16)') "DIM 1: ", arrayshape(1,1)
+             write(6,'(A7,23X,I16)') "DIM 2: ", arrayshape(2,1)
+             write(6,'(A7,23X,I16)') "DIM 3: ", arrayshape(3,1)
+             write(6,'(A18,12X,I16)') "WAVE SIZE NEEDED: ", arrayshape(1,1) * arrayshape(2,1) * arrayshape(3,1)
+             write(6,'(A23,7X,I16)') "POTENTIAL SIZE NEEDED: ", sendsize_pot*parai%nnode * 2
+             write(6,'(A15,15X,I16)') "SIZE RESERVED: ", needed_size(1)
+             write(6,*) "---------------------------------------------"
+             write(6,*) "CALC / COM LOCKS"
+             write(6,'(A7,23X,I16)') "DIM 1: ", arrayshape(1,2)
+             write(6,'(A7,23X,I16)') "DIM 2: ", arrayshape(2,2)
+             write(6,'(A7,23X,15X,A1)') "DIM 3: ", "4"
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN LOGICAL): ", arrayshape(1,2) * arrayshape(2,2) * 4
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN COMPLEX): ", arrayshape(1,2) * arrayshape(2,2)
+             write(6,'(A26,4X,I16)') "PREVIOUS RESERVATION END: ", needed_size(1)
+             write(6,'(A24,6X,I16)') "THIS RESERVATION START: ", ( ( arrayshape(3,2) - 4 ) * arrayshape(1,2) * arrayshape(2,2) ) / 4
+             write(6,'(A22,8X,I16)') "THIS RESERVATION END: ", needed_size(2)
+             write(6,'(A16,14X,I16)') "SIZE DIFFERENZ: ", needed_size(2) - ( ( arrayshape(3,2) - 4 ) * arrayshape(1,2) * arrayshape(2,2) ) / 4
+             write(6,'(A15,15X,I16)') "SIZE RESERVED: ", needed_size(2) - needed_size(1)
+             write(6,*) "---------------------------------------------"
+             write(6,*) "CALC ONLY LOCKS"
+             write(6,'(A7,23X,I16)') "DIM 1: ", arrayshape(1,3)
+             write(6,'(A7,23X,I16)') "DIM 2: ", arrayshape(2,3)
+             write(6,'(A7,23X,15X,A1)') "DIM 3: ", "2"
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN LOGICAL): ", arrayshape(1,3) * arrayshape(2,3) * 2
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN COMPLEX): ", ( arrayshape(1,3) * arrayshape(2,3) ) / 2
+             write(6,'(A26,4X,I16)') "PREVIOUS RESERVATION END: ", needed_size(2)
+             write(6,'(A24,6X,I16)') "THIS RESERVATION START: ", ( ( arrayshape(3,3) - 2 ) * arrayshape(1,3) * arrayshape(2,3) ) / 4
+             write(6,'(A22,8X,I16)') "THIS RESERVATION END: ", needed_size(3)
+             write(6,'(A16,14X,I16)') "SIZE DIFFERENZ: ", needed_size(3) - ( ( arrayshape(3,3) - 2 ) * arrayshape(1,3) * arrayshape(2,3) ) / 4
+             write(6,'(A15,15X,I16)') "SIZE RESERVED: ", needed_size(3) - needed_size(2)
+             write(6,*) "---------------------------------------------"
+             write(6,*) "SINGLE LOCKS"
+             write(6,'(A7,23X,I16)') "DIM 1: ", arrayshape(1,4)
+             write(6,'(A7,23X,I16)') "DIM 2: ", arrayshape(2,4)
+             write(6,'(A7,23X,15X,A1)') "DIM 3: ", "2"
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN LOGICAL): ", arrayshape(1,4) * arrayshape(2,4) * 2
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN COMPLEX): ", ( arrayshape(1,4) * arrayshape(2,4) ) / 2
+             write(6,'(A26,4X,I16)') "PREVIOUS RESERVATION END: ", needed_size(3)
+             write(6,'(A24,6X,I16)') "THIS RESERVATION START: ", ( ( arrayshape(3,4) - 2 ) * arrayshape(1,4) * arrayshape(2,4) ) / 4
+             write(6,'(A22,8X,I16)') "THIS RESERVATION END: ", needed_size(4)
+             write(6,'(A16,14X,I16)') "SIZE DIFFERENZ: ", needed_size(4) - ( ( arrayshape(3,4) - 2 ) * arrayshape(1,4) * arrayshape(2,4) ) / 4
+             write(6,'(A15,15X,I16)') "SIZE RESERVED: ", needed_size(4) - needed_size(3)
+             write(6,*) "---------------------------------------------"
+
+             war = .false.
+
+             DO i = 1, arrayshape(1,1)
+                DO j = 1, arrayshape(2,1)
+                   comm_send(i,j) = (1,1)
+                   comm_recv(i,j) = (1,1)
+                ENDDO
+             ENDDO
+             locks_sing_1 = .true.
+             locks_sing_2 = .true.
+             locks_calc_inv = .true.
+             locks_calc_fw  = .true.
+             locks_com_inv  = .true.
+             locks_com_fw   = .true.
+             locks_calc_1 = .true.
+             locks_calc_2 = .true.
+             DO i = 1, arrayshape(1,1)
+                DO j = 1, arrayshape(2,1)
+                   IF( REAL(comm_send(i,j)) .lt. 0.9 ) war(1) = .true.
+                   IF( REAL(comm_recv(i,j)) .lt. 0.9 ) war(1) = .true.
+                ENDDO
+             ENDDO
+
+             locks_calc_inv = .false.
+             locks_calc_fw  = .false.
+             locks_com_inv  = .false.
+             locks_com_fw   = .false.
+             comm_send = (1,1)
+             comm_recv = (1,1)
+             locks_calc_1 = .true.
+             locks_calc_2 = .true.
+             locks_sing_1 = .true.
+             locks_sing_2 = .true.
+             DO i = 1, arrayshape(1,2)
+                DO j = 1, arrayshape(2,2)
+                   IF( locks_calc_inv(i,j) ) war(2) = .true.
+                   IF( locks_calc_fw(i,j)  ) war(2) = .true.
+                   IF( locks_com_inv(i,j)  ) war(2) = .true.
+                   IF( locks_com_fw(i,j)   ) war(2) = .true.
+                ENDDO
+             ENDDO
+
+             locks_calc_1 = .false.
+             locks_calc_2 = .false.
+             locks_calc_inv = .true.
+             locks_calc_fw  = .true.
+             locks_com_inv  = .true.
+             locks_com_fw   = .true.
+             comm_send = (1,1)
+             comm_recv = (1,1)
+             locks_sing_1 = .true.
+             locks_sing_2 = .true.
+             DO i = 1, arrayshape(1,3)
+                DO j = 1, arrayshape(2,3)
+                   IF( locks_calc_1(i,j) ) war(3) = .true.
+                   IF( locks_calc_2(i,j) ) war(3) = .true.
+                ENDDO
+             ENDDO
+
+             locks_sing_1 = .false.
+             locks_sing_2 = .false.
+             locks_calc_inv = .true.
+             locks_calc_fw  = .true.
+             locks_com_inv  = .true.
+             locks_com_fw   = .true.
+             comm_send = (1,1)
+             comm_recv = (1,1)
+             locks_calc_1 = .true.
+             locks_calc_2 = .true.
+             DO i = 1, arrayshape(1,4)
+                DO j = 1, arrayshape(2,4)
+                   IF( locks_sing_1(i,j) ) war(4) = .true.
+                   IF( locks_sing_2(i,j) ) war(4) = .true.
+                ENDDO
+             ENDDO
+
+             IF( ANY(war) ) THEN
+                write(6,*) "OVERLAPP CHECKS FAILED"
+                IF( war(1) ) write(6,*) "COM_SEND / COM_RECV"
+                IF( war(2) ) write(6,*) "CALC / COM LOCKS"
+                IF( war(3) ) write(6,*) "CALC ONLY LOCKS"
+                IF( war(4) ) write(6,*) "SINGLE LOCKS"
+             ELSE
+                write(6,*) "OVERLAPP CHECKS PASSED"
+             END IF
+             write(6,*) "*********************************************"
+        
+          END IF  
+        
+          CALL MPI_BARRIER(parai%allgrp, ierr)
+
+       END IF
 
     END IF
 
@@ -2654,6 +2805,7 @@ CONTAINS
             __LINE__,__FILE__)
        first = .false.
     END IF
+
 
   END SUBROUTINE Pre_fft_setup
 
