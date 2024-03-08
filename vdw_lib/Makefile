@@ -3,7 +3,7 @@ RANLIB = /usr/bin/ranlib
 FFLAGS =  -g -traceback -fopenmp -axCORE-AVX2,CORE-AVX512 -mavx -unroll -funroll-loops -O0
 CPPFLAGS =
 
-FC = mpiifort 
+FC = mpif90 #ifort 
 
 GRIMME_LIB = libgrimmevdw.a
 SRC_GRIMME = vdw_calculator.F90 vdw_interface.F90 vdw_param.F90

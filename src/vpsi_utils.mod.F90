@@ -2568,9 +2568,9 @@ CONTAINS
           ALLOCATE( tfft%map_acinv_wave_rem( 1 ) )
        END IF   
        
-       sendsize     = MAXVAL( tfft%nr3p ) * MAXVAL ( tfft%nsw ) * parai%node_nproc * parai%node_nproc * fft_batchsize
-       sendsize_rem = MAXVAL( tfft%nr3p ) * MAXVAL ( tfft%nsw ) * parai%node_nproc * parai%node_nproc * fft_residual
-       sendsize_pot = MAXVAL( tfft%nr3p ) * MAXVAL(  tfft%nsp ) * parai%node_nproc * parai%node_nproc
+       sendsize     = MAXVAL( tfft%nr3p ) * MAXVAL ( tfft%nsw ) * parai%max_node_nproc * parai%max_node_nproc * fft_batchsize
+       sendsize_rem = MAXVAL( tfft%nr3p ) * MAXVAL ( tfft%nsw ) * parai%max_node_nproc * parai%max_node_nproc * fft_residual
+       sendsize_pot = MAXVAL( tfft%nr3p ) * MAXVAL(  tfft%nsp ) * parai%max_node_nproc * parai%max_node_nproc
        
        DO irun = 1, 2
 
@@ -2587,9 +2587,9 @@ CONTAINS
              comm_recv => Big_Com_Pointer(:,:,2) 
     
              CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, parai%nnode, parai%me, parai%my_node, parai%node_me, &
-                                parai%node_nproc, fft_buffsize, tfft%comm_sendrecv(:,1), tfft%do_comm(1), 1 )
+                                parai%node_nproc, parai%max_node_nproc, parai%cp_overview, fft_buffsize, tfft%comm_sendrecv(:,1), tfft%do_comm(1), 1 )
              CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, parai%nnode, parai%me, parai%my_node, parai%node_me, &
-                                parai%node_nproc, 1, tfft%comm_sendrecv(:,2), tfft%do_comm(2), 2 )
+                                parai%node_nproc, parai%max_node_nproc, parai%cp_overview, 1, tfft%comm_sendrecv(:,2), tfft%do_comm(2), 2 )
           END IF
 
           Com_in_locks = ( needed_size(1) / REAL( ( parai%node_nproc * ( ( nstate / fft_batchsize ) + 1 ) ) / 4.0 ) ) + 1

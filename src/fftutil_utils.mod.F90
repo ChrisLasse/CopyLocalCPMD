@@ -27,7 +27,8 @@
 MODULE fftutil_utils
   USE cppt,                            ONLY: nzh_r,&
                                              indz_r
-  USE fft,                             ONLY: FFT_TYPE_DESCRIPTOR
+  USE fft,                             ONLY: FFT_TYPE_DESCRIPTOR,&
+                                             fft_batchsize
   USE fft_maxfft,                      ONLY: maxfft
   USE kinds,                           ONLY: real_4,&
                                              real_8
@@ -1046,10 +1047,10 @@ CONTAINS
   
     !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 1 ), ierr )
     !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
-    
+
     CALL MP_STARTALL( tfft%comm_sendrecv(1,tfft%which), parai%send_handle(:,work_buffer,remswitch,which) )
     CALL MP_STARTALL( tfft%comm_sendrecv(2,tfft%which), parai%recv_handle(:,work_buffer,remswitch,which) )
-    
+   
     CALL MP_WAITALL( tfft%comm_sendrecv(1,tfft%which), parai%send_handle(:,work_buffer,remswitch,which) )
     CALL MP_WAITALL( tfft%comm_sendrecv(2,tfft%which), parai%recv_handle(:,work_buffer,remswitch,which) )
   
@@ -1106,11 +1107,16 @@ CONTAINS
   
        !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 1 ), ierr )
   
+       j = 0
        DO l = 1, parai%nnode
-          IF( l .eq. parai%my_node+1 ) CYCLE 
-          DO m = 1, parai%node_nproc
-             j = (l-1)*parai%node_nproc + m
-             offset = ( parai%node_me + (j-1)*parai%node_nproc ) * tfft%small_chunks(tfft%which) + (l-1)*(batch_size-1) * tfft%big_chunks(tfft%which)
+          IF( l .eq. parai%my_node+1 ) THEN
+             j = j + parai%node_nproc_overview( l )
+             CYCLE
+          END IF
+          DO m = 1, parai%node_nproc_overview( l )
+             j = j + 1
+             !     ( Where am I on the node + to which proc does it go ) * Package size
+             offset = ( parai%node_me + ((l-1)*parai%max_node_nproc+(m-1))*parai%max_node_nproc ) * tfft%small_chunks(tfft%which) + (l-1)*(batch_size-1) * tfft%big_chunks(tfft%which)
              DO k = tfft%thread_z_start( mythread+1, remswitch, parai%me+1, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, parai%me+1, tfft%which )
                 kdest = offset + tfft%nr3px * mod( (k-1), nss(parai%me+1) ) + ( (k-1) / nss(parai%me+1) ) * tfft%big_chunks(tfft%which)
                 DO i = 1, tfft%nr3p( j )
@@ -1119,7 +1125,7 @@ CONTAINS
              ENDDO
           ENDDO
        ENDDO
-  
+
        !CALL mpi_win_unlock_all( tfft%mpi_window( 1 ), ierr )
   
     END IF
@@ -1127,12 +1133,11 @@ CONTAINS
     !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
   
     DO m = 1, parai%node_nproc
-       j = parai%my_node*parai%node_nproc + m
-       offset = ( parai%node_me + (j-1)*parai%node_nproc ) * tfft%small_chunks(tfft%which) + parai%my_node*(batch_size-1) * tfft%big_chunks(tfft%which)
+       offset = ( parai%node_me + (parai%my_node*parai%max_node_nproc+(m-1))*parai%max_node_nproc) * tfft%small_chunks(tfft%which) + parai%my_node*(batch_size-1) * tfft%big_chunks(tfft%which)
        DO k = tfft%thread_z_start( mythread+1, remswitch, parai%me+1, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, parai%me+1, tfft%which )
           kdest = offset + tfft%nr3px * mod( k-1, nss(parai%me+1) ) + ( (k-1) / nss(parai%me+1) ) * tfft%big_chunks(tfft%which)
-          DO i = 1, tfft%nr3p( j )
-             comm_mem_recv( kdest + i ) = aux( i + tfft%nr3p_offset( j ), k )
+          DO i = 1, tfft%nr3p( parai%node_grpindx(m)+1 )
+             comm_mem_recv( kdest + i ) = aux( i + tfft%nr3p_offset( parai%node_grpindx(m)+1 ), k )
           ENDDO
        ENDDO
     ENDDO
@@ -1490,11 +1495,15 @@ CONTAINS
         
              !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 1 ), ierr )
         
+             i = 0
              DO l = 1, parai%nnode
-                IF( l .eq. parai%my_node+1 ) CYCLE
-                DO m = 1, parai%node_nproc
-                   i = (l-1)*parai%node_nproc + m
-                   offset = ( parai%node_me + (i-1)*parai%node_nproc ) * tfft%small_chunks(tfft%which) + (l-1)*(batch_size-1) * tfft%big_chunks(tfft%which)
+                IF( l .eq. parai%my_node+1 ) THEN 
+                   i = i + parai%node_nproc_overview( l )
+                   CYCLE
+                END IF
+                DO m = 1, parai%node_nproc_overview( l )
+                   i = i + 1
+                   offset = ( parai%node_me + ((l-1)*parai%max_node_nproc+(m-1))*parai%max_node_nproc ) * tfft%small_chunks(tfft%which) + (l-1)*(batch_size-1) * tfft%big_chunks(tfft%which)
                    DO j = tfft%thread_z_start( mythread+1, remswitch, i, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, i, tfft%which )
                       jter = mod( j-1, nss( i ) ) 
                       ibatch = ( (j-1) / nss( i ) )
@@ -1514,15 +1523,14 @@ CONTAINS
           !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
         
           DO m = 1, parai%node_nproc
-             i = parai%my_node*parai%node_nproc + m
-             offset = ( parai%node_me + (i-1)*parai%node_nproc ) * tfft%small_chunks(tfft%which) + parai%my_node*(batch_size-1) * tfft%big_chunks(tfft%which)
-             DO j = tfft%thread_z_start( mythread+1, remswitch, i, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, i, tfft%which )
-                jter = mod( j-1, nss( i ) ) 
-                ibatch = ( (j-1) / nss( i ) )
+             offset = ( parai%node_me + (parai%my_node*parai%max_node_nproc+(m-1))*parai%max_node_nproc ) * tfft%small_chunks(tfft%which) + parai%my_node*(batch_size-1) * tfft%big_chunks(tfft%which)
+             DO j = tfft%thread_z_start( mythread+1, remswitch, parai%node_grpindx(m)+1, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, parai%node_grpindx(m)+1, tfft%which )
+                jter = mod( j-1, nss( parai%node_grpindx(m)+1 ) ) 
+                ibatch = ( (j-1) / nss( parai%node_grpindx(m)+1 ) )
                 offset2 =  ibatch * tfft%big_chunks(tfft%which)
                 DO k = 1, tfft%my_nr3p
                    comm_mem_recv( offset + offset2 + jter*tfft%nr3px + k ) = &
-                   aux2( map_pcfw( (i-1)*tfft%small_chunks(tfft%which) + jter*tfft%nr3px + k ), ibatch+1 )
+                   aux2( map_pcfw( parai%node_grpindx(m)*tfft%small_chunks(tfft%which) + jter*tfft%nr3px + k ), ibatch+1 )
                 END DO
              END DO
           END DO
@@ -1549,7 +1557,7 @@ CONTAINS
     DOUBLE PRECISION, OPTIONAL, INTENT(IN) :: factor_in
   
     DOUBLE PRECISION :: factor
-    INTEGER :: j, l, k, i
+    INTEGER :: j, l, k, i, m
     INTEGER :: offset, kfrom, ierr
   !  INTEGER :: isub, isub4
   !  CHARACTER(*), PARAMETER :: procedureN = 'fwfft_z_section'
@@ -1574,13 +1582,15 @@ CONTAINS
   
     !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
    
+    m = 0
     DO j = 1, parai%nnode
-       DO l = 1, parai%node_nproc
-          offset = ( parai%node_me*parai%node_nproc + (l-1) ) * tfft%small_chunks(tfft%which) + (j-1)*batch_size * tfft%big_chunks(tfft%which)
+       DO l = 1, parai%node_nproc_overview( j )
+          m = m + 1
+          offset = ( parai%node_me*parai%max_node_nproc + (l-1) ) * tfft%small_chunks(tfft%which) + (j-1)*batch_size * tfft%big_chunks(tfft%which)
           DO k = tfft%thread_z_start( mythread+1, remswitch, parai%me+1, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, parai%me+1, tfft%which )
              kfrom = offset + tfft%nr3px * mod( k-1, nss(parai%me+1) ) + ( (k-1) / nss(parai%me+1) ) * tfft%big_chunks(tfft%which)
-             DO i = 1, tfft%nr3p( (j-1)*parai%node_nproc + l )
-                aux( tfft%nr3p_offset( (j-1)*parai%node_nproc + l ) + i, k ) = comm_mem_recv( kfrom + i ) * factor
+             DO i = 1, tfft%nr3p( m )
+                aux( tfft%nr3p_offset( m ) + i, k ) = comm_mem_recv( kfrom + i ) * factor
              ENDDO
           ENDDO
        ENDDO

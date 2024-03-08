@@ -1217,7 +1217,7 @@ CONTAINS
   
        first = .false.
 
-       sendsize = MAXVAL ( tfft%nr3p ) * MAXVAL( nss ) * parai%node_nproc * parai%node_nproc
+       sendsize = MAXVAL ( tfft%nr3p ) * MAXVAL( nss ) * parai%max_node_nproc * parai%max_node_nproc
    
        CALL mp_win_alloc_shared_mem( 'c', sendsize*parai%nnode*2, 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
 
@@ -1229,7 +1229,7 @@ CONTAINS
        comm_recv => Big_Pointer(:,:,2) 
 
        CALL Prep_fft_com( comm_send, comm_recv, sendsize, 0, parai%nnode, parai%me, parai%my_node, parai%node_me, &
-                          parai%node_nproc, 1, tfft%comm_sendrecv(:,2), tfft%do_comm(2), 2 )
+                          parai%node_nproc, parai%max_node_nproc, parai%cp_overview, 1, tfft%comm_sendrecv(:,2), tfft%do_comm(2), 2 )
 
        CALL Make_Manual_Maps( tfft, 1, 0, nss, nr1s, ngs, tfft%which ) 
 
