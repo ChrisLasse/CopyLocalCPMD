@@ -631,13 +631,15 @@ CONTAINS
     ! ==--------------------------------------------------------------==
   END SUBROUTINE setrays
   ! ==================================================================
-  SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size, comm_sendrecv, do_comm, WAVE )
+  SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, nodes_numb, mype, my_node, my_node_rank, node_task_size, &
+                           max_node_task_size, cp_overview, buffer_size, comm_sendrecv, do_comm, WAVE )
     IMPLICIT NONE
   
-    INTEGER, INTENT(IN)                                 :: sendsize, sendsize_rem, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size
+    INTEGER, INTENT(IN)                                 :: sendsize, sendsize_rem, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size, max_node_task_size
     COMPLEX(DP), INTENT(IN)                             :: comm_send( : , : )
     COMPLEX(DP), INTENT(INOUT)                          :: comm_recv( : , : )
     INTEGER, INTENT(OUT)                                :: comm_sendrecv( : )
+    INTEGER, INTENT(IN)                                 :: cp_overview( : , : )
     LOGICAL, INTENT(OUT)                                :: do_comm
     INTEGER, INTENT(IN)                                 :: WAVE
   
@@ -648,22 +650,32 @@ CONTAINS
   
     INTEGER :: i, j, k, l, m, n, p
     INTEGER :: ierr, eff_nodes, rem, origin_node, target_node
-    INTEGER :: howmany_sending( node_task_size, nodes_numb ) , howmany_receiving( node_task_size, nodes_numb )
+    INTEGER :: save_node, send_node, send_node_task, recv_node, recv_node_task
+    INTEGER :: howmany_sending( max_node_task_size, nodes_numb ) , howmany_receiving( max_node_task_size, nodes_numb )
     LOGICAL :: com_done( nodes_numb )
   
+    !Send to every other node but me
     eff_nodes = nodes_numb - 1
+
+    howmany_sending = 0
+    howmany_receiving = 0
+    IF( my_node_rank .eq. 0 ) THEN
+       !We have eff_nodes-many send and receiv jobs -> distribute among available tasks on node
+       howmany_sending( 1:node_task_size , my_node+1 )   = eff_nodes / node_task_size
+       howmany_receiving( 1:node_task_size , my_node+1 ) = eff_nodes / node_task_size
+       !Distribute Remainder jobs evenly
+       rem = mod( eff_nodes, node_task_size )
+       DO i = 1, rem * 2
+          k = mod( i-1, node_task_size ) + 1
+          IF( i .le. rem ) howmany_sending( k , my_node+1 )   = howmany_sending( k , my_node+1 )   + 1
+          IF( i .gt. rem ) howmany_receiving( k , my_node+1 ) = howmany_receiving( k , my_node+1 ) + 1
+       ENDDO
+    END IF
+    Call mp_sum( howmany_sending  , max_node_task_size*nodes_numb, parai%allgrp )
+    Call mp_sum( howmany_receiving, max_node_task_size*nodes_numb, parai%allgrp )
   
-    howmany_sending   = eff_nodes / node_task_size
-    howmany_receiving = eff_nodes / node_task_size
-    rem = mod( eff_nodes, node_task_size )
-    DO i = 1, rem * 2
-       k = mod( i-1, node_task_size ) + 1
-       IF( i .le. rem ) howmany_sending( k , : )   = howmany_sending( k , : )   + 1
-       IF( i .gt. rem ) howmany_receiving( k , : ) = howmany_receiving( k , : ) + 1
-    ENDDO
-  
-    ALLOCATE( comm_info_send( howmany_sending( 1 , 1 ), node_task_size*nodes_numb ) )
-    ALLOCATE( comm_info_recv( howmany_sending( 1 , 1 ), node_task_size*nodes_numb ) )
+    ALLOCATE( comm_info_send( MAXVAL( howmany_sending( : , 1 ) ), parai%nproc ) )
+    ALLOCATE( comm_info_recv( MAXVAL( howmany_sending( : , 1 ) ), parai%nproc ) )
     comm_info_send = 0
     comm_info_recv = 0
     comm_sendrecv(1) = howmany_sending  ( my_node_rank+1 , my_node+1 )
@@ -671,65 +683,61 @@ CONTAINS
   
     do_comm = .true.
     IF( comm_sendrecv(1) .eq. 0 .and. comm_sendrecv(2) .eq. 0 ) do_comm = .false.
+
+    save_node = -1
+    !Sending Allgrp-Rank
+    DO i = 1, parai%nproc
+       send_node      = parai%cp_overview( 4, i )
+       send_node_task = parai%cp_overview( 2, i )
+       IF( save_node .ne. send_node ) com_done = .false.
+       save_node = send_node
   
-    DO i = 1, nodes_numb
-  
-       com_done = .false.
-  
-       DO k = 1, node_task_size 
-  
-  s_loop: DO l = 1, howmany_sending( k, i )
-  
-             DO m = 1, nodes_numb
-                IF( m .eq. i ) CYCLE
-  
-                DO n = 1, node_task_size 
-  
-                   IF( .not. com_done( m ) .and. howmany_receiving( n , m ) .ne. 0 ) THEN
-                      com_done( m ) = .true.
-                      howmany_receiving( n , m ) = howmany_receiving( n , m ) - 1
-                      comm_info_send( l , k + (i-1)*node_task_size ) = n + (m-1)*node_task_size
-                      DO p = 1, howmany_sending( 1, 1 )
-                         IF( comm_info_recv( p , n + (m-1)*node_task_size ) .eq. 0 ) THEN
-                            comm_info_recv( p , n + (m-1)*node_task_size ) = k + (i-1)*node_task_size
-                            EXIT
-                         END IF
-                      ENDDO
-                      CYCLE s_loop
-                   END IF 
-  
+  s_l: DO l = 1, howmany_sending( send_node_task+1, send_node+1 )
+       
+          !Receiving Allgrp-Rank
+          DO m = 1, parai%nproc
+             recv_node      = parai%cp_overview( 4, m )
+             recv_node_task = parai%cp_overview( 2, m )
+             !Check if same node / nodes already communicated
+             IF( send_node .eq. recv_node .or. com_done( recv_node+1 ) ) CYCLE  
+
+             !Check if task has open receiving jobs 
+             IF( howmany_receiving( recv_node_task+1 , recv_node+1 ) .ne. 0 ) THEN
+                com_done( recv_node+1 ) = .true.
+                !Remove one receiving job
+                howmany_receiving( recv_node_task+1 , recv_node+1 ) = howmany_receiving( recv_node_task+1 , recv_node+1 ) - 1
+                !Save Sending and Receiving Rank
+                comm_info_send( l , i ) = m
+                DO p = 1, MAXVAL( howmany_sending( : , 1 ) )
+                   IF( comm_info_recv( p , m ) .eq. 0 ) THEN
+                      comm_info_recv( p , m ) = i
+                      EXIT
+                   END IF
                 ENDDO
+                CYCLE s_l
+             END IF 
   
-             ENDDO
+          ENDDO
   
-          ENDDO s_loop
-  
-       ENDDO
+       ENDDO s_l
   
     ENDDO
   
-!    IF( WAVE ) THEN
+!    IF( WAVE .eq. 1 ) THEN
 !       IF( first ) THEN
 !          first = .false.
-!          buffer_size_save = buffer_size
-!       ELSE
-!          DO i = 1, buffer_size_save
-!             DO j = 1, comm_sendrecv(1)
-!                CALL MPI_REQUEST_FREE( parai%send_handle( j , i , 1 ) )
-!                CALL MPI_REQUEST_FREE( parai%send_handle( j , i , 2 ) )
-!             ENDDO
-!             DO j = 1, comm_sendrecv(2)
-!                CALL MPI_REQUEST_FREE( parai%recv_handle( j , i , 1 ) )
-!                CALL MPI_REQUEST_FREE( parai%recv_handle( j , i , 2 ) )
-!             ENDDO
+!          DO j = 1, comm_sendrecv(1)
+!             CALL MPI_REQUEST_FREE( parai%send_handle( j , 1 , 1, 2 ) )
 !          ENDDO
-!          buffer_size_save = buffer_size
+!          DO j = 1, comm_sendrecv(2)
+!             CALL MPI_REQUEST_FREE( parai%recv_handle( j , 1 , 1, 2 ) )
+!          ENDDO
 !       END IF
 !    END IF
     
     IF( ALLOCATED( parai%send_handle ) .and. WAVE .eq. 1 )       DEALLOCATE( parai%send_handle )
     IF( ALLOCATED( parai%recv_handle ) .and. WAVE .eq. 1 )       DEALLOCATE( parai%recv_handle )
-    
+   
     IF( .not. ALLOCATED(parai%send_handle) ) ALLOCATE( parai%send_handle( comm_sendrecv(1), buffer_size, 2, 2 ) )
     IF( .not. ALLOCATED(parai%recv_handle) ) ALLOCATE( parai%recv_handle( comm_sendrecv(2), buffer_size, 2, 2 ) )
     
@@ -737,7 +745,7 @@ CONTAINS
   
        DO j = 1, comm_sendrecv( 1 )
   
-          target_node = (comm_info_send(j,mype+1)-1) / node_task_size
+          target_node = parai%cp_overview(4,comm_info_send(j,mype+1))
   
           CALL mp_send_init_complex( comm_send(:,i), target_node*sendsize, sendsize, comm_info_send( j , mype+1 ) - 1, mype, parai%allgrp, parai%send_handle( j , i, 1, WAVE ) )
   
@@ -745,7 +753,7 @@ CONTAINS
   
        DO j = 1, comm_sendrecv( 2 )
   
-          origin_node = (comm_info_recv(j,mype+1)-1) / node_task_size
+          origin_node = parai%cp_overview(4,comm_info_recv(j,mype+1))
   
           CALL mp_recv_init_complex( comm_recv(:,i), origin_node*sendsize, sendsize, comm_info_recv( j , mype+1 ) - 1, parai%allgrp, parai%recv_handle( j , i, 1, WAVE ) )
   
@@ -759,7 +767,7 @@ CONTAINS
     
           DO j = 1, comm_sendrecv( 1 )
   
-             target_node = (comm_info_send(j,mype+1)-1) / node_task_size
+             target_node = parai%cp_overview(4,comm_info_send(j,mype+1))
     
              CALL mp_send_init_complex( comm_send(:,i), target_node*sendsize_rem, sendsize_rem, comm_info_send( j , mype+1 ) - 1, mype, parai%allgrp, parai%send_handle( j , i, 2, WAVE ) )
    
@@ -767,7 +775,7 @@ CONTAINS
     
           DO j = 1, comm_sendrecv( 2 )
     
-             origin_node = (comm_info_recv(j,mype+1)-1) / node_task_size
+             origin_node = parai%cp_overview(4,comm_info_recv(j,mype+1))
     
              CALL mp_recv_init_complex( comm_recv(:,i), origin_node*sendsize_rem, sendsize_rem, comm_info_recv( j , mype+1 ) - 1, parai%allgrp, parai%recv_handle( j , i, 2, WAVE ) )
    
@@ -801,7 +809,7 @@ CONTAINS
   
   ! z things
     
-    DO j = 1, parai%node_nproc * parai%nnode
+    DO j = 1, parai%nproc
   
        DO i = 1+overlap_cor, parai%ncpus
           tfft%thread_z_sticks( i, 1, j, which ) = ( nss( j ) * batch_size ) / eff_nthreads
@@ -965,10 +973,11 @@ CONTAINS
     
     !$omp parallel private( ibatch, j, l, iproc, offset, i, it, mc, m1, m2, i1, k)
     DO ibatch = 1, batch_size
+       iproc = 0
        DO j = 1, parai%nnode
-          DO l = 1, parai%node_nproc
-             iproc = (j-1)*parai%node_nproc + l
-             offset = ( parai%node_me*parai%node_nproc + (l-1) ) * small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * big_chunks
+          DO l = 1, parai%node_nproc_overview( j )
+             iproc = iproc + 1
+             offset = ( parai%node_me*parai%max_node_nproc + (l-1) ) * small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * big_chunks
              !$omp do
              DO i = 1, nss( iproc )
                 it = offset + tfft%nr3px * (i-1) 

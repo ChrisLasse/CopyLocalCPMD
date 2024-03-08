@@ -59,7 +59,7 @@ CONTAINS
     INTEGER :: i, i0, ia, iat, icpu, ierr, ig, ihrays, ii, img, in1, in2, &
       in3, iorb, ip, ipp, ir, is, isub, isub2, isub3, isub4, izrays, izpl, j, &
       j1, j2, jmax, jmin, k, kmax, kmin, mspace, nh1, nh2, nh3, nthreads,&
-      first, last
+      first, last, offset
     INTEGER, ALLOCATABLE                     :: ihray(:,:), ixray(:,:), &
                                                 mgpa(:,:), ind(:), pre_inyh(:,:)
     INTEGER, ALLOCATABLE, DIMENSION(:)       :: thread_buff
@@ -398,16 +398,41 @@ CONTAINS
     ! SETUP ARRAYS NEEDED FOR IMPROVED FFT
     ! ==--------------------------------------------------------------==
 
-    parai%nnode = parai%nproc / parai%node_nproc
-    parai%my_node = parai%me / parai%node_nproc
+    ALLOCATE( parai%cp_overview( 4, parai%nproc ) )
+    parai%cp_overview = 0
+    parai%cp_overview( 1, parai%me+1 ) = parai%cp_me
+    parai%cp_overview( 2, parai%me+1 ) = parai%node_me 
+    parai%cp_overview( 3, parai%me+1 ) = parai%node_nproc
+    Call mp_sum(parai%cp_overview,parai%nproc*4,parai%allgrp)
+    offset = 0
+    DO i = 1, parai%nproc
+       parai%cp_overview( 4, i ) = offset
+       IF( parai%cp_overview( 2, i ) + 1 .eq. parai%cp_overview( 3, i ) ) offset = offset + 1
+    ENDDO
 
-    ALLOCATE( tfft%thread_z_sticks( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
+    parai%nnode = MAXVAL(parai%cp_overview(4,:))+1
+    parai%my_node = parai%cp_overview( 4, parai%me+1 )
+    parai%max_node_nproc = MAXVAL(parai%cp_overview(3,:))
+
+    ALLOCATE( parai%node_nproc_overview( parai%nnode ) )
+    DO i = 1, parai%nnode
+       DO j = 1, parai%nproc
+          IF( parai%cp_overview(4,j) .eq. i-1 ) parai%node_nproc_overview( i ) = parai%cp_overview(3,j)
+       ENDDO
+    ENDDO
+    
+    ALLOCATE( parai%node_grpindx( parai%node_nproc ) )
+    DO i = 1, parai%nproc
+       IF( parai%my_node .eq. parai%cp_overview(4,i) ) parai%node_grpindx( parai%cp_overview(2,i)+1 ) = i - 1
+    ENDDO
+
+    ALLOCATE( tfft%thread_z_sticks( parai%ncpus, 2, parai%nproc, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_z_start( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_z_start( parai%ncpus, 2, parai%nproc, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_z_end( parai%ncpus, 2, parai%node_nproc * parai%nnode, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_z_end( parai%ncpus, 2, parai%nproc, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
     ALLOCATE( tfft%thread_y_sticks( parai%ncpus, 2, 2 ), STAT=ierr )
@@ -1299,8 +1324,8 @@ CONTAINS
 
     tfft%small_chunks(1) = tfft%nr3px * MAXVAL( tfft%nsw )
     tfft%small_chunks(2) = tfft%nr3px * MAXVAL( tfft%nsp )
-    tfft%big_chunks(1)   = tfft%small_chunks(1) * parai%node_nproc * parai%node_nproc
-    tfft%big_chunks(2)   = tfft%small_chunks(2) * parai%node_nproc * parai%node_nproc
+    tfft%big_chunks(1)   = tfft%small_chunks(1) * parai%max_node_nproc * parai%max_node_nproc
+    tfft%big_chunks(2)   = tfft%small_chunks(2) * parai%max_node_nproc * parai%max_node_nproc
     tfft%tscale = 1.0d0 / dble( tfft%nr1 * tfft%nr2 * tfft%nr3 )
 
   END SUBROUTINE SetupArrays

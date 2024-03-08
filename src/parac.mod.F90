@@ -122,6 +122,10 @@ MODULE parac
 #endif
      INTEGER :: nnode = HUGE(0)
      INTEGER :: my_node = HUGE(0)
+     INTEGER, ALLOCATABLE :: cp_overview(:,:)
+     INTEGER :: max_node_nproc = HUGE(0)
+     INTEGER, ALLOCATABLE :: node_nproc_overview(:)
+     INTEGER, ALLOCATABLE :: node_grpindx(:)
   END TYPE parai_t
   TYPE(parai_t), SAVE :: parai
 

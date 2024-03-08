@@ -1464,7 +1464,6 @@ CONTAINS
     il_psi_both (1) = tfft%my_nr3p * tfft%nr2 * tfft%nr1
     il_psi_both (2) = (nstate_local/2)+1
 
-
 #ifdef _USE_SCRATCHLIBRARY
 !    CALL request_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
 !    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
