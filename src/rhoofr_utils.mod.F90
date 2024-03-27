@@ -1368,6 +1368,7 @@ CONTAINS
     COMPLEX(real_8), POINTER, SAVE           :: psi_work(:,:)
     INTEGER :: priv(10)
     INTEGER :: ip, jp
+    LOGICAL :: last_single
 
 #ifdef _USE_SCRATCHLIBRARY
 !    COMPLEX(DP), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux_array(:,:)
@@ -1435,7 +1436,10 @@ CONTAINS
     nstate_local = las - fir + 1
 
     CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate_local, sendsize, sendsize_rem, ispin, coef3, coef4 )
-  
+ 
+    IF( fft_buffsize .eq. 3 ) THEN
+       fft_buffsize = 2
+    END IF
     tfft%which_wave = 1
 
     locks_calc_inv = .true.
@@ -1508,7 +1512,7 @@ END IF
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
 
     !$OMP parallel num_threads( parai%ncpus ) &
-    !$omp private(mythread,ibatch,bsize,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending) &
+    !$omp private(mythread,ibatch,bsize,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending,last_single) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
 
@@ -1525,14 +1529,17 @@ END IF
              IF(ibatch.LE.fft_numbatches)THEN
                 bsize=fft_batchsize
                 remswitch = 1
+                last_single = .false.
+                IF( fft_residual .eq. 0 .and. ibatch .eq. fft_numbatches .and. mod(nstate_local,2) .ne. 0 ) last_single = .true.
              ELSE
                 bsize=fft_residual
                 remswitch = 2
+                IF( mod(nstate_local,2) .ne. 0 ) last_single = .true.
              END IF
              IF(bsize.NE.0)THEN
                 counter(1) = counter(1) + 1
                 ! Loop over the electronic states of this batch
-                CALL Prepare_Psi( tfft, c0( :, i_start3+1+(counter(1)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(1)-1+i_start3)*fft_batchsize*2 ), aux_array, remswitch, mythread )
+                CALL Prepare_Psi( tfft, c0( :, i_start3+1+(counter(1)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread, last_single, counter(1) )
 !                ! ==--------------------------------------------------------------==
 !                ! ==  Fourier transform the wave functions to real space.         ==
 !                ! ==  In the array PSI was used also the fact that the wave       ==
@@ -1616,7 +1623,7 @@ END IF
                       END IF
                    END IF
                    coef3(count)=crge%f(is1,1)*inv_omega
-                   IF(is2.GT.nstate) THEN
+                   IF(is2.GT.nstate_local) THEN
                       coef4(count)=0.0_real_8
                    ELSE
                       coef4(count)=crge%f(is2,1)*inv_omega

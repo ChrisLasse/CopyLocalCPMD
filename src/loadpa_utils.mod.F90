@@ -435,6 +435,15 @@ CONTAINS
     ALLOCATE( tfft%thread_z_end( parai%ncpus, 2, parai%nproc, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
+    ALLOCATE( tfft%thread_prepare_sticks( parai%ncpus, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( tfft%thread_prepare_start( parai%ncpus, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
+    ALLOCATE( tfft%thread_prepare_end( parai%ncpus, 2 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
+         __LINE__,__FILE__)
     ALLOCATE( tfft%thread_y_sticks( parai%ncpus, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
