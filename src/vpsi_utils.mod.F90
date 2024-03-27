@@ -1826,7 +1826,7 @@ CONTAINS
     !$omp end parallel
   END SUBROUTINE calc_c2
 
-  SUBROUTINE calc_c2_pw( psi, c2, c0, f, mythread, batch_size, counter, njump, nostat, last )
+  SUBROUTINE calc_c2_improved( psi, c2, c0, f, mythread, batch_size, counter, njump, nostat, last )
     IMPLICIT NONE
   
     INTEGER, INTENT(IN) :: batch_size, mythread, counter, njump, nostat
@@ -1921,7 +1921,7 @@ CONTAINS
   !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
   !  END IF
   
-  END SUBROUTINE Calc_c2_pw
+  END SUBROUTINE Calc_c2_improved
 
 
   SUBROUTINE Apply_V( f, v, spins, batch_size, mythread )
@@ -2375,7 +2375,7 @@ CONTAINS
                 swap=mod(ibatch-start_loop2,fft_buffsize)+1
                 counter(6) = counter(6) + 1
                 CALL fwfft_batch( tfft, 4, bsize, remswitch, mythread, counter(6), swap, f_inout1=comm_recv, f_inout2=aux_array )
-                CALL calc_c2_pw( aux_array, c2(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2), &
+                CALL calc_c2_improved( aux_array, c2(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2), &
                                      c0(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2 ), f, mythread, bsize, counter(6), njump, nostat, last_single )
              END IF
           END IF
