@@ -1340,7 +1340,7 @@ CONTAINS
     INTEGER                                  :: nstate
     COMPLEX(real_8), TARGET __CONTIGUOUS     :: psi(:)
 
-    CHARACTER(*), PARAMETER                  :: procedureN = 'rhoofr_pw_batchfft'
+    CHARACTER(*), PARAMETER                  :: procedureN = 'rhoofr_batchfft_improved'
     COMPLEX(real_8), PARAMETER               :: zone = (1.0_real_8,0.0_real_8)
     COMPLEX(real_8), POINTER __CONTIGUOUS &
                            , ASYNCHRONOUS    :: wfn_r1(:)
