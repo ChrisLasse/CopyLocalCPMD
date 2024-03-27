@@ -818,16 +818,17 @@ CONTAINS
   ! ==================================================================
   !TK
   !CR
-  SUBROUTINE Prepare_Psi( tfft, psi, aux, remswitch, mythread )
+  SUBROUTINE Prepare_Psi( tfft, psi, aux, remswitch, mythread, last_single, counter )
     IMPLICIT NONE
   
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) ::tfft 
     INTEGER, INTENT(IN) :: remswitch, mythread
     COMPLEX(DP), INTENT(IN)  :: psi ( : , : )
     COMPLEX(DP), INTENT(OUT)  :: aux ( tfft%nr3 , * ) !ns(parai%me+1)*z_group_size )
-  
-    INTEGER :: j, i, iter
-    INTEGER :: offset, offset2
+    LOGICAL, INTENT(IN) :: last_single
+ 
+    INTEGER :: j, i, iter, l, lter, f, fter, counter
+    INTEGER :: offset, offset2, offset3, offset4, offset5, offset6
   !  INTEGER :: isub, isub4
   !  CHARACTER(*), PARAMETER :: procedureN = 'Prepare_Psi'
   
@@ -844,32 +845,94 @@ CONTAINS
   !----------Prepare_Psi Start---------------------------
   
     ! parai%me+1 in tfft%thread_z_start eigentlich (parai%my_node-1)*parai%node_nproc+parai%node_me+1
+
+    IF( .not. last_single ) THEN
   
-    DO i = tfft%thread_z_start( mythread+1, remswitch, parai%me+1, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, parai%me+1, tfft%which )
-       iter = mod( i-1, tfft%nsw(parai%me+1) ) + 1
-       offset  = ( iter - 1 ) * tfft%nr3
-       offset2 = 2 * ( ( (i-1) / tfft%nsw(parai%me+1) ) + 1 )
-  
-       DO j = 1, tfft%prep_map(1,iter)-1
-          aux( j, i ) = conjg( psi( indz_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( indz_r( offset + j ), offset2 ) )
+       DO i = tfft%thread_z_start( mythread+1, remswitch, parai%me+1, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, parai%me+1, tfft%which )
+          iter = mod( i-1, tfft%nsw(parai%me+1) ) + 1
+          offset  = ( iter - 1 ) * tfft%nr3
+          offset2 = 2 * ( ( (i-1) / tfft%nsw(parai%me+1) ) + 1 )
+     
+          DO j = 1, tfft%prep_map(1,iter)-1
+             aux( j, i ) = conjg( psi( indz_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( indz_r( offset + j ), offset2 ) )
+          ENDDO
+          DO j = 1, tfft%prep_map(2,iter)-1
+             aux( j, i ) = psi( nzh_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( nzh_r( offset + j ), offset2 )
+          ENDDO
+        
+          DO j = tfft%prep_map(3,iter), tfft%prep_map(4,iter)
+             aux( j, i ) = (0.d0, 0.d0)
+          ENDDO
+        
+          DO j = tfft%prep_map(5,iter)+1, tfft%nr3
+             aux( j, i ) = psi( nzh_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( nzh_r( offset + j ), offset2 )
+          ENDDO
+          DO j = tfft%prep_map(6,iter)+1, tfft%nr3
+             aux( j, i ) = conjg( psi( indz_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( indz_r( offset + j ), offset2 ) )
+          ENDDO
+
        ENDDO
-       DO j = 1, tfft%prep_map(2,iter)-1
-          aux( j, i ) = psi( nzh_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( nzh_r( offset + j ), offset2 )
+
+    ELSE
+
+       DO l = tfft%thread_prepare_start( mythread+1, 1 ), tfft%thread_prepare_end( mythread+1, 1 )
+          lter = mod( l-1, tfft%nsw(parai%me+1) ) + 1
+          offset3  = ( lter - 1 ) * tfft%nr3
+          offset4 = 2 * ( ( (l-1) / tfft%nsw(parai%me+1) ) + 1 )
+     
+          DO j = 1, tfft%prep_map(1,lter)-1
+             aux( j, l ) = conjg( psi( indz_r( offset3 + j ), offset4 - 1 ) - (0.0d0,1.0d0) * psi( indz_r( offset3 + j ), offset4 ) )
+          ENDDO
+          DO j = 1, tfft%prep_map(2,lter)-1
+             aux( j, l ) = psi( nzh_r( offset3 + j ), offset4 - 1 ) + (0.0d0,1.0d0) * psi( nzh_r( offset3 + j ), offset4 )
+          ENDDO
+        
+          DO j = tfft%prep_map(3,lter), tfft%prep_map(4,lter)
+             aux( j, l ) = (0.d0, 0.d0)
+          ENDDO
+        
+          DO j = tfft%prep_map(5,lter)+1, tfft%nr3
+             aux( j, l ) = psi( nzh_r( offset3 + j ), offset4 - 1 ) + (0.0d0,1.0d0) * psi( nzh_r( offset3 + j ), offset4 )
+          ENDDO
+          DO j = tfft%prep_map(6,lter)+1, tfft%nr3
+             aux( j, l ) = conjg( psi( indz_r( offset3 + j ), offset4 - 1 ) - (0.0d0,1.0d0) * psi( indz_r( offset3 + j ), offset4 ) )
+          ENDDO
+
        ENDDO
-  
-       DO j = tfft%prep_map(3,iter), tfft%prep_map(4,iter)
-          aux( j, i ) = (0.d0, 0.d0)
+
+       DO f = tfft%thread_prepare_start( mythread+1, 2 ), tfft%thread_prepare_end( mythread+1, 2 )
+          fter = mod( f-1, tfft%nsw(parai%me+1) ) + 1
+          offset5  = ( fter - 1 ) * tfft%nr3
+          offset6 = 2 * ( ( (f-1) / tfft%nsw(parai%me+1) ) + 1 ) - 1
+
+          DO j = 1, tfft%prep_map(1,fter)-1
+             aux( j, f ) = conjg( psi( indz_r( offset5 + j ), offset6 ) )
+          ENDDO
+          DO j = 1, tfft%prep_map(2,fter)-1
+             aux( j, f ) = psi( nzh_r( offset5 + j ), offset6 )
+          ENDDO
+     
+          DO j = tfft%prep_map(3,fter), tfft%prep_map(4,fter)
+             aux( j, f ) = (0.d0, 0.d0)
+          ENDDO
+     
+          DO j = tfft%prep_map(5,fter)+1, tfft%nr3
+             aux( j, f ) = psi( nzh_r( offset5 + j ), offset6 )
+          ENDDO
+          DO j = tfft%prep_map(6,fter)+1, tfft%nr3
+             aux( j, f ) = conjg( psi( indz_r( offset5 + j ), offset6 ) )
+          ENDDO
+
        ENDDO
-  
-       DO j = tfft%prep_map(5,iter)+1, tfft%nr3
-          aux( j, i ) = psi( nzh_r( offset + j ), offset2 - 1 ) + (0.0d0,1.0d0) * psi( nzh_r( offset + j ), offset2 )
-       ENDDO
-       DO j = tfft%prep_map(6,iter)+1, tfft%nr3
-          aux( j, i ) = conjg( psi( indz_r( offset + j ), offset2 - 1 ) - (0.0d0,1.0d0) * psi( indz_r( offset + j ), offset2 ) )
-       ENDDO
-  
-    ENDDO
-  
+
+       !$  locks_omp( mythread+1, counter, 12 ) = .false.
+       !$omp flush( locks_omp )
+       !$  DO WHILE( ANY( locks_omp( :, counter, 12 ) ) )
+       !$omp flush( locks_omp )
+       !$  END DO
+
+    END IF
+ 
   !----------Prepare_Psi End-----------------------------
   !------------------------------------------------------
     IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )

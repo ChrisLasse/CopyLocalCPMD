@@ -674,8 +674,8 @@ CONTAINS
     Call mp_sum( howmany_sending  , max_node_task_size*nodes_numb, parai%allgrp )
     Call mp_sum( howmany_receiving, max_node_task_size*nodes_numb, parai%allgrp )
   
-    ALLOCATE( comm_info_send( MAXVAL( howmany_sending( : , 1 ) ), parai%nproc ) )
-    ALLOCATE( comm_info_recv( MAXVAL( howmany_sending( : , 1 ) ), parai%nproc ) )
+    ALLOCATE( comm_info_send( MAXVAL( howmany_sending( 1 , : ) ), parai%nproc ) )
+    ALLOCATE( comm_info_recv( MAXVAL( howmany_sending( 1 , : ) ), parai%nproc ) )
     comm_info_send = 0
     comm_info_recv = 0
     comm_sendrecv(1) = howmany_sending  ( my_node_rank+1 , my_node+1 )
@@ -708,7 +708,7 @@ CONTAINS
                 howmany_receiving( recv_node_task+1 , recv_node+1 ) = howmany_receiving( recv_node_task+1 , recv_node+1 ) - 1
                 !Save Sending and Receiving Rank
                 comm_info_send( l , i ) = m
-                DO p = 1, MAXVAL( howmany_sending( : , 1 ) )
+                DO p = 1, MAXVAL( howmany_sending( 1 , : ) )
                    IF( comm_info_recv( p , m ) .eq. 0 ) THEN
                       comm_info_recv( p , m ) = i
                       EXIT
@@ -787,11 +787,11 @@ CONTAINS
   
   END SUBROUTINE Prep_fft_com
   ! ==================================================================
-  SUBROUTINE Make_Manual_Maps( tfft, batch_size, rem_size, nss, nr1s, ngs, which )
+  SUBROUTINE Make_Manual_Maps( tfft, batch_size, rem_size, nss, nr1s, ngs, which, nstate )
     IMPLICIT NONE
   
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: tfft
-    INTEGER, INTENT(IN) :: batch_size, rem_size
+    INTEGER, INTENT(IN) :: batch_size, rem_size, nstate
     INTEGER, INTENT(IN) :: nss(:), nr1s, ngs
 
     CHARACTER(*), PARAMETER                     :: procedureN = 'Prep_fft_com'
@@ -817,7 +817,7 @@ CONTAINS
        DO i = 1+overlap_cor, mod( nss( j ) * batch_size, eff_nthreads ) + overlap_cor
           tfft%thread_z_sticks( i, 1, j, which ) = tfft%thread_z_sticks( i, 1, j, which ) + 1
        ENDDO
-     
+      
        tfft%thread_z_start( 1+overlap_cor, 1, j, which ) = 1
        DO i = 2+overlap_cor, parai%ncpus
           tfft%thread_z_start( i, 1, j, which ) = tfft%thread_z_start( i-1, 1, j, which ) + tfft%thread_z_sticks( i-1, 1, j, which )
@@ -825,7 +825,7 @@ CONTAINS
        DO i = 1+overlap_cor, parai%ncpus
           tfft%thread_z_end( i, 1, j, which ) = tfft%thread_z_start( i, 1, j, which ) + tfft%thread_z_sticks( i, 1, j, which ) - 1
        ENDDO
-     
+      
        IF( rem_size .ne. 0 ) THEN
           DO i = 1+overlap_cor, parai%ncpus
              tfft%thread_z_sticks( i, 2, j, which ) = ( nss( j ) * rem_size ) / eff_nthreads
@@ -844,6 +844,81 @@ CONTAINS
        END IF
   
     ENDDO
+
+    IF( mod( nstate, 2 ) .ne. 0 ) THEN
+
+       IF( rem_size .eq. 0 ) THEN
+
+          IF( batch_size .gt. 1 ) THEN
+
+             DO i = 1+overlap_cor, parai%ncpus
+                tfft%thread_prepare_sticks( i, 1 ) = ( nss( parai%me+1 ) * (batch_size-1) ) / eff_nthreads
+             ENDDO
+             DO i = 1+overlap_cor, mod( nss( parai%me+1 ) * (batch_size-1), eff_nthreads ) + overlap_cor
+                tfft%thread_prepare_sticks( i, 1 ) = tfft%thread_prepare_sticks( i, 1 ) + 1
+             ENDDO
+           
+             tfft%thread_prepare_start( 1+overlap_cor, 1 ) = 1
+             DO i = 2+overlap_cor, parai%ncpus
+                tfft%thread_prepare_start( i, 1 ) = tfft%thread_prepare_start( i-1, 1 ) + tfft%thread_prepare_sticks( i-1, 1 )
+             ENDDO
+             DO i = 1+overlap_cor, parai%ncpus
+                tfft%thread_prepare_end( i, 1 ) = tfft%thread_prepare_start( i, 1 ) + tfft%thread_prepare_sticks( i, 1 ) - 1
+             ENDDO
+
+          ELSE
+
+             tfft%thread_prepare_sticks(:,1) = 0
+             tfft%thread_prepare_start(:,1)  = 1
+             tfft%thread_prepare_end(:,1)    = 0
+
+          END IF
+
+       ELSE
+     
+          IF( rem_size .gt. 1 ) THEN
+
+             DO i = 1+overlap_cor, parai%ncpus
+                tfft%thread_prepare_sticks( i, 1 ) = ( nss( parai%me+1 ) * (rem_size-1) ) / eff_nthreads
+             ENDDO
+             DO i = 1+overlap_cor, mod( nss( parai%me+1 ) * (rem_size-1), eff_nthreads ) + overlap_cor
+                tfft%thread_prepare_sticks( i, 1 ) = tfft%thread_prepare_sticks( i, 1 ) + 1
+             ENDDO
+           
+             tfft%thread_prepare_start( 1+overlap_cor, 1 ) = 1
+             DO i = 2+overlap_cor, parai%ncpus
+                tfft%thread_prepare_start( i, 1 ) = tfft%thread_prepare_start( i-1, 1 ) + tfft%thread_prepare_sticks( i-1, 1 )
+             ENDDO
+             DO i = 1+overlap_cor, parai%ncpus
+                tfft%thread_prepare_end( i, 1 ) = tfft%thread_prepare_start( i, 1 ) + tfft%thread_prepare_sticks( i, 1 ) - 1
+             ENDDO
+
+          ELSE
+
+             tfft%thread_prepare_sticks(:,1) = 0
+             tfft%thread_prepare_start(:,1)  = 1
+             tfft%thread_prepare_end(:,1)    = 0
+
+          END IF
+
+       END IF
+
+       DO i = 1+overlap_cor, parai%ncpus
+          tfft%thread_prepare_sticks( i, 2 ) = nss( parai%me+1 ) / eff_nthreads
+       ENDDO
+       DO i = 1+overlap_cor, mod( nss( parai%me+1 ) , eff_nthreads ) + overlap_cor
+          tfft%thread_prepare_sticks( i, 2 ) = tfft%thread_prepare_sticks( i, 2 ) + 1
+       ENDDO
+       
+       tfft%thread_prepare_start( 1+overlap_cor, 2 ) = tfft%thread_prepare_end( parai%ncpus, 1 ) + 1
+       DO i = 2+overlap_cor, parai%ncpus
+          tfft%thread_prepare_start( i, 2 ) = tfft%thread_prepare_start( i-1, 2 ) + tfft%thread_prepare_sticks( i-1, 2 )
+       ENDDO
+       DO i = 1+overlap_cor, parai%ncpus
+          tfft%thread_prepare_end( i, 2 ) = tfft%thread_prepare_start( i, 2 ) + tfft%thread_prepare_sticks( i, 2 ) - 1
+       ENDDO
+
+    END IF
   
   ! y things
   

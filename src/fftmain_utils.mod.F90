@@ -868,7 +868,8 @@ CONTAINS
     IF( cntl%fft_tune_batchsize ) THEN
        IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
     ELSE
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+       CALL tiset(procedureN,isub)
     END IF
   
     IF( step .eq. 1 ) THEN
@@ -887,7 +888,8 @@ CONTAINS
     IF( cntl%fft_tune_batchsize ) THEN
        IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
     ELSE
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+       CALL tihalt(procedureN,isub)
     END IF
   
   END SUBROUTINE invfft_batch
@@ -908,7 +910,8 @@ CONTAINS
     IF( cntl%fft_tune_batchsize ) THEN
        IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
     ELSE
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+       CALL tiset(procedureN,isub)
     END IF
   
     IF( step .eq. 1 ) THEN
@@ -927,7 +930,8 @@ CONTAINS
     IF( cntl%fft_tune_batchsize ) THEN
        IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
     ELSE
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+       CALL tihalt(procedureN,isub)
     END IF
   
   END SUBROUTINE fwfft_batch
@@ -1205,7 +1209,7 @@ CONTAINS
        CALL Prep_fft_com( comm_send, comm_recv, sendsize, 0, parai%nnode, parai%me, parai%my_node, parai%node_me, &
                           parai%node_nproc, parai%max_node_nproc, parai%cp_overview, 1, tfft%comm_sendrecv(:,2), tfft%do_comm(2), 2 )
 
-       CALL Make_Manual_Maps( tfft, 1, 0, nss, nr1s, ngs, tfft%which ) 
+       CALL Make_Manual_Maps( tfft, 1, 0, nss, nr1s, ngs, tfft%which, 0 )
 
        IF( .not. allocated( locks_omp ) ) ALLOCATE( locks_omp( parai%ncpus, 1, 20 ) )
        !$ locks_omp = .true.
