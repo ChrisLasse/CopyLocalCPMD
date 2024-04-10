@@ -2338,11 +2338,12 @@ CONTAINS
                 bsize=fft_batchsize
                 remswitch = 1
                 last_single = .false.
-                IF( fft_residual .eq. 0 .and. ibatch-start_loop2 .eq. fft_numbatches ) last_single = .true.
+                IF( fft_residual .eq. 0 .and. ibatch-start_loop2 .eq. fft_numbatches .and. mod(nstate_local,2) .ne. 0 ) last_single = .true.
              ELSE
                 bsize=fft_residual
                 remswitch = 2
-                last_single = .true.
+                last_single = .false.
+                IF( mod(nstate_local,2) .ne. 0 ) last_single = .true.
              END IF
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop2,fft_buffsize)+1
