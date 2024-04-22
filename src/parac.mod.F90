@@ -54,6 +54,7 @@ MODULE parac
   ! ==--------------------------------------------------------------==
   TYPE :: parai_t
      INTEGER :: ncpus = HUGE(0)
+     INTEGER :: ncpus_FFT = HUGE(0)
      INTEGER :: nproc = HUGE(0)
      INTEGER :: me = HUGE(0)
      INTEGER :: mepos = HUGE(0)

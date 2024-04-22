@@ -426,58 +426,61 @@ CONTAINS
        IF( parai%my_node .eq. parai%cp_overview(4,i) ) parai%node_grpindx( parai%cp_overview(2,i)+1 ) = i - 1
     ENDDO
 
-    ALLOCATE( tfft%thread_z_sticks( parai%ncpus, 2, parai%nproc, 2 ), STAT=ierr )
+    !For now here; need to have a better spot for this eventually!
+    parai%ncpus_FFT = parai%ncpus
+
+    ALLOCATE( tfft%thread_z_sticks( parai%ncpus_FFT, 2, parai%nproc, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_z_start( parai%ncpus, 2, parai%nproc, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_z_start( parai%ncpus_FFT, 2, parai%nproc, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_z_end( parai%ncpus, 2, parai%nproc, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_z_end( parai%ncpus_FFT, 2, parai%nproc, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_prepare_sticks( parai%ncpus, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_prepare_sticks( parai%ncpus_FFT, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_prepare_start( parai%ncpus, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_prepare_start( parai%ncpus_FFT, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_prepare_end( parai%ncpus, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_prepare_end( parai%ncpus_FFT, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_y_sticks( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_y_sticks( parai%ncpus_FFT, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_y_start( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_y_start( parai%ncpus_FFT, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_y_end( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_y_end( parai%ncpus_FFT, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_x_sticks( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_x_sticks( parai%ncpus_FFT, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_x_start( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_x_start( parai%ncpus_FFT, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_x_end( parai%ncpus, 2, 2 ), STAT=ierr )
+    ALLOCATE( tfft%thread_x_end( parai%ncpus_FFT, 2, 2 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_ngms( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_ngms( parai%ncpus_FFT ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_ngms_start( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_ngms_start( parai%ncpus_FFT ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_ngms_end( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_ngms_end( parai%ncpus_FFT ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_rspace( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_rspace( parai%ncpus_FFT ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_rspace_start( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_rspace_start( parai%ncpus_FFT ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
-    ALLOCATE( tfft%thread_rspace_end( parai%ncpus ), STAT=ierr )
+    ALLOCATE( tfft%thread_rspace_end( parai%ncpus_FFT ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem',&
          __LINE__,__FILE__)
   
