@@ -835,12 +835,12 @@ CONTAINS
     INTEGER(INT64) :: time(2), cr
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
   !------------------------------------------------------
   !----------Prepare_Psi Start---------------------------
   
@@ -935,16 +935,16 @@ CONTAINS
  
   !----------Prepare_Psi End-----------------------------
   !------------------------------------------------------
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 1 ) = tfft%time_adding( 1 ) + ( time(2) - time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 1 ) = tfft%time_adding( 1 ) + ( time(2) - time(1) )
   
   !  CALL SYSTEM_CLOCK( count_rate = cr )
   !  write(6,*) "ACTUAL", REAL( tfft%time_adding( 1 ) / REAL( cr ) )
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
   !  END IF
   
   END SUBROUTINE Prepare_Psi
@@ -1002,12 +1002,12 @@ CONTAINS
     INTEGER(INT64) :: time(3)
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
   !------------------------------------------------------
   !------------z-FFT Start-------------------------------
   
@@ -1015,11 +1015,11 @@ CONTAINS
                      tfft%nr3, tfft%thread_z_sticks(mythread+1,remswitch,parai%me+1,tfft%which), &
                      aux( : , tfft%thread_z_start( mythread+1, remswitch, parai%me+1, tfft%which ) : tfft%thread_z_end( mythread+1, remswitch, parai%me+1, tfft%which ) ), &
                      tfft%nr3, tfft%thread_z_sticks(mythread+1,remswitch,parai%me+1,tfft%which), &
-                     tfft%nr3, tfft%thread_z_sticks(mythread+1,remswitch,parai%me+1,tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus)
+                     tfft%nr3, tfft%thread_z_sticks(mythread+1,remswitch,parai%me+1,tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
   
   !-------------z-FFT End--------------------------------
   !------------------------------------------------------
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
   !------------------------------------------------------
   !---------Pre-Com-Copy Start---------------------------
   
@@ -1066,14 +1066,14 @@ CONTAINS
   
   !----------Pre-Com-Copy End----------------------------
   !------------------------------------------------------
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 2 ) = tfft%time_adding( 2 ) + ( time(2) - time(1) )
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 3 ) = tfft%time_adding( 3 ) + ( time(3) - time(2) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 2 ) = tfft%time_adding( 2 ) + ( time(2) - time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 3 ) = tfft%time_adding( 3 ) + ( time(3) - time(2) )
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
   !  END IF
   
   END SUBROUTINE invfft_z_section 
@@ -1096,9 +1096,9 @@ CONTAINS
     INTEGER(INT64) :: time(5)
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
     IF( remswitch .eq. 1 ) THEN 
@@ -1116,9 +1116,9 @@ CONTAINS
     Call Second_Part_y_section( aux2_r )
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
   !  END IF
   
     CONTAINS
@@ -1130,7 +1130,7 @@ CONTAINS
         INTEGER, INTENT(IN)        :: map( * )
   
   
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
         !------------------------------------------------------
         !--------After-Com-Copy Start--------------------------
         
@@ -1154,7 +1154,7 @@ CONTAINS
         
         !---------After-Com-Copy End---------------------------
         !------------------------------------------------------
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
         !------------------------------------------------------
         !------------y-FFT Start-------------------------------
   
@@ -1162,13 +1162,13 @@ CONTAINS
                            tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
                            aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
                            tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus)
+                           tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
         
         !-------------y-FFT End--------------------------------
         !------------------------------------------------------
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 4 ) = tfft%time_adding( 4 ) + ( time(2) - time(1) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 5 ) = tfft%time_adding( 5 ) + ( time(3) - time(2) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 4 ) = tfft%time_adding( 4 ) + ( time(2) - time(1) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 5 ) = tfft%time_adding( 5 ) + ( time(3) - time(2) )
   
       END SUBROUTINE First_Part_y_section
   
@@ -1178,7 +1178,7 @@ CONTAINS
         COMPLEX(DP), INTENT(INOUT) :: aux2  ( my_nr1s * tfft%my_nr3p * tfft%nr2, * ) !y_group_size
         INTEGER :: ibatch
   
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
         !------------------------------------------------------
         !-------------yx-scatter-------------------------------
         
@@ -1198,8 +1198,8 @@ CONTAINS
         
         !-------------yx-scatter-------------------------------
         !------------------------------------------------------
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(5) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 6 ) = tfft%time_adding( 6 ) + ( time(5) - time(4) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(5) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 6 ) = tfft%time_adding( 6 ) + ( time(5) - time(4) )
   
       END SUBROUTINE Second_Part_y_section
   
@@ -1218,12 +1218,12 @@ CONTAINS
     INTEGER(INT64) :: time(2)
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
   !------------------------------------------------------
   !------------x-FFT Start-------------------------------
   
@@ -1231,17 +1231,17 @@ CONTAINS
                      tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
                      aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
                      tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
-                     tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus)
+                     tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
   
   !-------------x-FFT End--------------------------------
   !------------------------------------------------------
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 7 ) = tfft%time_adding( 7 ) + ( time(2) - time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 7 ) = tfft%time_adding( 7 ) + ( time(2) - time(1) )
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
   !  END IF
   
   END SUBROUTINE invfft_x_section
@@ -1260,9 +1260,9 @@ CONTAINS
     INTEGER(INT64) :: time(4)
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
     Call First_Part_x_section( aux_r )
@@ -1276,9 +1276,9 @@ CONTAINS
     Call Second_Part_x_section( aux_r )
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
   !  END IF
   
     CONTAINS
@@ -1297,18 +1297,18 @@ CONTAINS
           !$omp flush( locks_omp )
           !$  END DO
   
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
   
           CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
                            tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
                            aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
                            tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
-                           tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which),1,scal,.FALSE.,mythread,parai%ncpus)
+                           tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which),1,scal,.FALSE.,mythread,parai%ncpus_FFT)
         
         !-------------x-FFT End--------------------------------
         !------------------------------------------------------
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 9 ) = tfft%time_adding( 9 ) + ( time(2) - time(1) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 9 ) = tfft%time_adding( 9 ) + ( time(2) - time(1) )
   
       END SUBROUTINE First_Part_x_section
   
@@ -1318,7 +1318,7 @@ CONTAINS
         COMPLEX(DP), INTENT(INOUT)  :: aux( tfft%my_nr3p * tfft%nr2 * tfft%nr1 , * ) !x_group_size )
         INTEGER :: i, j, offset, ibatch
   
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
         !------------------------------------------------------
         !------Forward xy-scatter Start------------------------
         
@@ -1332,8 +1332,8 @@ CONTAINS
         
         !-------Forward xy-scatter End-------------------------
         !------------------------------------------------------
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 10 ) = tfft%time_adding( 10 ) + ( time(4) - time(3) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 10 ) = tfft%time_adding( 10 ) + ( time(4) - time(3) )
   
       END SUBROUTINE Second_Part_x_section
   
@@ -1356,9 +1356,9 @@ CONTAINS
     INTEGER(INT64) :: time(4)
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
     Call First_Part_y_section( aux )
@@ -1372,9 +1372,9 @@ CONTAINS
     Call Second_Part_y_section( aux )
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
   !  END IF
   
     CONTAINS
@@ -1384,7 +1384,7 @@ CONTAINS
         Implicit NONE
         COMPLEX(DP), INTENT(INOUT) :: aux2( tfft%nr2 , * ) !nr1s(parai%me+1) * tfft%my_nr3p *  y_group_size )
   
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
         !------------------------------------------------------
         !------------y-FFT Start-------------------------------
   
@@ -1392,12 +1392,12 @@ CONTAINS
                            tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
                            aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
                            tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which),1,scal,.FALSE.,mythread,parai%ncpus)
+                           tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which),1,scal,.FALSE.,mythread,parai%ncpus_FFT)
         
         !-------------y-FFT End--------------------------------
         !------------------------------------------------------
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 11 ) = tfft%time_adding( 11 ) + ( time(2) - time(1) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 11 ) = tfft%time_adding( 11 ) + ( time(2) - time(1) )
   
       END SUBROUTINE First_Part_y_section
   
@@ -1406,7 +1406,7 @@ CONTAINS
         IMPLICIT NONE
         COMPLEX(DP), INTENT(INOUT) :: aux2  ( my_nr1s * tfft%my_nr3p * tfft%nr2, * ) !y_group_size
   
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
   
         !------------------------------------------------------
         !---------Pre-Com-Copy Start---------------------------
@@ -1459,8 +1459,8 @@ CONTAINS
         
         !----------Pre-Com-Copy End----------------------------
         !------------------------------------------------------
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 12 ) = tfft%time_adding( 12 ) + ( time(4) - time(3) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 12 ) = tfft%time_adding( 12 ) + ( time(4) - time(3) )
   
       END SUBROUTINE Second_Part_y_section
         
@@ -1485,9 +1485,9 @@ CONTAINS
     INTEGER(INT64) :: time(4)
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
     IF( present( factor_in ) ) THEN
@@ -1496,7 +1496,7 @@ CONTAINS
        factor = 1
     END IF
   
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
   !------------------------------------------------------
   !--------After-Com-Copy Start--------------------------
   
@@ -1520,7 +1520,7 @@ CONTAINS
   
   !---------After-Com-Copy End---------------------------
   !------------------------------------------------------
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
   !------------------------------------------------------
   !------------z-FFT Start-------------------------------
   
@@ -1530,25 +1530,25 @@ CONTAINS
     !$omp flush( locks_omp )
     !$  END DO
   
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
   
   
     CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_z_start( mythread+1, remswitch, parai%me+1, tfft%which ) : tfft%thread_z_end( mythread+1, remswitch, parai%me+1, tfft%which ) ), &
                      tfft%nr3, tfft%thread_z_sticks(mythread+1,remswitch,parai%me+1,tfft%which), &
                      aux( : , tfft%thread_z_start( mythread+1, remswitch, parai%me+1, tfft%which ) : tfft%thread_z_end( mythread+1, remswitch, parai%me+1, tfft%which ) ), &
                      tfft%nr3, tfft%thread_z_sticks(mythread+1,remswitch,parai%me+1,tfft%which), &
-                     tfft%nr3, tfft%thread_z_sticks(mythread+1,remswitch,parai%me+1,tfft%which),1,scal,.FALSE.,mythread,parai%ncpus)
+                     tfft%nr3, tfft%thread_z_sticks(mythread+1,remswitch,parai%me+1,tfft%which),1,scal,.FALSE.,mythread,parai%ncpus_FFT)
   
   !-------------z-FFT End--------------------------------
   !------------------------------------------------------
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 13 ) = tfft%time_adding( 13 ) + ( time(2) - time(1) )
-    IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 14 ) = tfft%time_adding( 14 ) + ( time(4) - time(3) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 13 ) = tfft%time_adding( 13 ) + ( time(2) - time(1) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 14 ) = tfft%time_adding( 14 ) + ( time(4) - time(3) )
   
   !  IF( cntl%fft_tune_batchsize ) THEN
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
   !  ELSE
-  !     IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
   !  END IF
   
   END SUBROUTINE fwfft_z_section

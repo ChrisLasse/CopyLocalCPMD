@@ -866,9 +866,9 @@ CONTAINS
     INTEGER :: isub, isub4
 
     IF( cntl%fft_tune_batchsize ) THEN
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
     ELSE
-!       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
        CALL tiset(procedureN,isub)
     END IF
   
@@ -886,9 +886,9 @@ CONTAINS
     END IF
 
     IF( cntl%fft_tune_batchsize ) THEN
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
     ELSE
-!       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
        CALL tihalt(procedureN,isub)
     END IF
   
@@ -908,9 +908,9 @@ CONTAINS
     INTEGER :: isub, isub4
 
     IF( cntl%fft_tune_batchsize ) THEN
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
     ELSE
-!       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+!       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
        CALL tiset(procedureN,isub)
     END IF
   
@@ -928,9 +928,9 @@ CONTAINS
     END IF
 
     IF( cntl%fft_tune_batchsize ) THEN
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
     ELSE
-!       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+!       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
        CALL tihalt(procedureN,isub)
     END IF
   
@@ -952,9 +952,9 @@ CONTAINS
     INTEGER(INT64) :: time(20)
 
     IF( cntl%fft_tune_batchsize ) THEN
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
     ELSE
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
     END IF
  
     current = (counter-1)*fft_batchsize
@@ -963,7 +963,7 @@ CONTAINS
   
        IF( step .eq. 1 ) THEN
 
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
 
           !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
           !$omp flush( locks_calc_1 )
@@ -971,12 +971,12 @@ CONTAINS
           !$omp flush( locks_calc_1 )
           !$  END DO
 
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 17 ) = tfft%time_adding( 17 ) + ( time(2) - time(1) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 17 ) = tfft%time_adding( 17 ) + ( time(2) - time(1) )
 
           CALL invfft_z_section( tfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), batch_size, remswitch, mythread, tfft%nsw )
 
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
 
           !$  locks_omp( mythread+1, counter, 1 ) = .false.
           !$omp flush( locks_omp )
@@ -984,45 +984,45 @@ CONTAINS
           !$omp flush( locks_omp )
           !$  END DO
 
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 18 ) = tfft%time_adding( 18 ) + ( time(4) - time(3) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 18 ) = tfft%time_adding( 18 ) + ( time(4) - time(3) )
 
-          !$  IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) THEN
+          !$  IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
           !$     locks_calc_inv( parai%node_me+1, counter ) = .false.
           !$omp flush( locks_calc_fw )
           !$  END IF
   
        ELSE IF( step .eq. 2 ) THEN
   
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(5) )
+          IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(5) )
 
           !$omp flush( locks_calc_inv )
           !$  DO WHILE( ANY( locks_calc_inv( :, counter ) ) )
           !$omp flush( locks_calc_inv )
           !$  END DO
 
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(6) )
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 19 ) = tfft%time_adding( 19 ) + ( time(6) - time(5) )
+          IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(6) )
+          IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 19 ) = tfft%time_adding( 19 ) + ( time(6) - time(5) )
   
           CALL fft_com( tfft, remswitch, work_buffer, 1 )
 
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(7) )
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 20 ) = tfft%time_adding( 20 ) + ( time(7) - time(6) )
+          IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(7) )
+          IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 20 ) = tfft%time_adding( 20 ) + ( time(7) - time(6) )
   
           !$  locks_com_inv( parai%node_me+1, counter ) = .false.
           !$omp flush( locks_com_inv )
   
        ELSE IF( step .eq. 3 ) THEN
   
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(8) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(8) )
 
           !$omp flush( locks_com_inv )
           !$  DO WHILE( ANY( locks_com_inv( :, counter ) ) .and. parai%nnode .ne. 1 )
           !$omp flush( locks_com_inv )
           !$  END DO
 
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(9) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 21 ) = tfft%time_adding( 21 ) + ( time(9) - time(8) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(9) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 21 ) = tfft%time_adding( 21 ) + ( time(9) - time(8) )
 
           CALL invfft_y_section( tfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
                                  tfft%map_acinv_wave, tfft%map_acinv_wave_rem, counter, remswitch, mythread, tfft%nr1w )
@@ -1031,7 +1031,7 @@ CONTAINS
 
           CALL invfft_x_section( tfft, f_inout1, remswitch, mythread )
 
-          IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) THEN
+          IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
              IF( tfft%which_wave .eq. 1 ) THEN
                 !$  locks_calc_1( parai%node_me+1, 1+current+(fft_batchsize*fft_buffsize): &
                 !$                fft_batchsize+current+(fft_batchsize*fft_buffsize) ) = .false.
@@ -1042,7 +1042,7 @@ CONTAINS
              END IF
           END IF
 
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(10) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(10) )
 
           !$  locks_omp( mythread+1, counter, 2 ) = .false.
           !$omp flush( locks_omp )
@@ -1050,8 +1050,8 @@ CONTAINS
           !$omp flush( locks_omp )
           !$  END DO
 
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(11) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 22 ) = tfft%time_adding( 22 ) + ( time(11) - time(10) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(11) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 22 ) = tfft%time_adding( 22 ) + ( time(11) - time(10) )
 
        END IF
   
@@ -1064,20 +1064,20 @@ CONTAINS
 
        ELSE IF( step .eq. 2 ) THEN
 
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(12) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(12) )
 
           !$omp flush( locks_calc_2 )
           !$  DO WHILE( ANY(locks_calc_2(:,1+current:fft_batchsize+current ) ) )
           !$omp flush( locks_calc_2 )
           !$  END DO
   
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(13) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 23 ) = tfft%time_adding( 23 ) + ( time(13) - time(12) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(13) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 23 ) = tfft%time_adding( 23 ) + ( time(13) - time(12) )
   
           CALL fwfft_y_section( tfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
                                     tfft%map_pcfw(:,1), batch_size, counter, remswitch, mythread, tfft%nr1w, tfft%nsw )
 
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(14) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(14) )
 
           !$  locks_omp( mythread+1, counter, 3 ) = .false.
           !$omp flush( locks_omp )
@@ -1085,49 +1085,49 @@ CONTAINS
           !$omp flush( locks_omp )
           !$  END DO
   
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(15) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 24 ) = tfft%time_adding( 24 ) + ( time(15) - time(14) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(15) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 24 ) = tfft%time_adding( 24 ) + ( time(15) - time(14) )
 
-          !$  IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) THEN
+          !$  IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
           !$     locks_calc_fw( parai%node_me+1, counter ) = .false.
           !$omp flush( locks_calc_fw )
           !$  END IF
 
        ELSE IF( step .eq. 3 ) THEN
 
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(16) )
+          IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(16) )
 
           !$omp flush( locks_calc_fw )
           !$  DO WHILE( ANY( locks_calc_fw( :, counter ) ) )
           !$omp flush( locks_calc_fw )
           !$  END DO
   
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(17) )
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 25 ) = tfft%time_adding( 25 ) + ( time(17) - time(16) )
+          IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(17) )
+          IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 25 ) = tfft%time_adding( 25 ) + ( time(17) - time(16) )
      
           CALL fft_com( tfft, remswitch, work_buffer, 1 )
 
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(18) )
-          IF( mythread .eq. 0 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 26 ) = tfft%time_adding( 26 ) + ( time(18) - time(17) )
+          IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(18) )
+          IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 26 ) = tfft%time_adding( 26 ) + ( time(18) - time(17) )
 
           !$  locks_com_fw( parai%node_me+1, counter ) = .false.
           !$omp flush( locks_com_fw )
   
        ELSE IF( step .eq. 4 ) THEN
   
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(19) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(19) )
 
           !$omp flush( locks_com_fw )
           !$  DO WHILE( ANY( locks_com_fw( :, counter ) ) .and. parai%nnode .ne. 1 )
           !$omp flush( locks_com_fw )
           !$  END DO
 
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) CALL SYSTEM_CLOCK( time(20) )
-          IF( mythread .eq. 1 .or. parai%ncpus .eq. 1 ) tfft%time_adding( 27 ) = tfft%time_adding( 27 ) + ( time(20) - time(19) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(20) )
+          IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 27 ) = tfft%time_adding( 27 ) + ( time(20) - time(19) )
   
           CALL fwfft_z_section( tfft, f_inout1(:,work_buffer), f_inout2, counter, batch_size, remswitch, mythread, tfft%nsw )
 
-          IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) THEN
+          IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
              IF( cntl%krwfn ) THEN
              !$   locks_calc_2( parai%node_me+1, 1+(counter+fft_buffsize-1)*fft_batchsize:batch_size+(counter+fft_buffsize-1)*fft_batchsize ) = .false.
              !$omp flush( locks_calc_2 )
@@ -1142,9 +1142,9 @@ CONTAINS
     END IF
 
     IF( cntl%fft_tune_batchsize ) THEN
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
     ELSE
-       IF( parai%ncpus .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+       IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
     END IF
   
   END SUBROUTINE fft_improved_batch
@@ -1211,7 +1211,7 @@ CONTAINS
 
        CALL Make_Manual_Maps( tfft, 1, 0, nss, nr1s, ngs, tfft%which, 0 )
 
-       IF( .not. allocated( locks_omp ) ) ALLOCATE( locks_omp( parai%ncpus, 1, 20 ) )
+       IF( .not. allocated( locks_omp ) ) ALLOCATE( locks_omp( parai%ncpus_FFT, 1, 20 ) )
        !$ locks_omp = .true.
 
     END IF
@@ -1221,7 +1221,7 @@ CONTAINS
     CALL MPI_BARRIER( parai%allgrp, ierr )
     !$ locks_omp = .true.
 
-    !$OMP parallel num_threads( parai%ncpus ) &
+    !$OMP parallel num_threads( parai%ncpus_FFT ) &
     !$omp private(mythread) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()

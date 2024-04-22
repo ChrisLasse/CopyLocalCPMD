@@ -1513,7 +1513,7 @@ END IF
     ! 
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
 
-    !$OMP parallel num_threads( parai%ncpus ) &
+    !$OMP parallel num_threads( parai%ncpus_FFT ) &
     !$omp private(mythread,ibatch,bsize,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending,last_single) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
@@ -1525,7 +1525,7 @@ END IF
 
     !Loop over batches
     DO ibatch=1,fft_numbatches+2
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus_FFT .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           IF(ibatch.LE.fft_numbatches+1)THEN
              IF(ibatch.LE.fft_numbatches)THEN
@@ -1588,7 +1588,7 @@ END IF
           !$omp flush( locks_sing_1 )
           !$  END DO
        END IF
-       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
+       IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus_FFT .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
           !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
           IF(ibatch.GT.start_loop.AND.ibatch.LE.end_loop)THEN
              IF (ibatch-start_loop.LE.fft_numbatches)THEN
