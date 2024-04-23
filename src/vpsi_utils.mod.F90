@@ -2392,63 +2392,63 @@ CONTAINS
        timer( i ) = REAL( tfft%time_adding( i ), KIND = REAL64 ) / REAL ( cr , KIND = REAL64 )
     ENDDO
 
-    IF( tfft%timing_specific .and. parai%me .eq. 0 ) THEN
+    IF( tfft%timing_specific ) THEN !.and. parai%me .eq. 0 ) THEN
 
        WRITE(6,*)" "
        WRITE(6,*)"Some extra VPSI times"
        write(6,*)"==================================="
        write(6,*)"INV FFT before Com"
-       write(6,*)"Prepare_psi           ", parai%node_me, timer(1)
-       write(6,*)"CALC LOCK 1           ", parai%node_me, timer(17)
-       write(6,*)"INV z_fft             ", parai%node_me, timer(2)
-       write(6,*)"INV Pre_com_copy      ", parai%node_me, timer(3)
-       write(6,*)"OMP LOCK 2            ", parai%node_me, timer(18)
+       write(6,*)"Prepare_psi           ", parai%my_node, parai%node_me, timer(1)
+       write(6,*)"CALC LOCK 1           ", parai%my_node, parai%node_me, timer(17)
+       write(6,*)"INV z_fft             ", parai%my_node, parai%node_me, timer(2)
+       write(6,*)"INV Pre_com_copy      ", parai%my_node, parai%node_me, timer(3)
+       write(6,*)"OMP LOCK 2            ", parai%my_node, parai%node_me, timer(18)
      
-       write(6,*)"INV FFT before Com sum  ",timer(1)+timer(2)+timer(3)+timer(17)+timer(18)
+       write(6,*)"INV FFT before Com sum  " , parai%my_node, parai%node_me,timer(1)+timer(2)+timer(3)+timer(17)+timer(18)
        write(6,*)"==================================="
        write(6,*)"INV FFT after Com"
-       write(6,*)"CALC_COM LOCK 1       ", parai%node_me, timer(21)
-       write(6,*)"INV After_com_copy    ", parai%node_me, timer(4)
-       write(6,*)"INV y_fft             ", parai%node_me, timer(5)
-       write(6,*)"INV xy_scatter        ", parai%node_me, timer(6)
-       write(6,*)"INV x_fft             ", parai%node_me, timer(7)
-       write(6,*)"OMP LOCK 3            ", parai%node_me, timer(22)
-       write(6,*)"Apply V               ", parai%node_me, timer(8)
+       write(6,*)"CALC_COM LOCK 1       ", parai%my_node, parai%node_me, timer(21)
+       write(6,*)"INV After_com_copy    ", parai%my_node, parai%node_me, timer(4)
+       write(6,*)"INV y_fft             ", parai%my_node, parai%node_me, timer(5)
+       write(6,*)"INV xy_scatter        ", parai%my_node, parai%node_me, timer(6)
+       write(6,*)"INV x_fft             ", parai%my_node, parai%node_me, timer(7)
+       write(6,*)"OMP LOCK 3            ", parai%my_node, parai%node_me, timer(22)
+       write(6,*)"Apply V               ", parai%my_node, parai%node_me, timer(8)
      
-       write(6,*)"INV FFT after Com sum ",  timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(21)+timer(22)
+       write(6,*)"INV FFT after Com sum ",  parai%my_node, parai%node_me, timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(21)+timer(22)
        write(6,*)"==================================="
        write(6,*)"FW FFT before Com"
-       write(6,*)"FW x_fft              ", parai%node_me, timer(9)
-       write(6,*)"FW xy_scatter         ", parai%node_me, timer(10)
-       write(6,*)"CALC LOCK 2           ", parai%node_me, timer(23)
-       write(6,*)"FW y_fft              ", parai%node_me, timer(11)
-       write(6,*)"FW Pre_com_copy       ", parai%node_me, timer(12)
-       write(6,*)"OMP LOCK 4            ", parai%node_me, timer(24)
+       write(6,*)"FW x_fft              ", parai%my_node, parai%node_me, timer(9)
+       write(6,*)"FW xy_scatter         ", parai%my_node, parai%node_me, timer(10)
+       write(6,*)"CALC LOCK 2           ", parai%my_node, parai%node_me, timer(23)
+       write(6,*)"FW y_fft              ", parai%my_node, parai%node_me, timer(11)
+       write(6,*)"FW Pre_com_copy       ", parai%my_node, parai%node_me, timer(12)
+       write(6,*)"OMP LOCK 4            ", parai%my_node, parai%node_me, timer(24)
      
-       write(6,*)"FW FFT before Com sum ",  timer(9)+timer(10)+timer(11)+timer(12)+timer(23)+timer(24)
+       write(6,*)"FW FFT before Com sum ", parai%my_node, parai%node_me,  timer(9)+timer(10)+timer(11)+timer(12)+timer(23)+timer(24)
 !       write(6,*)"INV/APPLY/FW x-y-sections sum ", timer(4)+timer(5)+timer(6)+timer(7)+timer(8)+timer(24)+timer(9)+timer(10)+timer(11)+timer(12)+timer(25)
        write(6,*)"==================================="
        write(6,*)"FW FFT after Com"
-       write(6,*)"CALC_COM LOCK 2       ", parai%node_me, timer(27)
-       write(6,*)"FW After_com_copy     ", parai%node_me, timer(13)
-       write(6,*)"FW z_fft              ", parai%node_me, timer(14)
-       write(6,*)"OMP LOCK 5            ", parai%node_me, timer(28)
-       write(6,*)"Accumulate_Psi        ", parai%node_me, timer(15)
-       write(6,*)"OMP LOCK 6            ", parai%node_me, timer(29)
+       write(6,*)"CALC_COM LOCK 2       ", parai%my_node, parai%node_me, timer(27)
+       write(6,*)"FW After_com_copy     ", parai%my_node, parai%node_me, timer(13)
+       write(6,*)"FW z_fft              ", parai%my_node, parai%node_me, timer(14)
+       write(6,*)"OMP LOCK 5            ", parai%my_node, parai%node_me, timer(28)
+       write(6,*)"Accumulate_Psi        ", parai%my_node, parai%node_me, timer(15)
+       write(6,*)"OMP LOCK 6            ", parai%my_node, parai%node_me, timer(29)
      
-       write(6,*)"FW FFT after Com sum",  timer(13)+timer(14)+timer(15)+timer(27)+timer(28)+timer(29)
+       write(6,*)"FW FFT after Com sum",  parai%my_node, parai%node_me, timer(13)+timer(14)+timer(15)+timer(27)+timer(28)+timer(29)
        write(6,*)"==================================="
-       write(6,*)"COM LOCK 1            ", parai%node_me, timer(19)
-       write(6,*)"FIRST COMM TIMES:     ", parai%node_me, timer(20)
-       write(6,*)"COM LOCK 2            ", parai%node_me, timer(25)
-       write(6,*)"SECOND COMM TIMES:    ", parai%node_me, timer(26)
+       write(6,*)"COM LOCK 1            ", parai%my_node, parai%node_me, timer(19)
+       write(6,*)"FIRST COMM TIMES:     ", parai%my_node, parai%node_me, timer(20)
+       write(6,*)"COM LOCK 2            ", parai%my_node, parai%node_me, timer(25)
+       write(6,*)"SECOND COMM TIMES:    ", parai%my_node, parai%node_me, timer(26)
        write(6,*)"==================================="
-       write(6,*)"Adding up CALC:       ", parai%node_me, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
+       write(6,*)"Adding up CALC:       ", parai%my_node, parai%node_me, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
                                                           timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
                                                           timer(13)+timer(14)+timer(15)+timer(17)+&
                                                           timer(18)+timer(21)+timer(22)+timer(23)+timer(24)+&
                                                           timer(27)+timer(28)+timer(29)
-       write(6,*)"Adding up COMM:       ", parai%node_me, timer(19)+timer(20)+timer(25)+timer(26)
+       write(6,*)"Adding up COMM:       ", parai%my_node, parai%node_me, timer(19)+timer(20)+timer(25)+timer(26)
 !       write(6,*)"VPSI ADD Control:     ", parai%node_me, timer(1)+timer(2)+timer(3)+timer(4)+timer(5)+timer(6)+&
 !                               timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
 !                               timer(13)+timer(14)+timer(15)+timer(16)+timer(17)+timer(18)+timer(19)+timer(20)+&
@@ -2457,7 +2457,7 @@ CONTAINS
 !                               timer(7)+timer(8)+timer(9)+timer(10)+timer(11)+timer(12)+&
 !                               timer(13)+timer(14)+timer(15)+timer(16)+timer(17)+timer(18)+timer(19)+timer(20)+&
 !                               timer(22)+timer(23)+timer(24)+timer(25)+timer(26)+timer(28)+timer(29)
-       write(6,*)"VPSI Direct Control:  ", parai%node_me, timer(30)
+       write(6,*)"VPSI Direct Control:  ", parai%my_node, parai%node_me, timer(30)
        WRITE(6,*)" "
 
     END IF
