@@ -1358,7 +1358,7 @@ CONTAINS
                                                 swap, start_loop, end_loop
     INTEGER(int_8)                           :: il_wfng(2), il_wfnr(2), il_xf(2)
     REAL(real_8)                             :: chksum, ral, rbe, rsp, rsum, rsum1, &
-                                                rsum1abs, rsumv, rto, temp(4), inv_omega, temp_time
+                                                rsum1abs, rsumv, rto, temp(4), inv_omega, temp_time, summe
     REAL(real_8), SAVE, ALLOCATABLE          :: coef4(:), coef3(:)
     INTEGER, SAVE, ALLOCATABLE               :: ispin(:,:)
     LOGICAL, SAVE :: first = .true.
@@ -1369,7 +1369,7 @@ CONTAINS
     INTEGER, SAVE :: first_dim1, first_dim2, first_dim3
     COMPLEX(real_8), POINTER, SAVE           :: psi_work(:,:)
     INTEGER :: priv(10)
-    INTEGER :: ip, jp
+    INTEGER :: ip, jp, j
     LOGICAL :: last_single
 
 #ifdef _USE_SCRATCHLIBRARY
@@ -1382,6 +1382,19 @@ CONTAINS
     COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux_array(:,:)
     INTEGER(int_8) :: il_aux_array(2)
     INTEGER(int_8) :: il_psi_both (2)
+
+tfft%confw = 0
+tfft%coninv = 0
+
+!CALL part_1d_get_blk_bounds( nstate, parai%cp_inter_me, parai%cp_nogrp, fir, las )
+!nstate_local = las - fir + 1
+!summe = 0.0d0
+!DO i = 1, tfft%ngw
+!   DO j = fir, las
+!      summe = summe + c0(i,j)
+!   ENDDO
+!ENDDO
+!WRITE(6,*) parai%cp_me, "RHOOFR C0 SUM:", summe
 
     IF(cntl%fft_tune_batchsize) THEN
        CALL tiset(procedureN//'_tuning',isub4)
@@ -1669,6 +1682,17 @@ END IF
 
     !$omp end parallel
 
+!    IF( parai%cp_inter_me .eq. 0 .or. parai%cp_nogrp .eq. 1 ) WRITE(6,*) "RHO BEFORE:", c0(1,128)
+!    IF( parai%cp_inter_me .eq. 0 .or. parai%cp_nogrp .eq. 1 ) WRITE(6,*) "RHO AFTER:", psi_work(1,1)
+
+!summe = 0.0d0
+!DO i = 1, tfft%my_nr3p * tfft%nr2 * tfft%nr1
+!   DO j = fir, las
+!      summe = summe + rhoe(i,1)
+!   ENDDO
+!ENDDO
+!WRITE(6,*) parai%cp_me, "RHOOFR RHOE SUM:", summe
+
     IF(cntl%fft_tune_batchsize) fft_time_total(fft_tune_num_it)=m_walltime()-temp_time
 #ifdef _USE_SCRATCHLIBRARY
 !    CALL free_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
@@ -1828,6 +1852,12 @@ END IF
     chrg%csumr    = temp(2)
     chrg%csums    = temp(3)
     chrg%csumsabs = temp(4)
+
+!    IF (paral%parent) THEN
+!       WRITE(6,'(A,T46,F20.12)') ' IN FOURIER SPACE:', chrg%csumg
+!       WRITE(6,'(A,T46,F20.12)') ' IN REAL SPACE:', chrg%csumr
+!       WRITE(6,'(A,T46,F20.12)') ' Difference:', chrg%csumr - chrg%csumg
+!    END IF
 
     IF (paral%parent.AND.ABS(chrg%csumr-chrg%csumg).GT.delta) THEN
        IF (paral%io_parent)&

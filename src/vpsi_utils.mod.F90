@@ -25,7 +25,8 @@ MODULE vpsi_utils
                                              indzs,&
                                              nzh,&
                                              nzhs,&
-                                             indz
+                                             indz,&
+                                             nzh_r
   USE cuda_types,                      ONLY: cuda_memory_t,&
                                              cuda_stream_t
   USE cuda_utils,                      ONLY: cuda_alloc_host,&
@@ -96,13 +97,15 @@ MODULE vpsi_utils
                                              mp_comm_free,&
                                              mp_comm_null,&
                                              mp_bcast,&
-                                             mp_win_alloc_shared_mem
+                                             mp_win_alloc_shared_mem,&
+                                             mp_sum
   USE parac,                           ONLY: parai
   USE part_1d,                         ONLY: part_1d_get_el_in_blk,&
                                              part_1d_nbr_el_in_blk,&
                                              part_1d_get_blk_bounds
   USE prcp,                            ONLY: prcp_com
   USE reshaper,                        ONLY: reshape_inplace
+  USE rhov_utils,                      ONLY: rhov
   USE rswfmod,                         ONLY: maxstates,&
                                              rsactive,&
                                              rswf
@@ -1880,6 +1883,30 @@ CONTAINS
        IF (fip1.EQ.0._real_8.AND..NOT.cntl%tksham) fip1=1._real_8
        IF (fip1.EQ.0._real_8.AND.cntl%tksham) fip1=0.5_real_8
  
+!$OMP Barrier 
+
+!       IF( mythread .eq. 0 ) THEN
+!
+!       IF( .not. ( ibatch .eq. batch_size .and. last ) ) THEN
+! 
+!          DO j = 1, tfft%ngw
+!             fp = ( psi( nzh(j), ibatch ) + psi( indz(j), ibatch ) ) * (- tfft%tscale )
+!             fm = ( psi( nzh(j), ibatch ) - psi( indz(j), ibatch ) ) * (- tfft%tscale )
+!             c2 ( j, (2*ibatch)-1 ) = -fi * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
+!             c2 ( j, (2*ibatch)   ) = -fip1 * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch) ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
+!          END DO
+!
+!       ELSE
+!
+!          DO j = 1, tfft%ngw
+!             fp = ( psi( nzh(j), ibatch ) + psi( indz(j), ibatch ) ) * (- tfft%tscale )
+!             fm = ( psi( nzh(j), ibatch ) - psi( indz(j), ibatch ) ) * (- tfft%tscale )
+!             c2 ( j, (2*ibatch)-1 ) = -fi * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
+!          END DO
+!          
+!
+!       END IF
+
        IF( .not. ( ibatch .eq. batch_size .and. last ) ) THEN
  
           DO j = tfft%thread_ngms_start( mythread+1 ), tfft%thread_ngms_end( mythread+1 )
@@ -1898,6 +1925,8 @@ CONTAINS
           END DO
 
        END IF
+
+!$OMP Barrier 
 
     ENDDO
   
@@ -1923,6 +1952,133 @@ CONTAINS
   
   END SUBROUTINE Calc_c2_improved
 
+  SUBROUTINE calc_c3_improved( psi, c2, c0, f, mythread, batch_size, counter, njump, nostat, last )
+    IMPLICIT NONE
+  
+    INTEGER, INTENT(IN) :: batch_size, mythread, counter, njump, nostat
+    COMPLEX(DP), INTENT(IN), OPTIONAL :: c0( : , : )
+    COMPLEX(DP), INTENT(INOUT) :: c2( : , : )
+    COMPLEX(DP), INTENT(IN)  :: psi( tfft%nr3 * tfft%nsw(parai%me+1), * ) !z_group_size )
+    REAL(real_8), INTENT(IN)                 :: f( : )
+    LOGICAL, INTENT(IN) :: last
+  
+    COMPLEX(DP) :: fp, fm
+    INTEGER :: j, ibatch, offset, is1, is2
+    REAL(real_8) :: fi, fip1
+  !  INTEGER :: isub, isub4
+  !  CHARACTER(*), PARAMETER :: procedureN = 'Accumulate_Psi'
+  
+    INTEGER(INT64) :: time(4)
+  
+  !  IF( cntl%fft_tune_batchsize ) THEN
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN//'_tuning',isub4)
+  !  ELSE
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
+  !  END IF
+  
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
+  
+    !$  locks_omp( mythread+1, counter, 4 ) = .false.
+    !$omp flush( locks_omp )
+    !$  DO WHILE( ANY( locks_omp( :, counter, 4 ) ) )
+    !$omp flush( locks_omp )
+    !$  END DO
+  
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(2) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 28 ) = tfft%time_adding( 28 ) + ( time(2) - time(1) )
+  !------------------------------------------------------
+  !--------Accumulate_Psi Start--------------------------
+
+    offset = 2*(counter-1)*fft_batchsize     
+    DO ibatch = 1, batch_size
+       is1=offset+1
+       offset=offset+1
+       is2=nostat+1
+       IF(njump.EQ.2)THEN
+          is2=offset+1
+          offset=offset+1
+       END IF
+       fi=f(is1)*0.5_real_8
+       IF (fi.EQ.0._real_8.AND..NOT.cntl%tksham) fi=1._real_8
+       IF (fi.EQ.0._real_8.AND.cntl%tksham) fi=0.5_real_8
+       fip1=0._real_8
+       IF (is2.LE.nostat) fip1=f(is2)*0.5_real_8
+       IF (fip1.EQ.0._real_8.AND..NOT.cntl%tksham) fip1=1._real_8
+       IF (fip1.EQ.0._real_8.AND.cntl%tksham) fip1=0.5_real_8
+ 
+!$OMP Barrier 
+
+!       IF( mythread .eq. 0 ) THEN
+!
+!       IF( .not. ( ibatch .eq. batch_size .and. last ) ) THEN
+! 
+!          DO j = 1, tfft%ngw
+!             fp = ( psi( nzh(j), ibatch ) + psi( indz(j), ibatch ) ) * (- tfft%tscale )
+!             fm = ( psi( nzh(j), ibatch ) - psi( indz(j), ibatch ) ) * (- tfft%tscale )
+!             c2 ( j, (2*ibatch)-1 ) = -fi * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
+!             c2 ( j, (2*ibatch)   ) = -fip1 * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch) ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
+!          END DO
+!
+!       ELSE
+!
+!          DO j = 1, tfft%ngw
+!             fp = ( psi( nzh(j), ibatch ) + psi( indz(j), ibatch ) ) * (- tfft%tscale )
+!             fm = ( psi( nzh(j), ibatch ) - psi( indz(j), ibatch ) ) * (- tfft%tscale )
+!             c2 ( j, (2*ibatch)-1 ) = -fi * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
+!          END DO
+!          
+!
+!       END IF
+
+       IF( .not. ( ibatch .eq. batch_size .and. last ) ) THEN
+ 
+          DO j = tfft%thread_ngms_start( mythread+1 ), tfft%thread_ngms_end( mythread+1 )
+             fp = ( psi( nzh(j), ibatch ) + psi( indz(j), ibatch ) ) * (- tfft%tscale )
+             fm = ( psi( nzh(j), ibatch ) - psi( indz(j), ibatch ) ) * (- tfft%tscale )
+!             c2 ( j, (2*ibatch)-1 ) = -fi * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
+             c2 ( j, (2*ibatch)-1 ) = -0.5 * cmplx(  dble(fp) , aimag(fm), KIND=DP )
+!             c2 ( j, (2*ibatch)   ) = -fip1 * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch) ) + cmplx(  aimag(fp), -dble(fm), KIND=DP ) )
+             c2 ( j, (2*ibatch)   ) = -0.5 * cmplx(  aimag(fp), -dble(fm), KIND=DP )
+          END DO
+
+       ELSE
+
+          DO j = tfft%thread_ngms_start( mythread+1 ), tfft%thread_ngms_end( mythread+1 )
+             fp = ( psi( nzh(j), ibatch ) + psi( indz(j), ibatch ) ) * (- tfft%tscale )
+             fm = ( psi( nzh(j), ibatch ) - psi( indz(j), ibatch ) ) * (- tfft%tscale )
+!             c2 ( j, (2*ibatch)-1 ) = -fi * ((parm%tpiba2*hg(j))*c0( j, (2*ibatch)-1 ) + cmplx(  dble(fp) , aimag(fm), KIND=DP ) )
+             c2 ( j, (2*ibatch)-1 ) = -0.5 * cmplx(  dble(fp) , aimag(fm), KIND=DP )
+          END DO
+
+       END IF
+
+!$OMP Barrier 
+
+    ENDDO
+  
+  !---------Accumulate_Psi End---------------------------
+  !------------------------------------------------------
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 15 ) = tfft%time_adding( 15 ) + ( time(3) - time(2) )
+  
+    !$  locks_omp( mythread+1, counter, 5 ) = .false. 
+    !$omp flush( locks_omp )
+    !$  DO WHILE( ANY( locks_omp( :, counter, 5 ) ) )
+    !$omp flush( locks_omp )
+    !$  END DO 
+  
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(4) )
+    IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) tfft%time_adding( 29 ) = tfft%time_adding( 29 ) + ( time(4) - time(3) )
+  
+  !  IF( cntl%fft_tune_batchsize ) THEN
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
+  !  ELSE
+  !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN,isub)
+  !  END IF
+  
+  END SUBROUTINE Calc_c3_improved
+
+
 
   SUBROUTINE Apply_V( f, v, spins, batch_size, mythread )
     IMPLICIT NONE
@@ -1941,6 +2097,7 @@ CONTAINS
   !-----------Apply V Start------------------------------
   
     DO ibatch = 1, batch_size
+!$OMP Barrier 
        DO j = tfft%thread_rspace_start( mythread+1 ), tfft%thread_rspace_end( mythread+1 )
           f( j, ibatch )= - ( REAL( f( j, ibatch ) ) * v( j, spins(1,ibatch) ) + uimag * AIMAG( f( j, ibatch ) ) * v( j, spins(2,ibatch) ) )
        END DO
@@ -2001,6 +2158,11 @@ CONTAINS
     REAL(real_8), ALLOCATABLE                :: vpotx3a(:,:,:), vpotx3b(:,:,:)
     REAL(real_8), POINTER __CONTIGUOUS       :: VPOTX(:),vpotdg(:,:,:),extf_p(:,:)
     INTEGER, SAVE, ALLOCATABLE               :: lspin(:,:)
+
+    COMPLEX(real_8), ALLOCATABLE :: c3(:,:)
+    INTEGER :: t, j, nstates(2,1)
+    REAL(real_8), PARAMETER                  :: delta = 1.e-6_real_8
+    REAL(real_8) :: rsum(1), rsumv, summe
  
     INTEGER                                  :: rem, i1, j1
     INTEGER(INT64) :: time(2)
@@ -2031,6 +2193,26 @@ CONTAINS
     INTEGER :: ip, jp
 
     ! ==--------------------------------------------------------------==
+
+IF( .not. allocated( c3 ) ) ALLOCATE( c3( tfft%ngw, nstate ) )
+
+!c3 = c0
+!CALL part_1d_get_blk_bounds( nstate, parai%cp_inter_me, parai%cp_nogrp, fir, las )
+!nstate_local = las - fir + 1
+!
+!nstates(1,1)=1
+!nstates(2,1)=nstate
+!CALL rhov(nstates,rsumv,c3,.FALSE.,.FALSE.)
+!rsum(1)=parm%omega*rsumv
+!call mp_sum(rsum,1,parai%allgrp)
+!summe = 0.0d0
+!DO i = 1, tfft%ngw
+!   DO j = fir, las
+!      summe = summe + c0(i,j)
+!   ENDDO
+!ENDDO
+!WRITE(6,*) parai%cp_me, "VPSI C0 SUM:", rsum(1), summe
+
 
     IF(cntl%fft_tune_batchsize) THEN
        CALL tiset(procedureN//'_tuning',isub4)
@@ -2112,6 +2294,10 @@ CONTAINS
     CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate_local, sendsize, sendsize_rem, lspin )
 
     tfft%which_wave = 2
+
+
+
+DO t = 1, 2
   
     locks_calc_inv = .true.
     locks_calc_fw  = .true.
@@ -2164,6 +2350,8 @@ CONTAINS
     END IF
 #endif
 
+
+CALL MPI_BARRIER(parai%cp_grp, ierr)
     CALL MPI_BARRIER(parai%allgrp, ierr)
 
     tfft%time_adding=0
@@ -2172,7 +2360,7 @@ CONTAINS
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
     CALL SYSTEM_CLOCK( time(1) )
     !$OMP parallel num_threads( parai%ncpus_FFT ) &
-    !$omp private(mythread,ibatch,bsize,count,ist,is1,is2,ir,offset_state,swap,remswitch,counter) &
+    !$omp private(mythread,ibatch,bsize,count,ist,is1,is2,ir,offset_state,swap,remswitch,counter,last_single) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
 
@@ -2197,7 +2385,9 @@ CONTAINS
                 IF(bsize.NE.0)THEN
                    counter(1) = counter(1) + 1
                    ! Loop over the electronic states of this batch
+!$OMP Barrier 
                    CALL Prepare_Psi( tfft, c0( :, i_start3+1+(counter(1)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread, last_single, counter(1) )
+!$OMP Barrier 
                    ! ==--------------------------------------------------------------==
                    ! ==  Fourier transform the wave functions to real space.         ==
                    ! ==  In the array PSI was used also the fact that the wave       ==
@@ -2213,7 +2403,9 @@ CONTAINS
                    ! ==  to swap                                                     ==
                    ! ==--------------------------------------------------------------==
                    swap=mod(ibatch,fft_buffsize)+1
+!$OMP Barrier 
                    CALL invfft_batch( tfft, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
+!$OMP Barrier 
                 END IF
              END IF
           END IF
@@ -2235,6 +2427,7 @@ CONTAINS
                 END IF
              END IF
           END IF
+!$OMP Barrier 
           IF( parai%nnode .eq. 1 ) THEN
              counter(2) = counter(2) + 1
              !$OMP Barrier 
@@ -2244,6 +2437,7 @@ CONTAINS
              !$omp flush( locks_sing_1 )
              !$  END DO
           END IF
+!$OMP Barrier 
           IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus_FFT .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
              !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
              !data related to ibatch-1!
@@ -2257,11 +2451,16 @@ CONTAINS
                    remswitch = 2
                 END IF
                 IF(bsize.NE.0)THEN
+!$OMP Barrier 
                    swap=mod(ibatch-start_loop1,fft_buffsize)+1
+!$OMP Barrier 
                    counter(3) = counter(3) + 1
+!$OMP Barrier 
                    CALL invfft_batch( tfft, 3, bsize, remswitch, mythread, counter(3), swap, &
                                       f_inout1=rs_wave(:,1:1), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
+!$OMP Barrier 
                    CALL invfft_batch( tfft, 4, bsize, remswitch, mythread, counter(3), swap, f_inout1=rs_wave(:,1:1) )
+!$OMP Barrier 
                 END IF
              END IF
           END IF
@@ -2302,7 +2501,11 @@ CONTAINS
                    END IF
                    !njump states per single fft
                 END DO
+!$OMP Barrier 
+IF( t .eq. 1 ) THEN
                 CALL Apply_V( rs_wave(:,1:bsize), vpot, lspin, bsize, mythread )
+END IF
+!$OMP Barrier 
 !                IF (td_prop%td_extpot.AND.cntl%tlsd.AND.ispin.EQ.2) THEN
 !                   offset_state=i_start2
 !                   DO count=1,bsize
@@ -2325,9 +2528,13 @@ CONTAINS
              ! == Back transform to reciprocal space the product V.PSI       ==
              ! ==------------------------------------------------------------==
                  counter(4) = counter(4) + 1
+!$OMP Barrier 
                  CALL fwfft_batch( tfft, 1, bsize, remswitch, mythread, counter(4), swap, f_inout1=rs_wave, f_inout2=aux_array( : , 1 : 1 ) )
+!$OMP Barrier 
                  CALL fwfft_batch( tfft, 2, bsize, remswitch, mythread, counter(4), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv )
+!$OMP Barrier 
                  i_start2=i_start2+bsize*njump
+!$OMP Barrier 
              END IF
           END IF
        END IF
@@ -2348,6 +2555,7 @@ CONTAINS
              END IF
           END IF
        END IF
+!$OMP Barrier 
        IF( parai%nnode .eq. 1 ) THEN
           counter(5) = counter(5) + 1
           !$OMP Barrier 
@@ -2357,6 +2565,7 @@ CONTAINS
           !$omp flush( locks_sing_2 )
           !$  END DO
        END IF
+!$OMP Barrier 
        IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus_FFT .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
 !          IF(ibatch.GE.3.AND.ibatch.LE.fft_numbatches+3)THEN
           IF(ibatch.GT.start_loop2.AND.ibatch.LE.end_loop2)THEN
@@ -2365,25 +2574,54 @@ CONTAINS
                 bsize=fft_batchsize
                 remswitch = 1
                 last_single = .false.
+!$OMP Barrier 
                 IF( fft_residual .eq. 0 .and. ibatch-start_loop2 .eq. fft_numbatches .and. mod(nstate_local,2) .ne. 0 ) last_single = .true.
              ELSE
                 bsize=fft_residual
                 remswitch = 2
                 last_single = .false.
+!$OMP Barrier 
                 IF( mod(nstate_local,2) .ne. 0 ) last_single = .true.
              END IF
              IF(bsize.NE.0)THEN
+!$OMP Barrier 
                 swap=mod(ibatch-start_loop2,fft_buffsize)+1
+!$OMP Barrier 
                 counter(6) = counter(6) + 1
+!$OMP Barrier 
                 CALL fwfft_batch( tfft, 4, bsize, remswitch, mythread, counter(6), swap, f_inout1=comm_recv, f_inout2=aux_array )
+!$OMP Barrier 
+IF( t .eq. 1 ) THEN                
                 CALL calc_c2_improved( aux_array, c2(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2), &
                                      c0(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2 ), f, mythread, bsize, counter(6), njump, nostat, last_single )
+ELSE
+                CALL calc_c3_improved( aux_array, c3(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2), &
+                                     c0(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2 ), f, mythread, bsize, counter(6), njump, nostat, last_single )
+END IF
+!$OMP Barrier 
              END IF
           END IF
        END IF
     END DO
 
     !$omp end parallel
+
+!c3 = c3 / 2
+CALL MPI_BARRIER(parai%cp_grp, ierr)
+
+
+!    IF( parai%cp_inter_me .eq. 2 .or. parai%cp_nogrp .eq. 1 ) WRITE(6,*) "VPSI BEFORE:", c0(1,128)
+!    IF( parai%cp_inter_me .eq. 2 .or. parai%cp_nogrp .eq. 1 ) WRITE(6,*) "VPSI AFTER:", c2(1,128)
+
+!    CALL kin_energy(c0,nstate,rsum)
+!    nstates(1,1)=1
+!    nstates(2,1)=nstate
+!    CALL rhov(nstates,rsumv,psi,.FALSE.,.FALSE.)
+!    rsum=rsum+parm%omega*rsumv
+!    !$omp parallel do private(I)
+!    DO i=1,fpar%nnr1
+!       rhoe(i,1)=rhoe(i,1)+REAL(psi(i))
+!    ENDDO
 
     CALL SYSTEM_CLOCK( time(2) )
     tfft%time_adding( 30 ) = time(2) - time(1)
@@ -2493,6 +2731,34 @@ CONTAINS
             __LINE__,__FILE__)
     END IF
 #endif
+ENDDO
+
+!DO i = 1, tfft%ngw
+!   DO j = fir, las
+!      IF( abs(c0(i,j) - c3(i,j)) .gt. delta ) THEN
+!         WRITE(6,*) "WARNING: DIFF IN c0 AND c3 at", parai%me, i,j
+!         WRITE(6,*) "c0:", parai%me, c0(i,j)
+!         WRITE(6,*) "c3:", parai%me, c3(i,j)
+!         WRITE(6,*) "DIFF", parai%me, c0(i,j) - c3(i,j)
+!      END IF
+!   ENDDO
+!ENDDO
+!
+!c3 = c2
+!
+!nstates(1,1)=1
+!nstates(2,1)=nstate
+!CALL rhov(nstates,rsumv,c3,.FALSE.,.FALSE.)
+!rsum(1)=parm%omega*rsumv
+!call mp_sum(rsum,1,parai%allgrp)
+!summe = 0.0d0
+!DO i = 1, tfft%ngw
+!   DO j = fir, las
+!      summe = summe + c2(i,j)
+!   ENDDO
+!ENDDO
+!WRITE(6,*) parai%cp_me, "VPSI C2 SUM:", rsum(1), summe
+
     IF( allocated( lspin ) ) DEALLOCATE( lspin, STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate rs_array', &
          __LINE__,__FILE__)
@@ -2571,6 +2837,14 @@ CONTAINS
     ELSE
        CALL tihalt(procedureN,isub)
     END IF
+
+!summe = 0.0d0
+!DO i = 1, tfft%ngw
+!   DO j = fir, las
+!      summe = summe + c2(i,j)
+!   ENDDO
+!ENDDO
+!WRITE(6,*) parai%cp_me, "VPSI END C2 SUM:", summe
 
     ! ==--------------------------------------------------------------==
     RETURN

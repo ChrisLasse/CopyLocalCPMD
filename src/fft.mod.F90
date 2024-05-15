@@ -167,6 +167,9 @@ MODULE fft
      LOGICAL :: timing = .false.
      LOGICAL :: timing_specific = .false.
 
+     INTEGER :: coninv = 0
+     INTEGER :: confw = 0
+
   END TYPE
   Type( FFT_TYPE_DESCRIPTOR ) :: tfft
 

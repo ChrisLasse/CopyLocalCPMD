@@ -1265,8 +1265,10 @@ CONTAINS
   !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
+!$OMP Barrier 
     Call First_Part_x_section( aux_r )
   
+!$OMP Barrier 
     !$  locks_omp( mythread+1, counter, 8 ) = .false.
     !$omp flush( locks_omp )
     !$  DO WHILE( ANY( locks_omp( :, counter, 8 ) ) )
@@ -1274,6 +1276,7 @@ CONTAINS
     !$  END DO
    
     Call Second_Part_x_section( aux_r )
+!$OMP Barrier 
   
   !  IF( cntl%fft_tune_batchsize ) THEN
   !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
@@ -1299,6 +1302,7 @@ CONTAINS
   
           IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(1) )
   
+!$OMP Barrier 
           CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
                            tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
                            aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
@@ -1322,6 +1326,7 @@ CONTAINS
         !------------------------------------------------------
         !------Forward xy-scatter Start------------------------
         
+!$OMP Barrier 
           DO i = tfft%thread_y_start( mythread+1, remswitch, tfft%which ), tfft%thread_y_end( mythread+1, remswitch, tfft%which )
              ibatch = ( ( (i-1) / ( tfft%my_nr3p * my_nr1s ) ) + 1 )
              offset = tfft%nr2 * mod( i-1, my_nr1s * tfft%my_nr3p )
@@ -1361,8 +1366,10 @@ CONTAINS
   !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
+!$OMP Barrier 
     Call First_Part_y_section( aux )
   
+!$OMP Barrier 
     !$  locks_omp( mythread+1, counter, 10 ) = .false.
     !$omp flush( locks_omp )
     !$  DO WHILE( ANY( locks_omp( :, counter, 10 ) ) )
@@ -1371,6 +1378,7 @@ CONTAINS
    
     Call Second_Part_y_section( aux )
   
+!$OMP Barrier 
   !  IF( cntl%fft_tune_batchsize ) THEN
   !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tihalt(procedureN//'_tuning',isub4)
   !  ELSE
@@ -1388,6 +1396,7 @@ CONTAINS
         !------------------------------------------------------
         !------------y-FFT Start-------------------------------
   
+!$OMP Barrier 
           CALL mltfft_fftw_t('n','n',aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
                            tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
                            aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
@@ -1424,6 +1433,7 @@ CONTAINS
                 DO m = 1, parai%node_nproc_overview( l )
                    i = i + 1
                    offset = ( parai%node_me + ((l-1)*parai%max_node_nproc+(m-1))*parai%max_node_nproc ) * tfft%small_chunks(tfft%which) + (l-1)*(batch_size-1) * tfft%big_chunks(tfft%which)
+!$OMP Barrier 
                    DO j = tfft%thread_z_start( mythread+1, remswitch, i, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, i, tfft%which )
                       jter = mod( j-1, nss( i ) ) 
                       ibatch = ( (j-1) / nss( i ) )
@@ -1444,6 +1454,7 @@ CONTAINS
         
           DO m = 1, parai%node_nproc
              offset = ( parai%node_me + (parai%my_node*parai%max_node_nproc+(m-1))*parai%max_node_nproc ) * tfft%small_chunks(tfft%which) + parai%my_node*(batch_size-1) * tfft%big_chunks(tfft%which)
+!$OMP Barrier 
              DO j = tfft%thread_z_start( mythread+1, remswitch, parai%node_grpindx(m)+1, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, parai%node_grpindx(m)+1, tfft%which )
                 jter = mod( j-1, nss( parai%node_grpindx(m)+1 ) ) 
                 ibatch = ( (j-1) / nss( parai%node_grpindx(m)+1 ) )
@@ -1507,6 +1518,7 @@ CONTAINS
        DO l = 1, parai%node_nproc_overview( j )
           m = m + 1
           offset = ( parai%node_me*parai%max_node_nproc + (l-1) ) * tfft%small_chunks(tfft%which) + (j-1)*batch_size * tfft%big_chunks(tfft%which)
+!$OMP Barrier 
           DO k = tfft%thread_z_start( mythread+1, remswitch, parai%me+1, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, parai%me+1, tfft%which )
              kfrom = offset + tfft%nr3px * mod( k-1, nss(parai%me+1) ) + ( (k-1) / nss(parai%me+1) ) * tfft%big_chunks(tfft%which)
              DO i = 1, tfft%nr3p( m )
@@ -1532,6 +1544,7 @@ CONTAINS
   
     IF( mythread .eq. 1 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(3) )
   
+!$OMP Barrier 
   
     CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_z_start( mythread+1, remswitch, parai%me+1, tfft%which ) : tfft%thread_z_end( mythread+1, remswitch, parai%me+1, tfft%which ) ), &
                      tfft%nr3, tfft%thread_z_sticks(mythread+1,remswitch,parai%me+1,tfft%which), &

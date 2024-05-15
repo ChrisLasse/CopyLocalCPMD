@@ -164,6 +164,10 @@ CONTAINS
     INTEGER(INT64) :: time(2), cr
     REAL :: total_time
     LOGICAL, SAVE :: tunning_finished = .false.
+
+    REAL(real_8) :: summe,temp(3)
+    REAL(real_8), PARAMETER                  :: delta = 1.e-6_real_8
+
     CALL tiset(procedureN,isub)
     CALL tiset(procedureN//'_a',isub2)
     !TK noforce goes here:
@@ -399,7 +403,26 @@ CONTAINS
                   use_cp=.TRUE.,redist=.NOT.cntl%nonort)
              CALL rotate_fnl(int(il_fnl_packed(1)),fnl_packed,fnlgam_packed,nstate,gam)
           END IF
+!summe = 0.0d0
+!DO i = 1, SIZE( c2(:,1) )
+!   DO j = 1, SIZE( c2(1,:) )
+!      summe = summe + c2(i,j)
+!   ENDDO
+!ENDDO
+!WRITE(6,*) parai%cp_me, "FORCES AFTERVPSI_212 C2 SUM:", summe
           CALL nlforce(c2,crge%f,fnl_packed,fnlgam_packed,nstate,redist=.NOT.cntl%nonort)
+!summe = 0.0d0
+!DO i = 1, SIZE( c2(:,1) )
+!   DO j = 1, SIZE( c2(1,:) )
+!      summe = summe + c2(i,j)
+!   ENDDO
+!ENDDO
+!WRITE(6,*) parai%cp_me, "FORCES AFTERVPSI_22 C2 SUM:", summe
+!temp = 0.0d0
+!temp(parai%cp_me+1) = summe
+!call mp_sum(temp,3,parai%cp_grp)
+!IF( abs(temp(1)-temp(2)) .gt. delta .or. abs(temp(1)-temp(3)) .gt. delta ) call sleep(10000)
+
           IF (tfor) THEN
              CALL rnlsm(c0_ptr(:,:,ik),nstate,1,ik,tfor,unpack_dfnl_fnl=.FALSE.,&
                   only_dfnl=.TRUE.)
@@ -613,7 +636,6 @@ CONTAINS
        IF (ierr.NE.0) CALL stopgm(procedureN,'Deallocation problem',&
             __LINE__,__FILE__)
     END IF
-
 2000 CONTINUE
     rsactive = .FALSE.
     IF (tfor) THEN

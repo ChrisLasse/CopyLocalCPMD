@@ -98,6 +98,10 @@ CONTAINS
 #endif
     LOGICAL                                  :: mixed_psp
 
+    REAL(real_8) :: summe,temp(3)
+    REAL(real_8), PARAMETER                  :: delta = 1.e-6_real_8
+    INTEGER :: j
+
     CALL tiset(procedureN,isub)
     IF (imagp.EQ.2) call stopgm(procedureN,'k-point not implemented',&
          __LINE__,__FILE__)
@@ -230,6 +234,7 @@ CONTAINS
           !get data from other cp_grp other threads build local beta and perform dgemms
           CALL my_concat_inplace(dai,INT(il_dai(1),kind=int_4)*nstate,parai%cp_inter_grp)
        END IF
+!$OMP Barrier
        IF(methread.EQ.1.OR.nthreads.EQ.1)THEN
           !$ methread = omp_get_thread_num()
           !$ IF(methread.EQ.1)THEN
@@ -299,6 +304,17 @@ CONTAINS
        mixed_psp=.TRUE.
     END DO
     IF(mixed_psp) CALL nlforce_old(c2,f,nstate)
+summe = 0.0d0
+DO i = 1, SIZE( c2(:,1) )
+   DO j = 1, SIZE( c2(1,:) )
+      summe = summe + c2(i,j)
+   ENDDO
+ENDDO
+WRITE(6,*) parai%cp_me, "FORCES AFTERVPSI_22 C2 SUM:", summe
+temp = 0.0d0
+temp(parai%cp_me+1) = summe
+call mp_sum(temp,3,parai%cp_grp)
+IF( abs(temp(1)-temp(2)) .gt. delta .or. abs(temp(1)-temp(3)) .gt. delta ) call sleep(10000000)
     RETURN
   END SUBROUTINE nlforce
   ! ==================================================================

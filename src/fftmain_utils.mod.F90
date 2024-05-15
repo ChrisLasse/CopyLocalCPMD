@@ -662,6 +662,9 @@ CONTAINS
 
     INTEGER                                  :: isign, isub
 
+    INTEGER :: i
+    REAL(real_8) :: summe
+
     CALL tiset(procedureN,isub)
     isign=-1
     IF( cp_cuda_env%use_fft ) THEN
@@ -671,7 +674,18 @@ CONTAINS
        IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
+tfft%coninv = tfft%coninv + 1
+summe = 0.d0
+DO i = 1, SIZE(f)
+   summe = summe + f(i)
+ENDDO
+!WRITE(6,*) parai%cp_me, tfft%coninv, "INVFFT BEFORE", summe
           CALL fft_improved( isign, tfft, f, tfft%nhg, tfft%nr1p, tfft%ir1p, tfft%nsp )
+summe = 0.d0
+DO i = 1, SIZE(f)
+   summe = summe + f(i)
+ENDDO
+!WRITE(6,*) parai%cp_me, tfft%coninv, "INVFFT AFTER", summe
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
@@ -704,6 +718,9 @@ CONTAINS
 
     INTEGER                                  :: isign, isub
 
+    INTEGER :: i
+    REAL(real_8) :: summe
+
     CALL tiset(procedureN,isub)
     isign=1
     IF( cp_cuda_env%use_fft ) THEN
@@ -713,7 +730,18 @@ CONTAINS
        IF( .false. ) THEN
           CALL fftnew(isign,f,sparse, parai%allgrp )
        ELSE
+tfft%confw = tfft%confw + 1
+summe = 0.d0
+DO i = 1, SIZE(f)
+   summe = summe + f(i)
+ENDDO
+!WRITE(6,*) parai%cp_me, tfft%confw, "FWFFT BEFORE", summe
           CALL fft_improved( isign, tfft, f, tfft%nhg, tfft%nr1p, tfft%ir1p, tfft%nsp )
+summe = 0.d0
+DO i = 1, SIZE(f)
+   summe = summe + f(i)
+ENDDO
+!WRITE(6,*) parai%cp_me, tfft%confw, "FWFFT AFTER", summe
        END IF
     ENDIF
     CALL tihalt(procedureN,isub)
