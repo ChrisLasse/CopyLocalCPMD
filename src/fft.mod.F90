@@ -163,6 +163,7 @@ MODULE fft
      INTEGER :: big_chunks( 2 )
      LOGICAL :: do_comm( 2 )
      INTEGER :: comm_sendrecv(2,2)
+     INTEGER, ALLOCATABLE :: c2_com_num(:,:)
 
      LOGICAL :: timing = .false.
      LOGICAL :: timing_specific = .false.
