@@ -1223,12 +1223,12 @@ CONTAINS
   
   END SUBROUTINE invfft_z_section 
   
-  SUBROUTINE invfft_y_section( tfft, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, counter, remswitch, mythread, my_nr1s )
+  SUBROUTINE invfft_y_section( tfft, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, counter, remswitch, mythread, my_nr1s, ispec )
     !$ USE omp_lib
     IMPLICIT NONE
   
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) ::tfft 
-    INTEGER, INTENT(IN) :: remswitch, mythread, counter, my_nr1s
+    INTEGER, INTENT(IN) :: remswitch, mythread, counter, my_nr1s, ispec
     COMPLEX(DP), INTENT(IN)  :: comm_mem_recv( * )
     COMPLEX(DP), INTENT(INOUT) :: aux ( tfft%my_nr3p * tfft%nr2 * tfft%nr1 , * ) !y_group_size
     COMPLEX(DP), INTENT(INOUT) :: aux2_r( : , : )
@@ -1252,11 +1252,12 @@ CONTAINS
        Call First_Part_y_section( aux2_r, map_acinv_rem )
     END IF
   
-    !$  locks_omp( mythread+1, counter, 7 ) = .false.
-    !$omp flush( locks_omp )
-    !$  DO WHILE( ANY( locks_omp( :, counter, 7 ) ) )
-    !$omp flush( locks_omp )
+    !$  locks_omp_big( mythread+1, ispec, counter, 5 ) = .false.
+    !$omp flush( locks_omp_big )
+    !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 5 ) ) )
+    !$omp flush( locks_omp_big )
     !$  END DO
+!$OMP BARRIER
   
     Call Second_Part_y_section( aux2_r )
   
@@ -1280,6 +1281,8 @@ CONTAINS
         !--------After-Com-Copy Start--------------------------
         
           !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
+
+IF( tfft%which .eq. 2 .or. tfft%which_wave .eq. 2 ) THEN
           
           DO i = tfft%thread_y_start( mythread+1, remswitch, tfft%which ), tfft%thread_y_end( mythread+1, remswitch, tfft%which )
              iter = mod( i-1, my_nr1s ) + 1
@@ -1294,6 +1297,24 @@ CONTAINS
                 aux2( k, i ) = comm_mem_recv( map( offset + k ) )
              END DO
           END DO
+
+ELSE
+
+          DO i = tfft%thread_y_start( mythread+1, 1, 3 ), tfft%thread_y_end( mythread+1, 1, 3 )
+             iter = mod( i-1, my_nr1s ) + 1
+             offset = ( mod( i-1, my_nr1s * tfft%my_nr3p ) + ( (i-1) / ( my_nr1s * tfft%my_nr3p ) ) * tfft%my_nr3p * my_nr1s ) * tfft%nr2
+             DO k = 1, tfft%zero_acinv_start( iter, tfft%which ) - 1
+                aux2( k, i ) = comm_mem_recv( map( offset + k ) )
+             END DO
+             DO k = tfft%zero_acinv_start( iter, tfft%which ), tfft%zero_acinv_end( iter, tfft%which )
+                aux2( k, i ) = (0.0_DP,0.0_DP)
+             END DO
+             DO k = tfft%zero_acinv_end( iter, tfft%which ) + 1, tfft%nr2
+                aux2( k, i ) = comm_mem_recv( map( offset + k ) )
+             END DO
+          END DO
+
+END IF
         
           !CALL mpi_win_unlock_all( tfft%mpi_window( 2 ), ierr )
         
@@ -1303,11 +1324,23 @@ CONTAINS
         !------------------------------------------------------
         !------------y-FFT Start-------------------------------
   
+IF( tfft%which .eq. 2 .or. tfft%which_wave .eq. 2 ) THEN
+
           CALL mltfft_fftw_t('n','n',aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
                            tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
                            aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
                            tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
                            tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
+
+ELSE
+
+          CALL mltfft_fftw_t('n','n',aux2( : , tfft%thread_y_start( mythread+1, 1, 3 ) : tfft%thread_y_end( mythread+1, 1, 3 ) ), &
+                           tfft%nr2, tfft%thread_y_sticks(mythread+1,1,3), &
+                           aux2( : , tfft%thread_y_start( mythread+1,1,3) : tfft%thread_y_end( mythread+1, 1, 3 ) ), &
+                           tfft%nr2, tfft%thread_y_sticks(mythread+1,1,3), &
+                           tfft%nr2, tfft%thread_y_sticks(mythread+1,1,3),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
+
+END IF
         
         !-------------y-FFT End--------------------------------
         !------------------------------------------------------
@@ -1327,6 +1360,8 @@ CONTAINS
         !------------------------------------------------------
         !-------------yx-scatter-------------------------------
         
+IF( tfft%which .eq. 2 .or. tfft%which_wave .eq. 2 ) THEN
+
           DO i = tfft%thread_x_start( mythread+1, remswitch, tfft%which ), tfft%thread_x_end( mythread+1, remswitch, tfft%which )
              offset = mod( i-1, tfft%my_nr3p * tfft%nr2 ) * tfft%nr1
              ibatch = ( ( (i-1) / ( tfft%my_nr3p * tfft%nr2 ) ) + 1 )
@@ -1340,7 +1375,25 @@ CONTAINS
                 aux( offset + k, ibatch ) = aux2( tfft%map_scatter_inv( offset + k, tfft%which ), ibatch )
              END DO
           END DO
-        
+
+ELSE
+    
+          DO i = tfft%thread_x_start( mythread+1, 1, 3 ), tfft%thread_x_end( mythread+1, 1, 3 )
+             offset = mod( i-1, tfft%my_nr3p * tfft%nr2 ) * tfft%nr1
+             ibatch = ( ( (i-1) / ( tfft%my_nr3p * tfft%nr2 ) ) + 1 )
+             DO k = 1, tfft%zero_scatter_start( tfft%which ) - 1
+                aux( offset + k, ibatch ) = aux2( tfft%map_scatter_inv( offset + k, tfft%which ), ibatch )
+             END DO
+             DO k = tfft%zero_scatter_start( tfft%which ), tfft%zero_scatter_end( tfft%which )
+                aux( offset + k, ibatch ) = (0.0_DP, 0.0_DP)
+             END DO
+             DO k = tfft%zero_scatter_end( tfft%which ) + 1, tfft%nr1
+                aux( offset + k, ibatch ) = aux2( tfft%map_scatter_inv( offset + k, tfft%which ), ibatch )
+             END DO
+          END DO
+
+END IF
+    
         !-------------yx-scatter-------------------------------
         !------------------------------------------------------
           IF( parai%ncpus_FFT .eq. 1 .or. ( mythread .eq. 1 .and. cntl%overlapp_comm_comp ) .or. ( mythread .eq. 0 .and. .not. cntl%overlapp_comm_comp ) ) CALL SYSTEM_CLOCK( time(5) )
@@ -1371,12 +1424,24 @@ CONTAINS
     IF( parai%ncpus_FFT .eq. 1 .or. ( mythread .eq. 1 .and. cntl%overlapp_comm_comp ) .or. ( mythread .eq. 0 .and. .not. cntl%overlapp_comm_comp ) ) CALL SYSTEM_CLOCK( time(1) )
   !------------------------------------------------------
   !------------x-FFT Start-------------------------------
+
+IF( tfft%which .eq. 2 .or. tfft%which_wave .eq. 2 ) THEN
   
     CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
                      tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
                      aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
                      tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
                      tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
+
+ELSE
+
+    CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, 1, 3 ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
+                     tfft%nr1, tfft%thread_x_sticks(mythread+1,1, 3), &
+                     aux( : , tfft%thread_x_start( mythread+1, 1, 3 ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
+                     tfft%nr1, tfft%thread_x_sticks(mythread+1,1, 3), &
+                     tfft%nr1, tfft%thread_x_sticks(mythread+1,1, 3),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
+
+END IF
   
   !-------------x-FFT End--------------------------------
   !------------------------------------------------------

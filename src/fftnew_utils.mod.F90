@@ -1134,7 +1134,7 @@ CONTAINS
     map_acinv = 0
     
     !$omp parallel private( ibatch, j, l, iproc, offset, i, it, mc, m1, m2, i1, k)
-    DO ibatch = 1, batch_size
+    DO ibatch = 1, 1 !batch_size
        iproc = 0
        DO j = 1, parai%nnode
           DO l = 1, parai%node_nproc_overview( j )

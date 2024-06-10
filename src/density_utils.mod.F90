@@ -80,21 +80,21 @@ CONTAINS
 
     IF( nspin .eq. 1 ) THEN
 
-       DO i = 1, batch_size
+!       DO i = 1, batch_size
           DO j = tfft%thread_rspace_start( mythread+1 ), tfft%thread_rspace_end( mythread+1 )
-             rho( j, 1 ) = rho( j, 1 ) + alpha_real( i ) *  REAL( psi( j, i ) )**2 &
-                                       + alpha_imag( i ) * AIMAG( psi( j, i ) )**2
+             rho( j, 1 ) = rho( j, 1 ) + alpha_real( 1 ) *  REAL( psi( j, 1 ) )**2 &
+                                       + alpha_imag( 1 ) * AIMAG( psi( j, 1 ) )**2
           ENDDO
-       ENDDO
+!       ENDDO
 
     ELSE
 
-       DO i = 1, batch_size
+!       DO i = 1, batch_size
           DO j = tfft%thread_rspace_start( mythread+1 ), tfft%thread_rspace_end( mythread+1 )
-             rho( j, spins( 1, i ) ) = rho( j, spins( 1, i ) ) + alpha_real( i ) *  REAL( psi( j, i ) )**2
-             rho( j, spins( 2, i ) ) = rho( j, spins( 2, i ) ) + alpha_imag( i ) * AIMAG( psi( j, i ) )**2
+             rho( j, spins( 1, 1 ) ) = rho( j, spins( 1, 1 ) ) + alpha_real( 1 ) *  REAL( psi( j, 1 ) )**2
+             rho( j, spins( 2, 1 ) ) = rho( j, spins( 2, 1 ) ) + alpha_imag( 1 ) * AIMAG( psi( j, 1 ) )**2
           ENDDO
-       ENDDO
+!       ENDDO
 !       DO i = 1, batch_size
 !          DO j = tfft%thread_rspace_start( mythread+1 ), tfft%thread_rspace_end( mythread+1 )
 !             rho( j, spins( 2, i ) ) = rho( j, spins( 2, i ) ) + alpha_imag( i ) * AIMAG( psi( j, i ) )**2

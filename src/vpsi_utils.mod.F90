@@ -2872,7 +2872,7 @@ CONTAINS
        ALLOCATE( locks_omp( parai%ncpus_FFT, fft_numbatches+3, 20 ) )
 
        IF( allocated( locks_omp_big ) ) DEALLOCATE( locks_omp_big )
-       ALLOCATE( locks_omp_big( parai%ncpus_FFT, fft_batchsize, fft_numbatches+3, 5 ) )
+       ALLOCATE( locks_omp_big( parai%ncpus_FFT, fft_batchsize, fft_numbatches+3, 20 ) )
      
        CALL Make_Manual_Maps( tfft, fft_batchsize, fft_residual, tfft%nsw, tfft%nr1w, tfft%ngw, tfft%which, nstate ) 
 
