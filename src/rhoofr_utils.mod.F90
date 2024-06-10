@@ -1555,7 +1555,7 @@ END IF
 !                ! ==  to swap                                                     ==
 !                ! ==--------------------------------------------------------------==
                 swap=mod(ibatch,fft_buffsize)+1
-                CALL invfft_batch( tfft, 1, bsize, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
+                CALL invfft_batch( tfft, 1, bsize, 1, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
              END IF
           END IF
        END IF
@@ -1573,7 +1573,7 @@ END IF
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch,fft_buffsize)+1
                 counter(2) = counter(2) + 1
-                CALL invfft_batch( tfft, 2, bsize, remswitch, mythread, counter(2), swap )
+                CALL invfft_batch( tfft, 2, bsize, 1, remswitch, mythread, counter(2), swap )
              END IF
           END IF
        END IF
@@ -1601,9 +1601,9 @@ END IF
                 counter(3) = counter(3) + 1
                 start = (1+((counter(3)-1)*fft_batchsize))
                 ending = (1+(counter(3)-1)*fft_batchsize)+bsize-1
-                CALL invfft_batch( tfft, 3, bsize, remswitch, mythread, counter(3), swap, &
+                CALL invfft_batch( tfft, 3, bsize, 1, remswitch, mythread, counter(3), swap, &
                                    f_inout1=psi_work( : , start : ending ), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
-                CALL invfft_batch( tfft, 4, bsize, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : ending ) )
+                CALL invfft_batch( tfft, 4, bsize, 1, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : ending ) )
 
                 ! Compute the charge density from the wave functions
                 ! in real space

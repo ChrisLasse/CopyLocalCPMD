@@ -578,6 +578,7 @@ MODULE system
      LOGICAL :: use_elpa_autotune = .FALSE.
      LOGICAL :: rnlsm_autotune
      LOGICAL :: fft_tune_batchsize
+     LOGICAL :: fft_prescribe_batchsize = .FALSE.
   END TYPE cntl_t
   TYPE(cntl_t), SAVE, PUBLIC :: cntl
   ! ==================================================================
@@ -697,6 +698,8 @@ MODULE system
      INTEGER :: blocksize_uspp = HUGE(0)
      INTEGER :: elpa_num_proc = HUGE(0)
      INTEGER :: fft_tune_it_per_batch = HUGE(0)
+     INTEGER :: fft_prescribed_batchsize = HUGE(0)
+     INTEGER :: C2_strat = HUGE(0)
   END TYPE cnti_t
   TYPE(cnti_t), SAVE, PUBLIC :: cnti
   ! ==================================================================

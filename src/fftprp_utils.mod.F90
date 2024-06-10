@@ -477,6 +477,7 @@ CONTAINS
        fft_batchsize=MIN( fft_batchsize, nstate/4 )
        fft_batchsize=MIN( fft_batchsize, 60 )
        IF( parai%nnode .eq. 1 ) fft_batchsize=MIN( fft_batchsize, 10 )
+       IF( cntl%fft_prescribe_batchsize ) fft_batchsize = cnti%fft_prescribed_batchsize
        IF(fft_batchsize.LE.0) fft_batchsize=1
        fft_residual=MOD(fft_total,fft_batchsize)
        fft_numbatches=(fft_total-fft_residual)/fft_batchsize

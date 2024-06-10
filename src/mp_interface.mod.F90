@@ -75,6 +75,7 @@ MODULE mp_interface
   PUBLIC :: mp_win_unlock_all_shared
   PUBLIC :: mp_startall
   PUBLIC :: mp_waitall
+  PUBLIC :: mp_testall
   PUBLIC :: mp_send_init_COMPLEX
   PUBLIC :: mp_recv_init_COMPLEX
   !
@@ -1379,6 +1380,24 @@ CONTAINS
     CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
 
   END SUBROUTINE mp_waitall
+
+  SUBROUTINE mp_testall( howmany, handles )
+    IMPLICIT NONE
+    ! ==--------------------------------------------------------------==
+    ! == Wrapper for MPI_STARTALL                                     ==
+    ! ==--------------------------------------------------------------==
+    ! Author: Christian Ritterhoff, FAU Erlangen Nuernberg, Sep 2023
+    INTEGER, INTENT(IN)                    :: howmany
+    TYPE( MPI_REQUEST ), INTENT(INOUT)     :: handles(:)
+    CHARACTER(*),PARAMETER::procedureN='mp_testall'
+    
+    LOGICAL :: flag
+    INTEGER :: ierr
+
+    CALL MPI_TESTALL( howmany, handles, flag, MPI_STATUSES_IGNORE, ierr )
+    CALL mp_mpi_error_assert(ierr,procedureN,__LINE__,__FILE__)
+
+  END SUBROUTINE mp_testall
 
   SUBROUTINE mp_win_alloc_shared_mem_central( type, baseptr, window_number, winsize, me, task_count, comm, mpi_window )
     IMPLICIT NONE

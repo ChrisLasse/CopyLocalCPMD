@@ -110,6 +110,8 @@ MODULE fft
      INTEGER, ALLOCATABLE :: nsp(:)
      INTEGER, ALLOCATABLE :: iss(:)
      INTEGER, ALLOCATABLE :: ismap(:)
+     INTEGER, ALLOCATABLE :: cp_ngws(:)
+     INTEGER, ALLOCATABLE :: cp_nstates(:)
 
      INTEGER, ALLOCATABLE :: thread_z_sticks(:,:,:,:)
      INTEGER, ALLOCATABLE :: thread_prepare_sticks(:,:)
@@ -126,6 +128,9 @@ MODULE fft
      INTEGER, ALLOCATABLE :: thread_ngms(:)
      INTEGER, ALLOCATABLE :: thread_ngms_start(:)
      INTEGER, ALLOCATABLE :: thread_ngms_end(:)
+     INTEGER, ALLOCATABLE :: cg_thread_ngms(:,:)
+     INTEGER, ALLOCATABLE :: cg_thread_ngms_start(:,:)
+     INTEGER, ALLOCATABLE :: cg_thread_ngms_end(:,:)
      INTEGER, ALLOCATABLE :: thread_rspace(:)
      INTEGER, ALLOCATABLE :: thread_rspace_start(:)
      INTEGER, ALLOCATABLE :: thread_rspace_end(:)
@@ -153,6 +158,8 @@ MODULE fft
      INTEGER :: ngw
      INTEGER :: nwst
      INTEGER :: npst
+     INTEGER :: max_ngw
+     INTEGER :: max_nstates
 
      INTEGER :: which ! 1 -> wave sticks ; 2 -> pot sticks
      INTEGER :: which_wave ! 1 -> rho ; -> 2 -> vpsi
@@ -164,6 +171,7 @@ MODULE fft
      LOGICAL :: do_comm( 2 )
      INTEGER :: comm_sendrecv(2,2)
      INTEGER, ALLOCATABLE :: c2_com_num(:,:)
+     INTEGER, ALLOCATABLE :: c2_com_recv(:,:)
 
      LOGICAL :: timing = .false.
      LOGICAL :: timing_specific = .false.

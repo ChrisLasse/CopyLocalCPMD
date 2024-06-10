@@ -37,7 +37,8 @@ MODULE fftnew_utils
                                              parap,&
                                              parm,&
                                              spar,&
-                                             cntl
+                                             cntl,&
+                                             cnti
   USE utils,                           ONLY: icopy
   USE zeroing_utils,                   ONLY: zeroing
 
@@ -845,6 +846,29 @@ CONTAINS
   
     ENDDO
 
+    IF( tfft%which .eq. 1 ) THEN
+    
+       DO j = 1, parai%nproc
+     
+          DO i = 1+overlap_cor, parai%ncpus_FFT
+             tfft%thread_z_sticks( i, 1, j, 3 ) = ( nss( j ) ) / eff_nthreads
+          ENDDO
+          DO i = 1+overlap_cor, mod( nss( j ), eff_nthreads ) + overlap_cor
+             tfft%thread_z_sticks( i, 1, j, 3 ) = tfft%thread_z_sticks( i, 1, j, 3 ) + 1
+          ENDDO
+         
+          tfft%thread_z_start( 1+overlap_cor, 1, j, 3 ) = 1
+          DO i = 2+overlap_cor, parai%ncpus_FFT
+             tfft%thread_z_start( i, 1, j, 3 ) = tfft%thread_z_start( i-1, 1, j, 3 ) + tfft%thread_z_sticks( i-1, 1, j, 3 )
+          ENDDO
+          DO i = 1+overlap_cor, parai%ncpus_FFT
+             tfft%thread_z_end( i, 1, j, 3 ) = tfft%thread_z_start( i, 1, j, 3 ) + tfft%thread_z_sticks( i, 1, j, 3 ) - 1
+          ENDDO
+   
+       ENDDO
+
+    END IF
+
     IF( mod( nstate, 2 ) .ne. 0 ) THEN
 
        IF( rem_size .eq. 0 ) THEN
@@ -953,7 +977,26 @@ CONTAINS
           tfft%thread_y_end( i, 2, which ) = tfft%thread_y_start( i, 2, which ) + tfft%thread_y_sticks( i, 2, which ) - 1
        ENDDO
     END IF
-  
+
+    IF( tfft%which .eq. 1 ) THEN
+
+       DO i = 1+overlap_cor, parai%ncpus_FFT
+          tfft%thread_y_sticks( i, 1, 3 ) = ( nr1s * tfft%my_nr3p ) / eff_nthreads
+       ENDDO
+       DO i = 1+overlap_cor, mod( nr1s * tfft%my_nr3p, eff_nthreads ) + overlap_cor
+          tfft%thread_y_sticks( i, 1, 3 ) = tfft%thread_y_sticks( i, 1, 3 ) + 1
+       ENDDO
+     
+       tfft%thread_y_start( 1+overlap_cor, 1, 3 ) = 1
+       DO i = 2+overlap_cor, parai%ncpus_FFT
+          tfft%thread_y_start( i, 1, 3 ) = tfft%thread_y_start( i-1, 1, 3 ) + tfft%thread_y_sticks( i-1, 1, 3 )
+       ENDDO
+       DO i = 1+overlap_cor, parai%ncpus_FFT
+          tfft%thread_y_end( i, 1, 3 ) = tfft%thread_y_start( i, 1, 3 ) + tfft%thread_y_sticks( i, 1, 3 ) - 1
+       ENDDO
+ 
+    END IF
+ 
   ! x things
     
     DO i = 1+overlap_cor, parai%ncpus_FFT
@@ -987,25 +1030,69 @@ CONTAINS
           tfft%thread_x_end( i, 2, which ) = tfft%thread_x_start( i, 2, which ) + tfft%thread_x_sticks( i, 2, which ) - 1
        ENDDO
     END IF
+
+    IF( tfft%which .eq. 1 ) THEN
+
+       DO i = 1+overlap_cor, parai%ncpus_FFT
+          tfft%thread_x_sticks( i, 1, 3 ) = ( tfft%my_nr3p * tfft%nr2 ) / eff_nthreads
+       ENDDO
+       DO i = 1+overlap_cor, mod( tfft%my_nr3p * tfft%nr2, eff_nthreads ) + overlap_cor
+          tfft%thread_x_sticks( i, 1, 3 ) = tfft%thread_x_sticks( i, 1, 3 ) + 1
+       ENDDO
+     
+       tfft%thread_x_start( 1+overlap_cor, 1, 3 ) = 1
+       DO i = 2+overlap_cor, parai%ncpus_FFT
+          tfft%thread_x_start( i, 1, 3 ) = tfft%thread_x_start( i-1, 1, 3 ) + tfft%thread_x_sticks( i-1, 1, 3 )
+       ENDDO
+       DO i = 1+overlap_cor, parai%ncpus_FFT
+          tfft%thread_x_end( i, 1, 3 ) = tfft%thread_x_start( i, 1, 3 ) + tfft%thread_x_sticks( i, 1, 3 ) - 1
+       ENDDO
+
+    END IF
  
     IF( tfft%which .eq. 1 ) THEN
  
      ! gspace things
+
+       IF( parai%cp_nogrp .eq. 1 .or. cnti%c2_strat .ne. 3 ) THEN
      
-       DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_ngms( i ) = ( ngs ) / eff_nthreads
-       ENDDO
-       DO i = 1+overlap_cor, mod( ngs, eff_nthreads ) + overlap_cor
-          tfft%thread_ngms( i ) = tfft%thread_ngms( i ) + 1
-       ENDDO
+          DO i = 1+overlap_cor, parai%ncpus_FFT
+             tfft%thread_ngms( i ) = ( ngs ) / eff_nthreads
+          ENDDO
+          DO i = 1+overlap_cor, mod( ngs, eff_nthreads ) + overlap_cor
+             tfft%thread_ngms( i ) = tfft%thread_ngms( i ) + 1
+          ENDDO
+        
+          tfft%thread_ngms_start( 1+overlap_cor ) = 1
+          DO i = 2+overlap_cor, parai%ncpus_FFT
+             tfft%thread_ngms_start( i ) = tfft%thread_ngms_start( i-1 ) + tfft%thread_ngms( i-1 )
+          ENDDO
+          DO i = 1+overlap_cor, parai%ncpus_FFT
+             tfft%thread_ngms_end( i ) = tfft%thread_ngms_start( i ) + tfft%thread_ngms( i ) - 1
+          ENDDO
+
+       ELSE
      
-       tfft%thread_ngms_start( 1+overlap_cor ) = 1
-       DO i = 2+overlap_cor, parai%ncpus_FFT
-          tfft%thread_ngms_start( i ) = tfft%thread_ngms_start( i-1 ) + tfft%thread_ngms( i-1 )
-       ENDDO
-       DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_ngms_end( i ) = tfft%thread_ngms_start( i ) + tfft%thread_ngms( i ) - 1
-       ENDDO
+!          DO j = 1, parai%cp_nogrp
+!
+!             DO i = 1+overlap_cor, parai%ncpus_FFT
+!                tfft%cg_thread_ngms( i, j ) = ( cp_ngws(j) ) / eff_nthreads
+!             ENDDO
+!             DO i = 1+overlap_cor, mod( cp_ngws(j), eff_nthreads ) + overlap_cor
+!                tfft%cg_thread_ngms( i, j ) = tfft%cg_thread_ngms( i, j ) + 1
+!             ENDDO
+!           
+!             tfft%thread_ngms_start( 1+overlap_cor, j ) = 1
+!             DO i = 2+overlap_cor, parai%ncpus_FFT
+!                tfft%thread_ngms_start( i ) = tfft%thread_ngms_start( i-1 ) + tfft%thread_ngms( i-1 )
+!             ENDDO
+!             DO i = 1+overlap_cor, parai%ncpus_FFT
+!                tfft%thread_ngms_end( i ) = tfft%thread_ngms_start( i ) + tfft%thread_ngms( i ) - 1
+!             ENDDO
+!
+!          ENDDO
+
+       END IF
      
      ! rspace things
        
