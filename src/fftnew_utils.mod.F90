@@ -1096,11 +1096,23 @@ CONTAINS
      
      ! rspace things
        
+!       DO i = 1+overlap_cor, parai%ncpus_FFT
+!          tfft%thread_rspace( i ) = ( tfft%my_nr3p * tfft%nr2 * tfft%nr1 ) / eff_nthreads
+!       ENDDO
+!       DO i = 1+overlap_cor, mod( tfft%my_nr3p * tfft%nr2 * tfft%nr1, eff_nthreads ) + overlap_cor
+!          tfft%thread_rspace( i ) = tfft%thread_rspace( i ) + 1
+!       ENDDO
+!     
+!       tfft%thread_rspace_start( 1+overlap_cor ) = 1
+!       DO i = 2+overlap_cor, parai%ncpus_FFT
+!          tfft%thread_rspace_start( i ) = tfft%thread_rspace_start( i-1 ) + tfft%thread_rspace( i-1 )
+!       ENDDO
+!       DO i = 1+overlap_cor, parai%ncpus_FFT
+!          tfft%thread_rspace_end( i ) = tfft%thread_rspace_start( i ) + tfft%thread_rspace( i ) - 1
+!       ENDDO
+
        DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_rspace( i ) = ( tfft%my_nr3p * tfft%nr2 * tfft%nr1 ) / eff_nthreads
-       ENDDO
-       DO i = 1+overlap_cor, mod( tfft%my_nr3p * tfft%nr2 * tfft%nr1, eff_nthreads ) + overlap_cor
-          tfft%thread_rspace( i ) = tfft%thread_rspace( i ) + 1
+          tfft%thread_rspace( i ) =  tfft%thread_x_sticks( i, 1, 3 ) * tfft%nr1
        ENDDO
      
        tfft%thread_rspace_start( 1+overlap_cor ) = 1
@@ -1110,6 +1122,8 @@ CONTAINS
        DO i = 1+overlap_cor, parai%ncpus_FFT
           tfft%thread_rspace_end( i ) = tfft%thread_rspace_start( i ) + tfft%thread_rspace( i ) - 1
        ENDDO
+
+
 
     END IF
     

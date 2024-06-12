@@ -2289,11 +2289,12 @@ CONTAINS
 
     tfft%time_adding=0
     CALL SYSTEM_CLOCK( count_rate = cr )
-    IF(.NOT.rsactive) rs_wave=>rs_array(:,1:1)
+!    IF(.NOT.rsactive) rs_wave(:,1:fft_batchsize)=>rs_array(:,1:fft_batchsize)
+    IF(.NOT.rsactive) rs_wave=>rs_array
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
     CALL SYSTEM_CLOCK( time(1) )
     !$OMP parallel num_threads( parai%ncpus_FFT ) &
-    !$omp private(mythread,ibatch,bsize,count,ist,is1,is2,ir,offset_state,swap,remswitch,counter,remove) &
+    !$omp private(mythread,ibatch,bsize,r_bsize,ispec,count,ist,is1,is2,ir,offset_state,swap,remswitch,counter,remove) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
 
@@ -2365,32 +2366,41 @@ CONTAINS
              !$omp flush( locks_sing_1 )
              !$  END DO
           END IF
-          IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus_FFT .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
-             !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
-             !data related to ibatch-1!
-!             IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
-             IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
-                IF (ibatch-start_loop1.LE.fft_numbatches)THEN
-                   bsize=fft_batchsize
-                   remswitch = 1
-                ELSE
-                   bsize=fft_residual
-                   remswitch = 2
-                END IF
-                IF(bsize.NE.0)THEN
-                   swap=mod(ibatch-start_loop1,fft_buffsize)+1
-                   counter(3) = counter(3) + 1
-                   CALL invfft_batch( tfft, 3, bsize, 1, remswitch, mythread, counter(3), swap, &
-                                      f_inout1=rs_wave(:,1:1), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
-                   CALL invfft_batch( tfft, 4, bsize, 1, remswitch, mythread, counter(3), swap, f_inout1=rs_wave(:,1:1) )
-                END IF
-             END IF
-          END IF
        END IF
-       ! ==------------------------------------------------------------==
-       ! == Apply the potential (V), which acts in real space.         ==
 
        DO ispec = 1, fft_batchsize
+
+          IF(.NOT.rsactive)THEN
+
+             IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus_FFT .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
+                !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
+                !data related to ibatch-1!
+!                IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
+                IF(ibatch.GT.start_loop1.AND.ibatch.LE.end_loop1)THEN
+                   IF(ibatch-start_loop1.LE.fft_numbatches)THEN
+                      bsize=1 !fft_batchsize
+                      r_bsize = fft_batchsize
+                      remswitch = 1
+                   ELSE
+                      IF( ispec .gt. fft_residual ) EXIT
+                      bsize=1 !fft_residual
+                      r_bsize = fft_residual
+                      remswitch = 2
+                   END IF
+                   IF(r_bsize.NE.0)THEN
+                      swap=mod(ibatch-start_loop1,fft_buffsize)+1
+                      IF( ispec .eq. 1 ) counter(3) = counter(3) + 1
+                      CALL invfft_batch( tfft, 3, r_bsize, ispec, remswitch, mythread, counter(3), swap, &
+                                         f_inout1=rs_wave(:,ispec:ispec), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
+                      CALL invfft_batch( tfft, 4, r_bsize, ispec, remswitch, mythread, counter(3), swap, f_inout1=rs_wave(:,ispec:ispec) )
+                   END IF
+                END IF
+             END IF
+
+          END IF
+
+       ! ==------------------------------------------------------------==
+       ! == Apply the potential (V), which acts in real space.         ==
 
           IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus_FFT .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
 !             IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
@@ -2405,7 +2415,7 @@ CONTAINS
                    r_bsize = fft_residual
                    remswitch = 2
                 END IF
-                IF(bsize.NE.0)THEN
+                IF(r_bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop1,fft_buffsize)+1
 !                   start  = ispec+(ibatch-1)*fft_batchsize
                    start  = 1+(ibatch-1)*fft_batchsize

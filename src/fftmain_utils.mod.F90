@@ -1058,6 +1058,7 @@ CONTAINS
 
           CALL invfft_x_section( tfft, f_inout1, remswitch, mythread )
 
+          !Wouldnt all threads need to be finished before this lock can be lifted?
           IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
              IF( tfft%which_wave .eq. 1 ) THEN
                 !$  locks_calc_1( parai%node_me+1, 1+current+(fft_batchsize*fft_buffsize): &
@@ -1076,7 +1077,6 @@ CONTAINS
           !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 6 ) ) )
           !$omp flush( locks_omp_big )
           !$  END DO
-!$OMP BARRIER
 
           IF( parai%ncpus_FFT .eq. 1 .or. ( mythread .eq. 1 .and. cntl%overlapp_comm_comp ) .or. ( mythread .eq. 0 .and. .not. cntl%overlapp_comm_comp ) ) CALL SYSTEM_CLOCK( time(11) )
           IF( parai%ncpus_FFT .eq. 1 .or. ( mythread .eq. 1 .and. cntl%overlapp_comm_comp ) .or. ( mythread .eq. 0 .and. .not. cntl%overlapp_comm_comp ) ) tfft%time_adding( 22 ) = tfft%time_adding( 22 ) + ( time(11) - time(10) )

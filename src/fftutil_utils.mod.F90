@@ -1246,7 +1246,7 @@ CONTAINS
   !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
-    IF( remswitch .eq. 1 ) THEN 
+    IF( remswitch .eq. 1 .or. .TRUE. ) THEN 
        Call First_Part_y_section( aux2_r, map_acinv )
     ELSE
        Call First_Part_y_section( aux2_r, map_acinv_rem )
@@ -1257,7 +1257,6 @@ CONTAINS
     !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 5 ) ) )
     !$omp flush( locks_omp_big )
     !$  END DO
-!$OMP BARRIER
   
     Call Second_Part_y_section( aux2_r )
   
@@ -1282,7 +1281,7 @@ CONTAINS
         
           !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
 
-IF( tfft%which .eq. 2 .or. tfft%which_wave .eq. 2 ) THEN
+IF( tfft%which .eq. 2 ) THEN
           
           DO i = tfft%thread_y_start( mythread+1, remswitch, tfft%which ), tfft%thread_y_end( mythread+1, remswitch, tfft%which )
              iter = mod( i-1, my_nr1s ) + 1
@@ -1304,13 +1303,13 @@ ELSE
              iter = mod( i-1, my_nr1s ) + 1
              offset = ( mod( i-1, my_nr1s * tfft%my_nr3p ) + ( (i-1) / ( my_nr1s * tfft%my_nr3p ) ) * tfft%my_nr3p * my_nr1s ) * tfft%nr2
              DO k = 1, tfft%zero_acinv_start( iter, tfft%which ) - 1
-                aux2( k, i ) = comm_mem_recv( map( offset + k ) )
+                aux2( k, i ) = comm_mem_recv( map( offset + k )  + (ispec-1)*tfft%big_chunks( tfft%which ) )
              END DO
              DO k = tfft%zero_acinv_start( iter, tfft%which ), tfft%zero_acinv_end( iter, tfft%which )
                 aux2( k, i ) = (0.0_DP,0.0_DP)
              END DO
              DO k = tfft%zero_acinv_end( iter, tfft%which ) + 1, tfft%nr2
-                aux2( k, i ) = comm_mem_recv( map( offset + k ) )
+                aux2( k, i ) = comm_mem_recv( map( offset + k ) + (ispec-1)*tfft%big_chunks( tfft%which ) )
              END DO
           END DO
 
@@ -1324,7 +1323,7 @@ END IF
         !------------------------------------------------------
         !------------y-FFT Start-------------------------------
   
-IF( tfft%which .eq. 2 .or. tfft%which_wave .eq. 2 ) THEN
+IF( tfft%which .eq. 2 ) THEN
 
           CALL mltfft_fftw_t('n','n',aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
                            tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
@@ -1360,7 +1359,7 @@ END IF
         !------------------------------------------------------
         !-------------yx-scatter-------------------------------
         
-IF( tfft%which .eq. 2 .or. tfft%which_wave .eq. 2 ) THEN
+IF( tfft%which .eq. 2 ) THEN
 
           DO i = tfft%thread_x_start( mythread+1, remswitch, tfft%which ), tfft%thread_x_end( mythread+1, remswitch, tfft%which )
              offset = mod( i-1, tfft%my_nr3p * tfft%nr2 ) * tfft%nr1
@@ -1425,7 +1424,7 @@ END IF
   !------------------------------------------------------
   !------------x-FFT Start-------------------------------
 
-IF( tfft%which .eq. 2 .or. tfft%which_wave .eq. 2 ) THEN
+IF( tfft%which .eq. 2 ) THEN
   
     CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
                      tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
@@ -1435,9 +1434,9 @@ IF( tfft%which .eq. 2 .or. tfft%which_wave .eq. 2 ) THEN
 
 ELSE
 
-    CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, 1, 3 ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
+    CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, 1, 3 ) : tfft%thread_x_end( mythread+1, 1, 3 ) ), &
                      tfft%nr1, tfft%thread_x_sticks(mythread+1,1, 3), &
-                     aux( : , tfft%thread_x_start( mythread+1, 1, 3 ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
+                     aux( : , tfft%thread_x_start( mythread+1, 1, 3 ) : tfft%thread_x_end( mythread+1, 1, 3 ) ), &
                      tfft%nr1, tfft%thread_x_sticks(mythread+1,1, 3), &
                      tfft%nr1, tfft%thread_x_sticks(mythread+1,1, 3),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
 
@@ -1483,7 +1482,6 @@ END IF
     !$omp flush( locks_omp_big )
     !$  END DO
    
-!!$OMP Barrier 
     Call Second_Part_x_section( aux_r )
   
   !  IF( cntl%fft_tune_batchsize ) THEN

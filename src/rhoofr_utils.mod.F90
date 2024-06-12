@@ -80,7 +80,8 @@ MODULE rhoofr_utils
                                              invfft_batch
   USE fftnew_utils,                    ONLY: setfftn
   USE fftutil_utils,                   ONLY: locks_omp,&
-                                             Prepare_Psi
+                                             Prepare_Psi,&
+                                             locks_omp_big
   USE geq0mod,                         ONLY: geq0
   USE ions,                            ONLY: ions0,&
                                              ions1
@@ -1456,6 +1457,8 @@ CONTAINS
     locks_sing_1   = .true.
     locks_omp   = .true.
     IF( cntl%overlapp_comm_comp .and. tfft%do_comm(1) ) locks_omp( 1, :, : ) = .false.
+    locks_omp_big   = .true.
+    IF( cntl%overlapp_comm_comp .and. tfft%do_comm(1) ) locks_omp_big( 1, :, :, : ) = .false.
 
 !    write(6,*) fft_batchsize, fft_residual
 
@@ -1512,7 +1515,7 @@ END IF
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
 
     !$OMP parallel num_threads( parai%ncpus_FFT ) &
-    !$omp private(mythread,ibatch,bsize,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending,last_single) &
+    !$omp private(mythread,ibatch,bsize,r_bsize,ispec,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending,last_single) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
 
@@ -1523,6 +1526,7 @@ END IF
 
     !Loop over batches
     DO ibatch=1,fft_numbatches+2
+!$OMP BARRIER
        IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus_FFT .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           IF(ibatch.LE.fft_numbatches+1)THEN
@@ -1602,7 +1606,7 @@ END IF
                    r_bsize = fft_residual
                    remswitch = 2
                 END IF
-                IF(bsize.NE.0)THEN
+                IF(r_bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop,fft_buffsize)+1
                    IF( ispec .eq. 1 ) counter(3) = counter(3) + 1
                    start = (ispec+((counter(3)-1)*fft_batchsize))
@@ -1611,13 +1615,12 @@ END IF
                    CALL invfft_batch( tfft, 3, r_bsize, ispec, remswitch, mythread, counter(3), swap, &
                                       f_inout1=psi_work( : , start : start ), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
                    CALL invfft_batch( tfft, 4, r_bsize, ispec, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : start ) )
-
                    ! Compute the charge density from the wave functions
                    ! in real space
                    ! Decode fft batch, setup (lsd) spin settings                     
                    offset_state=i_start2
                    ispin=1
-                   DO count=1,r_bsize
+                   DO count=1,bsize
                       is1=offset_state+1
                       is2=offset_state+2
                       offset_state=offset_state+2
@@ -1636,36 +1639,7 @@ END IF
                          coef4(count)=crge%f(is2,1)*inv_omega
                       END IF
                    END DO
-                   CALL build_density_sum_Man( tfft, coef3(ispec), coef4(ispec), psi_work( : , start : start ), rhoe, bsize, mythread, ispin(:,ispec), clsd%nlsd )
-
-!                   !some extra loop in case of lse
-!                   IF (lspin2%tlse) THEN
-!                      ispin=1
-!                      !search for clsd%ialpha/ibeta
-!                      coef3=0.0_real_8
-!                      coef4=0.0_real_8
-!                      offset_state=i_start2
-!                      DO count=1,bsize
-!                         is1=offset_state+1
-!                         is2=offset_state+2
-!                         offset_state=offset_state+2
-!                         IF (is1.EQ.clsd%ialpha.OR.is1.EQ.clsd%ibeta) THEN
-!                            coef3(count)=crge%f(is1,1)/parm%omega
-!                         END IF
-!                         IF (is2.EQ.clsd%ialpha.OR.is2.EQ.clsd%ibeta)THEN
-!                            coef4(count)=crge%f(is2,1)/parm%omega
-!                         END IF
-!                         IF (is1.EQ.clsd%ialpha) ispin(1,count)=2
-!                         IF (is1.EQ.clsd%ibeta)  ispin(1,count)=3
-!                         IF (is2.EQ.clsd%ialpha) ispin(2,count)=2
-!                         IF (is2.EQ.clsd%ibeta)  ispin(2,count)=3
-!                      END DO
-!                      !
-!                      IF (SUM(coef3).GT.0.0_real_8.OR.SUM(coef4).GT.0.0_real_8) THEN
-!                         CALL build_density_sum_batch(coef3,coef4,wfn_r1,rhoe_p,&
-!                              fpar%kr1*fpar%kr2s,bsize,fpar%kr3s,ispin,clsd%nlsd)
-!                      END IF
-!                   END IF
+                   CALL build_density_sum_Man( tfft, coef3(1), coef4(1), psi_work( : , start : start ), rhoe, bsize, mythread, ispin(:,1), clsd%nlsd )
                    i_start2=i_start2+bsize*2
                 END IF
              END IF
