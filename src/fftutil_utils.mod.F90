@@ -1246,7 +1246,7 @@ CONTAINS
   !     IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) CALL tiset(procedureN,isub)
   !  END IF
   
-    IF( remswitch .eq. 1 .or. .TRUE. ) THEN 
+    IF( remswitch .eq. 1 ) THEN !.or. .TRUE. ) THEN 
        Call First_Part_y_section( aux2_r, map_acinv )
     ELSE
        Call First_Part_y_section( aux2_r, map_acinv_rem )

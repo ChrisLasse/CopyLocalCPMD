@@ -1016,7 +1016,7 @@ CONTAINS
 
           !$  IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
           !$     locks_calc_inv( parai%node_me+1, counter ) = .false.
-          !$omp flush( locks_calc_fw )
+          !$omp flush( locks_calc_inv )
           !$  END IF
   
        ELSE IF( step .eq. 2 ) THEN

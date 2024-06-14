@@ -1526,7 +1526,6 @@ END IF
 
     !Loop over batches
     DO ibatch=1,fft_numbatches+2
-!$OMP BARRIER
        IF ( mythread .ge. 1 .or. .not. cntl%overlapp_comm_comp .or. parai%ncpus_FFT .eq. 1 .or. .not. tfft%do_comm(1) ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           IF(ibatch.LE.fft_numbatches+1)THEN

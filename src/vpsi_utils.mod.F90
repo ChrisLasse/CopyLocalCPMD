@@ -2391,8 +2391,8 @@ CONTAINS
                       swap=mod(ibatch-start_loop1,fft_buffsize)+1
                       IF( ispec .eq. 1 ) counter(3) = counter(3) + 1
                       CALL invfft_batch( tfft, 3, r_bsize, ispec, remswitch, mythread, counter(3), swap, &
-                                         f_inout1=rs_wave(:,ispec:ispec), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
-                      CALL invfft_batch( tfft, 4, r_bsize, ispec, remswitch, mythread, counter(3), swap, f_inout1=rs_wave(:,ispec:ispec) )
+                                         f_inout1=rs_wave(:,1:1), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
+                      CALL invfft_batch( tfft, 4, r_bsize, ispec, remswitch, mythread, counter(3), swap, f_inout1=rs_wave(:,1:1) )
                    END IF
                 END IF
              END IF
@@ -2417,10 +2417,10 @@ CONTAINS
                 END IF
                 IF(r_bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop1,fft_buffsize)+1
-!                   start  = ispec+(ibatch-1)*fft_batchsize
-                   start  = 1+(ibatch-1)*fft_batchsize
-                   finish = bsize+(ibatch-1)*fft_batchsize
-                   IF(rsactive) rs_wave=>wfn_r(:,start:finish)
+                   start  = ispec+(ibatch-1)*fft_batchsize
+!                   start  = 1+(ibatch-1)*fft_batchsize
+!                   finish = bsize+(ibatch-1)*fft_batchsize
+                   IF(rsactive) rs_wave=>wfn_r(:,start:start)
                    
                    lspin=1
                    offset_state=i_start2
@@ -2439,7 +2439,7 @@ CONTAINS
                       END IF
                       !njump states per single fft
                    END DO
-                   CALL Apply_V( rs_wave(:,ispec), vpot, lspin(:,ispec), bsize, mythread )
+                   CALL Apply_V( rs_wave(:,1), vpot, lspin(:,ispec), bsize, mythread )
 !                   IF (td_prop%td_extpot.AND.cntl%tlsd.AND.ispin.EQ.2) THEN
 !                      offset_state=i_start2
 !                      DO count=1,bsize
@@ -2462,19 +2462,22 @@ CONTAINS
                 ! == Back transform to reciprocal space the product V.PSI       ==
                 ! ==------------------------------------------------------------==
                     IF( ispec .eq. 1 ) counter(4) = counter(4) + 1
-                    CALL fwfft_batch( tfft, 1, r_bsize, ispec, remswitch, mythread, counter(4), swap, f_inout1=rs_wave(:,ispec:ispec), f_inout2=aux_array( : , 1 : 1 ) )
+                    CALL fwfft_batch( tfft, 1, r_bsize, ispec, remswitch, mythread, counter(4), swap, f_inout1=rs_wave(:,1:1), f_inout2=aux_array( : , 1 : 1 ) )
                     CALL fwfft_batch( tfft, 2, r_bsize, ispec, remswitch, mythread, counter(4), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv )
                     i_start2=i_start2+bsize*njump
+
+                    IF( ispec .eq. r_bsize ) THEN
+                       !$  IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
+                       !$     locks_calc_fw( parai%node_me+1, counter(4) ) = .false.
+                       !$omp flush( locks_calc_fw )
+                       !$  END IF
+                    END IF
+
                 END IF
              END IF
           END IF
 
        ENDDO
-
-       !$  IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
-       !$     locks_calc_fw( parai%node_me+1, counter(4) ) = .false.
-       !$omp flush( locks_calc_fw )
-       !$  END IF
 
        IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. tfft%do_comm(1) ) THEN !.and. parai%node_me .eq. 0 ) THEN
 !       IF(ibatch.GE.2.AND.ibatch.LE.fft_numbatches+2)THEN
