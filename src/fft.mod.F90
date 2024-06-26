@@ -92,6 +92,8 @@ MODULE fft
   TYPE FFT_TYPE_DESCRIPTOR
 
      INTEGER, ALLOCATABLE :: time_adding(:)
+     INTEGER, ALLOCATABLE :: time_adding_extra(:,:)
+     INTEGER, ALLOCATABLE :: time_adding_extra2(:,:,:)
 
      INTEGER, ALLOCATABLE :: stownW(:,:)
      INTEGER, ALLOCATABLE :: stownP(:,:)
@@ -160,6 +162,7 @@ MODULE fft
      INTEGER :: npst
      INTEGER :: max_ngw
      INTEGER :: max_nstates
+     INTEGER :: com_count
 
      INTEGER :: which ! 1 -> wave sticks ; 2 -> pot sticks
      INTEGER :: which_wave ! 1 -> rho ; -> 2 -> vpsi

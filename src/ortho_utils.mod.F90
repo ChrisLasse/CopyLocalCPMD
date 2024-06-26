@@ -20,7 +20,7 @@ MODULE ortho_utils
   USE error_handling,                  ONLY: stopgm
   USE geq0mod,                         ONLY: geq0
   USE gsortho_utils,                   ONLY: gs_ortho
-  USE gpu
+!  USE gpu
   USE jrotation_utils,                 ONLY: set_orbdist
   USE kinds,                           ONLY: real_8, &
                                              int_8

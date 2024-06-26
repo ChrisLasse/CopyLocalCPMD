@@ -649,7 +649,7 @@ CONTAINS
   
     INTEGER, ALLOCATABLE :: comm_info_send(:,:), comm_info_recv(:,:)
   
-    INTEGER :: i, j, k, l, m, n, p
+    INTEGER :: i, j, k, l, m, n, p, jter
     INTEGER :: ierr, eff_nodes, rem, origin_node, target_node
     INTEGER :: save_node, send_node, send_node_task, recv_node, recv_node_task
     INTEGER :: howmany_sending( max_node_task_size, nodes_numb ) , howmany_receiving( max_node_task_size, nodes_numb )
@@ -736,11 +736,11 @@ CONTAINS
 !       END IF
 !    END IF
     
-    IF( ALLOCATED( parai%send_handle ) .and. WAVE .eq. 1 )       DEALLOCATE( parai%send_handle )
-    IF( ALLOCATED( parai%recv_handle ) .and. WAVE .eq. 1 )       DEALLOCATE( parai%recv_handle )
+    IF( ALLOCATED( parai%sendrecv_handle ) .and. WAVE .eq. 1 )       DEALLOCATE( parai%sendrecv_handle )
+!    IF( ALLOCATED( parai%recv_handle ) .and. WAVE .eq. 1 )       DEALLOCATE( parai%recv_handle )
    
-    IF( .not. ALLOCATED(parai%send_handle) ) ALLOCATE( parai%send_handle( comm_sendrecv(1), buffer_size, 2, 2 ) )
-    IF( .not. ALLOCATED(parai%recv_handle) ) ALLOCATE( parai%recv_handle( comm_sendrecv(2), buffer_size, 2, 2 ) )
+    IF( .not. ALLOCATED(parai%sendrecv_handle) ) ALLOCATE( parai%sendrecv_handle( comm_sendrecv(1)+comm_sendrecv(2), buffer_size, 2, 2 ) )
+!    IF( .not. ALLOCATED(parai%recv_handle) ) ALLOCATE( parai%recv_handle( comm_sendrecv(2), buffer_size, 2, 2 ) )
     
     DO i = 1, buffer_size !INITIALIZE SENDING AND RECEIVING
   
@@ -748,15 +748,19 @@ CONTAINS
   
           target_node = parai%cp_overview(4,comm_info_send(j,mype+1))
   
-          CALL mp_send_init_complex( comm_send(:,i), target_node*sendsize, sendsize, comm_info_send( j , mype+1 ) - 1, mype, parai%allgrp, parai%send_handle( j , i, 1, WAVE ) )
+          CALL mp_send_init_complex( comm_send(:,i), target_node*sendsize, sendsize, comm_info_send( j , mype+1 ) - 1, mype, &
+                                     parai%allgrp, parai%sendrecv_handle( j , i, 1, WAVE ) )
   
        ENDDO        
   
        DO j = 1, comm_sendrecv( 2 )
+
+          jter = comm_sendrecv( 1 ) + j
   
           origin_node = parai%cp_overview(4,comm_info_recv(j,mype+1))
   
-          CALL mp_recv_init_complex( comm_recv(:,i), origin_node*sendsize, sendsize, comm_info_recv( j , mype+1 ) - 1, parai%allgrp, parai%recv_handle( j , i, 1, WAVE ) )
+          CALL mp_recv_init_complex( comm_recv(:,i), origin_node*sendsize, sendsize, comm_info_recv( j , mype+1 ) - 1, &
+                                     parai%allgrp, parai%sendrecv_handle( jter , i, 1, WAVE ) )
   
        ENDDO        
   
@@ -770,15 +774,19 @@ CONTAINS
   
              target_node = parai%cp_overview(4,comm_info_send(j,mype+1))
     
-             CALL mp_send_init_complex( comm_send(:,i), target_node*sendsize_rem, sendsize_rem, comm_info_send( j , mype+1 ) - 1, mype, parai%allgrp, parai%send_handle( j , i, 2, WAVE ) )
+             CALL mp_send_init_complex( comm_send(:,i), target_node*sendsize_rem, sendsize_rem, comm_info_send( j , mype+1 ) - 1, mype, &
+                                        parai%allgrp, parai%sendrecv_handle( j , i, 2, WAVE ) )
    
           ENDDO        
     
           DO j = 1, comm_sendrecv( 2 )
+
+             jter = comm_sendrecv( 1 ) + j
     
              origin_node = parai%cp_overview(4,comm_info_recv(j,mype+1))
     
-             CALL mp_recv_init_complex( comm_recv(:,i), origin_node*sendsize_rem, sendsize_rem, comm_info_recv( j , mype+1 ) - 1, parai%allgrp, parai%recv_handle( j , i, 2, WAVE ) )
+             CALL mp_recv_init_complex( comm_recv(:,i), origin_node*sendsize_rem, sendsize_rem, comm_info_recv( j , mype+1 ) - 1, &
+                                        parai%allgrp, parai%sendrecv_handle( jter , i, 2, WAVE ) )
    
           ENDDO        
     

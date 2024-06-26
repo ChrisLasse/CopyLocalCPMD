@@ -67,20 +67,20 @@ MODULE rhoofr_utils
                                              invfftn,&
                                              fwfftn_batch,&
                                              invfftn_batch,&
-                                             invfftn_batch_com,&
                                              comm_send,&
                                              comm_recv,&
                                              locks_calc_inv,&
                                              locks_calc_fw,&
                                              locks_com_inv,&
                                              locks_com_fw,&
-                                             locks_calc_1,&
-                                             locks_calc_2,&
+                                             locks_all_com,&
+                                             locks_all_com2,&
                                              locks_sing_1,&
                                              invfft_batch
   USE fftnew_utils,                    ONLY: setfftn
   USE fftutil_utils,                   ONLY: locks_omp,&
                                              Prepare_Psi,&
+                                             locks_calc_1,&
                                              locks_omp_big
   USE geq0mod,                         ONLY: geq0
   USE ions,                            ONLY: ions0,&
@@ -1461,6 +1461,9 @@ CONTAINS
     IF( cntl%overlapp_comm_comp .and. tfft%do_comm(1) ) locks_omp_big( 1, :, :, : ) = .false.
 
 !    write(6,*) fft_batchsize, fft_residual
+
+    locks_all_com = .TRUE.
+    locks_all_com2 = .TRUE.
 
     CALL MPI_BARRIER(parai%allgrp, ierr)
 

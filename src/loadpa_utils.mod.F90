@@ -492,6 +492,12 @@ CONTAINS
     ALLOCATE( tfft%time_adding( 100 ), STAT=ierr )
     IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
          __LINE__,__FILE__)
+    ALLOCATE( tfft%time_adding_extra( 100, 10000 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
+    ALLOCATE( tfft%time_adding_extra2( 100, 1000, 1000 ), STAT=ierr )
+    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+         __LINE__,__FILE__)
 
     ! ==--------------------------------------------------------------==
     ! LEADING DIMENSIONS OF REAL SPACE ARRAYS
