@@ -2250,6 +2250,9 @@ CONTAINS
 
     locks_all_com = .true.
     locks_all_com2 = .true.
+    CALL MPI_BARRIER(parai%allgrp, ierr)
+    IF( .not. tfft%do_comm(1) ) locks_all_com( parai%node_me+1, : ) = .false.
+    IF( .not. tfft%do_comm(1) ) locks_all_com2( parai%node_me+1, : ) = .false.
     tfft%com_count = 0
     IF( parai%me .eq. 0 ) WRITE(6,*) tfft%comm_sendrecv(1,1), tfft%comm_sendrecv(2,1)
 
@@ -2297,11 +2300,12 @@ CONTAINS
     END IF
 #endif
 
-    CALL MPI_BARRIER(parai%allgrp, ierr)
-
     tfft%time_adding=0
     tfft%time_adding_extra=0
     tfft%time_adding_extra2=0
+
+    CALL MPI_BARRIER(parai%allgrp, ierr)
+
     CALL SYSTEM_CLOCK( count_rate = cr )
 !    IF(.NOT.rsactive) rs_wave(:,1:fft_batchsize)=>rs_array(:,1:fft_batchsize)
     IF(.NOT.rsactive) rs_wave=>rs_array

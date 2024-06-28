@@ -1063,7 +1063,6 @@ CONTAINS
           !$omp flush( locks_all_com2 )
           !$  END DO
  
-          CALL MPI_BARRIER(parai%allgrp, ierr)
  
           IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(17) )
           IF( ( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) .and. remswitch .eq. 1 ) tfft%time_adding( 33 ) = tfft%time_adding( 33 ) + ( time(17) - time(21) )
@@ -1083,8 +1082,6 @@ CONTAINS
           !$  DO WHILE( ANY( locks_all_com( :, counter ) ) )
           !$omp flush( locks_all_com )
           !$  END DO
-
-          CALL MPI_BARRIER(parai%allgrp, ierr)
 
           IF( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) CALL SYSTEM_CLOCK( time(19) )
           IF( ( mythread .eq. 0 .or. parai%ncpus_FFT .eq. 1 ) .and. remswitch .eq. 1 ) tfft%time_adding( 31 ) = tfft%time_adding( 31 ) + ( time(19) - time(18) )
