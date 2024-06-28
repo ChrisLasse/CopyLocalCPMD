@@ -88,12 +88,8 @@ MODULE fft
   ! ==================================================================
   ! IMPROVED FFT CODE
   ! ==================================================================
-  INTEGER :: fft_buffsize
+  INTEGER :: fft_numbuff
   TYPE FFT_TYPE_DESCRIPTOR
-
-     INTEGER, ALLOCATABLE :: time_adding(:)
-     INTEGER, ALLOCATABLE :: time_adding_extra(:,:)
-     INTEGER, ALLOCATABLE :: time_adding_extra2(:,:,:)
 
      INTEGER, ALLOCATABLE :: stownW(:,:)
      INTEGER, ALLOCATABLE :: stownP(:,:)
@@ -175,9 +171,6 @@ MODULE fft
      INTEGER :: comm_sendrecv(2,2)
      INTEGER, ALLOCATABLE :: c2_com_num(:,:)
      INTEGER, ALLOCATABLE :: c2_com_recv(:,:)
-
-     LOGICAL :: timing = .false.
-     LOGICAL :: timing_specific = .false.
 
   END TYPE
   Type( FFT_TYPE_DESCRIPTOR ) :: tfft

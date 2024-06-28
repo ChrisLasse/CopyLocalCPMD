@@ -67,39 +67,30 @@ CONTAINS
     RETURN
   END SUBROUTINE build_density_sum
   ! ==================================================================
-  SUBROUTINE build_density_sum_Man( tfft, alpha_real, alpha_imag, psi, rho, batch_size, mythread, spins, nspin)
+  SUBROUTINE build_density_sum_Man( tfft, alpha_real, alpha_imag, psi, rho, mythread, spins, nspin)
     ! ==--------------------------------------------------------------==
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(IN)    :: tfft
     COMPLEX(real_8), INTENT(IN)              :: psi( tfft%my_nr3p * tfft%nr2 * tfft%nr1, * )
     REAL(real_8), INTENT(INOUT)              :: rho( tfft%my_nr3p * tfft%nr2 * tfft%nr1, * )
-    INTEGER, INTENT(IN)                      :: mythread, batch_size, nspin
-    REAL(real_8), INTENT(IN)                 :: alpha_real( batch_size ), alpha_imag( batch_size )
-    INTEGER, INTENT(IN)                      :: spins( 2, batch_size )
+    INTEGER, INTENT(IN)                      :: mythread, nspin
+    REAL(real_8), INTENT(IN)                 :: alpha_real, alpha_imag
+    INTEGER, INTENT(IN)                      :: spins( 2 )
 
     INTEGER                                  :: i, j
 
     IF( nspin .eq. 1 ) THEN
 
-!       DO i = 1, batch_size
           DO j = tfft%thread_rspace_start( mythread+1 ), tfft%thread_rspace_end( mythread+1 )
-             rho( j, 1 ) = rho( j, 1 ) + alpha_real( 1 ) *  REAL( psi( j, 1 ) )**2 &
-                                       + alpha_imag( 1 ) * AIMAG( psi( j, 1 ) )**2
+             rho( j, 1 ) = rho( j, 1 ) + alpha_real *  REAL( psi( j, 1 ) )**2 &
+                                       + alpha_imag * AIMAG( psi( j, 1 ) )**2
           ENDDO
-!       ENDDO
 
     ELSE
 
-!       DO i = 1, batch_size
           DO j = tfft%thread_rspace_start( mythread+1 ), tfft%thread_rspace_end( mythread+1 )
-             rho( j, spins( 1, 1 ) ) = rho( j, spins( 1, 1 ) ) + alpha_real( 1 ) *  REAL( psi( j, 1 ) )**2
-             rho( j, spins( 2, 1 ) ) = rho( j, spins( 2, 1 ) ) + alpha_imag( 1 ) * AIMAG( psi( j, 1 ) )**2
+             rho( j, spins( 1 ) ) = rho( j, spins( 1 ) ) + alpha_real *  REAL( psi( j, 1 ) )**2
+             rho( j, spins( 2 ) ) = rho( j, spins( 2 ) ) + alpha_imag * AIMAG( psi( j, 1 ) )**2
           ENDDO
-!       ENDDO
-!       DO i = 1, batch_size
-!          DO j = tfft%thread_rspace_start( mythread+1 ), tfft%thread_rspace_end( mythread+1 )
-!             rho( j, spins( 2, i ) ) = rho( j, spins( 2, i ) ) + alpha_imag( i ) * AIMAG( psi( j, i ) )**2
-!          ENDDO
-!       ENDDO
 
     END IF
     ! ==--------------------------------------------------------------==

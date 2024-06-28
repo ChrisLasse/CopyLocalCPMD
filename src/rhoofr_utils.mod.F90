@@ -62,7 +62,7 @@ MODULE rhoofr_utils
                                              INZS,&
                                              locks_inv,&
                                              tfft,&
-                                             fft_buffsize
+                                             fft_numbuff
   USE fftmain_utils,                   ONLY: fwfftn,&
                                              invfftn,&
                                              fwfftn_batch,&
@@ -167,8 +167,6 @@ MODULE rhoofr_utils
   PUBLIC :: rhoofr_batchfft
   PUBLIC :: rhoofr_batchfft_improved
   !public :: movepsih
-
-  INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
 
 CONTAINS
 
@@ -1357,9 +1355,9 @@ CONTAINS
                                                 swap, start_loop, end_loop
     INTEGER(int_8)                           :: il_wfng(2), il_wfnr(2), il_xf(2)
     REAL(real_8)                             :: chksum, ral, rbe, rsp, rsum, rsum1, &
-                                                rsum1abs, rsumv, rto, temp(4), inv_omega, temp_time
-    REAL(real_8), SAVE, ALLOCATABLE          :: coef4(:), coef3(:)
-    INTEGER, SAVE, ALLOCATABLE               :: ispin(:,:)
+                                                rsum1abs, rsumv, rto, temp(4), inv_omega, temp_time, &
+                                                coef3, coef4
+    INTEGER, SAVE, ALLOCATABLE               :: ispin(:)
     LOGICAL, SAVE :: first = .true.
     INTEGER :: sendsize, sendsize_rem
     INTEGER :: start, ending, nstate_local, fir, las
@@ -1372,13 +1370,13 @@ CONTAINS
     LOGICAL :: last_single
 
 #ifdef _USE_SCRATCHLIBRARY
-!    COMPLEX(DP), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux_array(:,:)
-    COMPLEX(DP), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: psi_nors (:,:)
+!    COMPLEX(real_8), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux_array(:,:)
+    COMPLEX(real_8), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: psi_nors (:,:)
 #else
-    COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux_array(:,:)
-    COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: psi_nors (:,:)
+    COMPLEX(real_8), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux_array(:,:)
+    COMPLEX(real_8), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: psi_nors (:,:)
 #endif
-    COMPLEX(DP), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux_array(:,:)
+    COMPLEX(real_8), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux_array(:,:)
     INTEGER(int_8) :: il_aux_array(2)
     INTEGER(int_8) :: il_psi_both (2)
 
@@ -1436,10 +1434,10 @@ CONTAINS
     CALL part_1d_get_blk_bounds( nstate, parai%cp_inter_me, parai%cp_nogrp, fir, las )
     nstate_local = las - fir + 1
 
-    CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate_local, sendsize, sendsize_rem, ispin, coef3, coef4 )
+    CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate_local, sendsize, sendsize_rem, ispin )
  
-    IF( fft_buffsize .eq. 3 ) THEN
-       fft_buffsize = 2
+    IF( fft_numbuff .eq. 3 ) THEN
+       fft_numbuff = 2
     END IF
     tfft%which_wave = 1
 
@@ -1451,7 +1449,7 @@ CONTAINS
     END IF
   
     locks_calc_1   = .true.
-    DO i = 1, fft_batchsize*fft_buffsize
+    DO i = 1, fft_batchsize*fft_numbuff
        locks_calc_1( : , i ) = .false.
     ENDDO
     locks_sing_1   = .true.
@@ -1459,11 +1457,6 @@ CONTAINS
     IF( cntl%overlapp_comm_comp .and. tfft%do_comm(1) ) locks_omp( 1, :, : ) = .false.
     locks_omp_big   = .true.
     IF( cntl%overlapp_comm_comp .and. tfft%do_comm(1) ) locks_omp_big( 1, :, :, : ) = .false.
-
-!    write(6,*) fft_batchsize, fft_residual
-
-    locks_all_com = .TRUE.
-    locks_all_com2 = .TRUE.
 
     CALL MPI_BARRIER(parai%allgrp, ierr)
 
@@ -1522,8 +1515,6 @@ END IF
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
 
-!mythread = 0
-
     counter = 0
     i_start2 = 0
 
@@ -1560,12 +1551,12 @@ END IF
 !                ! ==  ist revers to the current batch (rsactive) or is identical  ==
 !                ! ==  to swap                                                     ==
 !                ! ==--------------------------------------------------------------==
-                swap=mod(ibatch,fft_buffsize)+1
+                swap=mod(ibatch,fft_numbuff)+1
                 CALL invfft_batch( tfft, 1, bsize, 1, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
              END IF
           END IF
        END IF
-       IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. tfft%do_comm(1) ) THEN !.and. parai%node_me .eq. 0 ) THEN
+       IF( parai%nnode .ne. 1 .and. mythread .eq. 0 .and. tfft%do_comm(1) ) THEN
           !process batches starting from ibatch .eq. 1 until ibatch .eq. fft_numbatches+1
           !communication phase
           IF(ibatch.LE.fft_numbatches+1)THEN
@@ -1577,7 +1568,7 @@ END IF
                 remswitch = 2
              END IF
              IF(bsize.NE.0)THEN
-                swap=mod(ibatch,fft_buffsize)+1
+                swap=mod(ibatch,fft_numbuff)+1
                 counter(2) = counter(2) + 1
                 CALL invfft_batch( tfft, 2, bsize, 1, remswitch, mythread, counter(2), swap )
              END IF
@@ -1599,50 +1590,45 @@ END IF
              !process batches starting from ibatch .eq. 2 until ibatch .eq. fft_numbatches+2
              IF(ibatch.GT.start_loop.AND.ibatch.LE.end_loop)THEN
                 IF (ibatch-start_loop.LE.fft_numbatches)THEN
-                   bsize=1 !fft_batchsize
-                   r_bsize = fft_batchsize
+                   bsize = fft_batchsize
                    remswitch = 1
                 ELSE
                    IF( ispec .gt. fft_residual ) EXIT
-                   bsize=1 !fft_residual
-                   r_bsize = fft_residual
+                   bsize = fft_residual
                    remswitch = 2
                 END IF
-                IF(r_bsize.NE.0)THEN
-                   swap=mod(ibatch-start_loop,fft_buffsize)+1
+                IF(bsize.NE.0)THEN
+                   swap=mod(ibatch-start_loop,fft_numbuff)+1
                    IF( ispec .eq. 1 ) counter(3) = counter(3) + 1
                    start = (ispec+((counter(3)-1)*fft_batchsize))
-!                   start = (1+((counter(3)-1)*fft_batchsize))
-!                   ending = (1+(counter(3)-1)*fft_batchsize)+bsize-1
-                   CALL invfft_batch( tfft, 3, r_bsize, ispec, remswitch, mythread, counter(3), swap, &
+                   CALL invfft_batch( tfft, 3, bsize, ispec, remswitch, mythread, counter(3), swap, &
                                       f_inout1=psi_work( : , start : start ), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
-                   CALL invfft_batch( tfft, 4, r_bsize, ispec, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : start ) )
+                   CALL invfft_batch( tfft, 4, bsize, ispec, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : start ) )
                    ! Compute the charge density from the wave functions
                    ! in real space
                    ! Decode fft batch, setup (lsd) spin settings                     
                    offset_state=i_start2
+                   !CLR: changed it and not yet tested; if problems with lsd arrise, check this section
                    ispin=1
-                   DO count=1,bsize
-                      is1=offset_state+1
-                      is2=offset_state+2
-                      offset_state=offset_state+2
-                      IF (cntl%tlsd) THEN
-                         IF (is1.GT.spin_mod%nsup) THEN
-                            ispin(1,count)=2
-                         END IF
-                         IF (is2.GT.spin_mod%nsup) THEN
-                            ispin(2,count)=2
-                         END IF
+                   is1=offset_state+1
+                   is2=offset_state+2
+                   offset_state=offset_state+2
+                   IF (cntl%tlsd) THEN
+                      IF (is1.GT.spin_mod%nsup) THEN
+                         ispin(1)=2
                       END IF
-                      coef3(count)=crge%f(is1,1)*inv_omega
-                      IF(is2.GT.nstate_local) THEN
-                         coef4(count)=0.0_real_8
-                      ELSE
-                         coef4(count)=crge%f(is2,1)*inv_omega
+                      IF (is2.GT.spin_mod%nsup) THEN
+                         ispin(2)=2
                       END IF
-                   END DO
-                   CALL build_density_sum_Man( tfft, coef3(1), coef4(1), psi_work( : , start : start ), rhoe, bsize, mythread, ispin(:,1), clsd%nlsd )
-                   i_start2=i_start2+bsize*2
+                   END IF
+                   coef3=crge%f(is1,1)*inv_omega
+                   IF(is2.GT.nstate_local) THEN
+                      coef4=0.0_real_8
+                   ELSE
+                      coef4=crge%f(is2,1)*inv_omega
+                   END IF
+                   CALL build_density_sum_Man( tfft, coef3, coef4, psi_work( : , start : start ), rhoe, mythread, ispin, clsd%nlsd )
+                   i_start2=i_start2+2
                 END IF
              END IF
           END IF

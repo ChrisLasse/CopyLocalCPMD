@@ -46,8 +46,6 @@ MODULE loadpa_utils
   PUBLIC :: loadpa
   PUBLIC :: leadim
 
-  INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
-
 CONTAINS
 
   ! ==================================================================
@@ -65,7 +63,7 @@ CONTAINS
     INTEGER, ALLOCATABLE, DIMENSION(:)       :: thread_buff
     LOGICAL                                  :: oldstatus
     REAL(real_8)                             :: g2, sign, t
-    REAL(real_8), PARAMETER                  :: eps8=1.0E-8_DP
+    REAL(real_8), PARAMETER                  :: eps8=1.0E-8_real_8
 
     INTEGER :: win
 ! ==--------------------------------------------------------------==
@@ -488,16 +486,6 @@ CONTAINS
          __LINE__,__FILE__)
   
     CALL SetupArrays()
-
-    ALLOCATE( tfft%time_adding( 100 ), STAT=ierr )
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-    ALLOCATE( tfft%time_adding_extra( 100, 10000 ), STAT=ierr )
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
-    ALLOCATE( tfft%time_adding_extra2( 100, 1000, 1000 ), STAT=ierr )
-    IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
-         __LINE__,__FILE__)
 
     ! ==--------------------------------------------------------------==
     ! LEADING DIMENSIONS OF REAL SPACE ARRAYS
@@ -1052,11 +1040,11 @@ CONTAINS
     !-input/output variables
     integer, intent(in) :: n  
     integer, intent(inout) :: ind (*)  
-    real(DP), intent(inout) :: ra (*)
-    real(DP), intent(in) :: eps
+    real(real_8), intent(inout) :: ra (*)
+    real(real_8), intent(in) :: eps
     !-local variables
     integer :: i, ir, j, l, iind  
-    real(DP) :: rra  
+    real(real_8) :: rra  
     ! initialize index array
     if (ind (1) .eq.0) then  
        do i = 1, n  

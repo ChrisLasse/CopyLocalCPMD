@@ -351,12 +351,8 @@ CONTAINS
 
     DO ik=1,nkpoint
        IF(batch_fft.AND..NOT.tkpts%tkpnt)THEN
-          CALL SYSTEM_CLOCK( time(1) )
           CALL vpsi_batchfft_improved(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,&
                clsd%nlsd,redist_c2)
-          CALL SYSTEM_CLOCK( time(2) )
-          CALL SYSTEM_CLOCK( count_rate = cr )
-          IF ( tfft%timing .and. paral%io_parent ) write(6,*) "TIME OF NEW VPSI", REAL( time(2)-time(1) ) / REAL( cr )
        ELSE
           CALL vpsi(c0_ptr(:,:,ik),c2,crge%f(:,1),rhoe,psi(:,1),nstate,ik,clsd%nlsd,&
                redist_c2)

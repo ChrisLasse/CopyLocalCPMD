@@ -54,8 +54,6 @@ MODULE fftnew_utils
   PUBLIC :: Make_Manual_Maps
   PUBLIC :: Make_inv_yzCOM_Maps
 
-  INTEGER, PARAMETER :: DP = selected_real_kind(14,200)
-
 CONTAINS
 
   ! ==================================================================
@@ -637,8 +635,8 @@ CONTAINS
     IMPLICIT NONE
   
     INTEGER, INTENT(IN)                                 :: sendsize, sendsize_rem, nodes_numb, mype, my_node, my_node_rank, node_task_size, buffer_size, max_node_task_size
-    COMPLEX(DP), INTENT(IN)                             :: comm_send( : , : )
-    COMPLEX(DP), INTENT(INOUT)                          :: comm_recv( : , : )
+    COMPLEX(real_8), INTENT(IN)                             :: comm_send( : , : )
+    COMPLEX(real_8), INTENT(INOUT)                          :: comm_recv( : , : )
     INTEGER, INTENT(OUT)                                :: comm_sendrecv( : )
     INTEGER, INTENT(IN)                                 :: cp_overview( : , : )
     LOGICAL, INTENT(OUT)                                :: do_comm
