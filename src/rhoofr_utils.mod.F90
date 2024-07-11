@@ -67,21 +67,20 @@ MODULE rhoofr_utils
                                              invfftn,&
                                              fwfftn_batch,&
                                              invfftn_batch,&
+                                             invfft_batch
+  USE fftnew_utils,                    ONLY: setfftn,&
+                                             Pre_fft_setup,&
                                              comm_send,&
                                              comm_recv,&
                                              locks_calc_inv,&
                                              locks_calc_fw,&
                                              locks_com_inv,&
                                              locks_com_fw,&
-                                             locks_all_com,&
-                                             locks_all_com2,&
+                                             locks_omp,&
                                              locks_sing_1,&
-                                             invfft_batch
-  USE fftnew_utils,                    ONLY: setfftn
-  USE fftutil_utils,                   ONLY: locks_omp,&
-                                             Prepare_Psi,&
                                              locks_calc_1,&
                                              locks_omp_big
+  USE fftutil_utils,                   ONLY: Prepare_Psi
   USE geq0mod,                         ONLY: geq0
   USE ions,                            ONLY: ions0,&
                                              ions1
@@ -132,7 +131,6 @@ MODULE rhoofr_utils
                                              thread_views_init
   USE timer,                           ONLY: tihalt,&
                                              tiset
-  USE vpsi_utils,                      ONLY: Pre_fft_setup
   USE zeroing_utils,                   ONLY: zeroing
 
   !$ USE omp_lib, ONLY: omp_get_max_threads, omp_get_thread_num, &
@@ -1434,7 +1432,7 @@ CONTAINS
     CALL part_1d_get_blk_bounds( nstate, parai%cp_inter_me, parai%cp_nogrp, fir, las )
     nstate_local = las - fir + 1
 
-    CALL Pre_fft_setup( fft_batchsize, fft_residual, fft_numbatches, nstate_local, sendsize, sendsize_rem, ispin )
+    CALL Pre_fft_setup( tfft, nstate_local, sendsize, sendsize_rem, ispin )
  
     IF( fft_numbuff .eq. 3 ) THEN
        fft_numbuff = 2
@@ -1602,8 +1600,9 @@ END IF
                    IF( ispec .eq. 1 ) counter(3) = counter(3) + 1
                    start = (ispec+((counter(3)-1)*fft_batchsize))
                    CALL invfft_batch( tfft, 3, bsize, ispec, remswitch, mythread, counter(3), swap, &
-                                      f_inout1=psi_work( : , start : start ), f_inout2=comm_recv, f_inout3=aux_array( : , 1 : 1 ) )
-                   CALL invfft_batch( tfft, 4, bsize, ispec, remswitch, mythread, counter(3), swap, f_inout1=psi_work( : , start : start ) )
+                                      f_inout1=comm_recv, f_inout2=aux_array( : , 1 : 1 ) )
+                   CALL invfft_batch( tfft, 4, bsize, ispec, remswitch, mythread, counter(3), swap, &
+                                      f_inout1=aux_array( : , 1 : 1 ), f_inout2=psi_work(:,start:start) )
                    ! Compute the charge density from the wave functions
                    ! in real space
                    ! Decode fft batch, setup (lsd) spin settings                     

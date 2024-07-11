@@ -42,6 +42,18 @@ MODULE fftmain_utils
                                              fftcu_inv_sprs_1,&
                                              fftcu_inv_sprs_2
   USE fftnew_utils,                    ONLY: Prep_fft_com,&
+                                             comm_send,&
+                                             comm_recv,&
+                                             locks_calc_inv,&
+                                             locks_calc_fw,&
+                                             locks_com_inv,&
+                                             locks_com_fw,&
+                                             locks_sing_1,&
+                                             locks_sing_2,&
+                                             locks_omp,&
+                                             locks_calc_1,&
+                                             locks_calc_2,&
+                                             locks_omp_big,&
                                              Make_Manual_Maps
   USE fftutil_utils,                   ONLY: fft_comm,&
                                              getz,&
@@ -58,10 +70,6 @@ MODULE fftmain_utils
                                              pack_x2y_n,&
                                              unpack_y2x,&
                                              unpack_y2x_n,&
-                                             locks_omp,&
-                                             locks_calc_1,&
-                                             locks_calc_2,&
-                                             locks_omp_big,&
                                              Prepare_Psi,&
                                              fft_com,&
                                              invfft_z_section,&
@@ -110,32 +118,6 @@ MODULE fftmain_utils
   PUBLIC :: fwfftn
   PUBLIC :: invfftn_batch
   PUBLIC :: fwfftn_batch
-
-  COMPLEX(real_8), POINTER, SAVE, CONTIGUOUS :: comm_send(:,:)
-  COMPLEX(real_8), POINTER, SAVE, CONTIGUOUS :: comm_recv(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_inv(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_inv(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_fw(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_fw(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_all_com(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_all_com2(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_sing_1(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_sing_2(:,:)
-
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_flush(:,:)
-  PUBLIC :: locks_flush
-
-
-  PUBLIC :: comm_send
-  PUBLIC :: comm_recv
-  PUBLIC :: locks_calc_inv
-  PUBLIC :: locks_com_inv
-  PUBLIC :: locks_calc_fw
-  PUBLIC :: locks_com_fw
-  PUBLIC :: locks_all_com
-  PUBLIC :: locks_all_com2
-  PUBLIC :: locks_sing_1
-  PUBLIC :: locks_sing_2
 
   PUBLIC :: invfft_batch
   PUBLIC :: fwfft_batch
@@ -791,7 +773,7 @@ CONTAINS
     ! ==--------------------------------------------------------------==
   END SUBROUTINE invfftn_batch
 
-  SUBROUTINE invfft_batch( tfft, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+  SUBROUTINE invfft_batch( tfft, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3, f_inout4 )
     IMPLICIT NONE
   
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: tfft
@@ -799,6 +781,7 @@ CONTAINS
     COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout1(:,:)
     COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout2(:,:)
     COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout3(:,:)
+    COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout4(:,:)
 
     CHARACTER(*), PARAMETER :: procedureN = 'invfft_batch'
 
@@ -813,15 +796,15 @@ CONTAINS
   
     IF( step .eq. 1 ) THEN
        CALL fft_improved_batch( tfft, -1, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, &
-                            f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
+                                f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     ELSE IF( step .eq. 2 ) THEN                                          
        CALL fft_improved_batch( tfft, -1, step, batch_size, ispec, remswitch, mythread, counter, work_buffer )
     ELSE IF( step .eq. 3 ) THEN                                       
        CALL fft_improved_batch( tfft, -1, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, &
-                            f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
+                                f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     ELSE IF( step .eq. 4 ) THEN                                       
        CALL fft_improved_batch( tfft, -1, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, &
-                            f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
+                                f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     END IF
 
     IF( cntl%fft_tune_batchsize ) THEN
@@ -833,7 +816,7 @@ CONTAINS
   
   END SUBROUTINE invfft_batch
   
-  SUBROUTINE fwfft_batch( tfft, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+  SUBROUTINE fwfft_batch( tfft, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3, f_inout4 )
     IMPLICIT NONE
   
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: tfft 
@@ -841,6 +824,7 @@ CONTAINS
     COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout1(:,:)
     COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout2(:,:)
     COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout3(:,:)
+    COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout4(:,:)
 
     CHARACTER(*), PARAMETER :: procedureN = 'fwfft_batch'
 
@@ -855,15 +839,15 @@ CONTAINS
   
     IF( step .eq. 1 ) THEN
        CALL fft_improved_batch( tfft, 1, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, &
-                            f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
+                                f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     ELSE IF( step .eq. 2 ) THEN
        CALL fft_improved_batch( tfft, 1, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, &
-                            f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
+                                f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     ELSE IF( step .eq. 3 ) THEN
        CALL fft_improved_batch( tfft, 1, step, batch_size, ispec, remswitch, mythread, counter, work_buffer )
     ELSE IF( step .eq. 4 ) THEN
        CALL fft_improved_batch( tfft, 1, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, &
-                            f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3 )
+                                f_inout1=f_inout1, f_inout2=f_inout2, f_inout3=f_inout3, f_inout4=f_inout4 )
     END IF
 
     IF( cntl%fft_tune_batchsize ) THEN
@@ -875,7 +859,7 @@ CONTAINS
   
   END SUBROUTINE fwfft_batch
 
-  SUBROUTINE fft_improved_batch( tfft, isign, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3 )
+  SUBROUTINE fft_improved_batch( tfft, isign, step, batch_size, ispec, remswitch, mythread, counter, work_buffer, f_inout1, f_inout2, f_inout3, f_inout4 )
     IMPLICIT NONE
   
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) ::tfft 
@@ -884,6 +868,7 @@ CONTAINS
     COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout1(:,:)
     COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout2(:,:)
     COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout3(:,:)
+    COMPLEX(real_8), OPTIONAL, INTENT(INOUT) :: f_inout4(:,:)
 
     CHARACTER(*), PARAMETER :: procedureN = 'fft_improved_batch'
   
@@ -901,14 +886,9 @@ CONTAINS
   
        IF( step .eq. 1 ) THEN
 
-          !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
-!          !$omp flush( locks_calc_1 )
-!          !$  DO WHILE( ANY(locks_calc_1( :, 1+current:fft_batchsize+current ) ) )
-!          !$omp flush( locks_calc_1 )
-!          !$  END DO
-
           CALL invfft_z_section( tfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), batch_size, remswitch, mythread, tfft%nsw, current )
 
+!CLR: technically dont need to stop, right? Last thread finished opens the door
           !$  locks_omp( mythread+1, counter, 1 ) = .false.
           !$omp flush( locks_omp )
           !$  DO WHILE( ANY( locks_omp( :, counter, 1 ) ) )
@@ -939,30 +919,45 @@ CONTAINS
           !$omp flush( locks_com_inv )
           !$  END DO
 
-          CALL invfft_y_section( tfft, f_inout1, f_inout2(:,work_buffer), f_inout3, &
-                                 tfft%map_acinv_wave, tfft%map_acinv_wave_rem, counter, remswitch, mythread, tfft%nr1w, ispec )
+          IF( remswitch .eq. 1 ) THEN
+             CALL invfft_y_section( tfft, f_inout1(:,work_buffer), f_inout2(:,1), &
+                                    tfft%map_acinv_wave, mythread, tfft%nr1w, ispec )
+          ELSE
+             CALL invfft_y_section( tfft, f_inout1(:,work_buffer), f_inout2(:,1), &
+                                    tfft%map_acinv_wave_rem, mythread, tfft%nr1w, ispec )
+          END IF
+
+          !$  locks_omp_big( mythread+1, ispec, counter, 5 ) = .false.
+          !$omp flush( locks_omp_big )
+          !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 5 ) ) )
+          !$omp flush( locks_omp_big )
+          !$  END DO
+
+!CLR: Could be earlier with "Last one finished"-strategy
+          IF( tfft%which .eq. 1 .and. ( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) ) THEN
+             IF( tfft%which_wave .eq. 1 ) THEN
+                !$  locks_calc_1( parai%node_me+1, 1+current+(fft_batchsize*fft_numbuff): &
+                !$                             ispec+current+(fft_batchsize*fft_numbuff) ) = .false.
+                !$omp flush( locks_calc_1 )
+             ELSE
+                !$  locks_calc_2( parai%node_me+1, 1+current:ispec+current ) = .false.
+                !$omp flush( locks_calc_2 )
+             END IF
+          END IF
 
        ELSE IF( step .eq. 4 ) THEN
 
-          CALL invfft_x_section( tfft, f_inout1, remswitch, mythread )
+          CALL invfft_x_section( tfft, f_inout1(:,1), f_inout2(:,1), mythread, tfft%nr1w )
 
-          !Wouldnt all threads need to be finished before this lock can be lifted?
-!          IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
-!             IF( tfft%which_wave .eq. 1 ) THEN
-!                !$  locks_calc_1( parai%node_me+1, 1+current+(fft_batchsize*fft_numbuff): &
-!                !$                             ispec+current+(fft_batchsize*fft_numbuff) ) = .false.
-!                !$omp flush( locks_calc_1 )
-!             ELSE
-!                !$  locks_calc_2( parai%node_me+1, 1+current:ispec+current ) = .false.
-!                !$omp flush( locks_calc_2 )
-!             END IF
-!          END IF
+          IF( tfft%which_wave .eq. 1 ) THEN
 
-          !$  locks_omp_big( mythread+1, ispec, counter, 6 ) = .false.
-          !$omp flush( locks_omp_big )
-          !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 6 ) ) )
-          !$omp flush( locks_omp_big )
-          !$  END DO
+             !$  locks_omp_big( mythread+1, ispec, counter, 6 ) = .false.
+             !$omp flush( locks_omp_big )
+             !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 6 ) ) )
+             !$omp flush( locks_omp_big )
+             !$  END DO
+
+          END IF
 
        END IF
   
@@ -970,28 +965,25 @@ CONTAINS
   
        IF( step .eq. 1 ) THEN
 
-          CALL fwfft_x_section( tfft, f_inout1(:,1), f_inout2, ispec, counter, remswitch, mythread, tfft%nr1w )
+          CALL fwfft_x_section( tfft, f_inout1(:,1), mythread )
+
+          !$  locks_omp_big( mythread+1, ispec, counter, 1 ) = .false.
+          !$omp flush( locks_omp_big )
+          !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 1 ) ) )
+          !$omp flush( locks_omp_big )
+          !$  END DO
 
        ELSE IF( step .eq. 2 ) THEN
-
-          !$omp flush( locks_calc_2 )
-          !$  DO WHILE( ANY(locks_calc_2(:,1+current:ispec+current ) ) )
-          !$omp flush( locks_calc_2 )
-          !$  END DO
   
-          CALL fwfft_y_section( tfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), &
-                                    tfft%map_pcfw(:,1), batch_size, ispec, counter, remswitch, mythread, tfft%nr1w, tfft%nsw )
+          CALL fwfft_y_section( tfft, f_inout1(:,1), f_inout2(:,1), f_inout3(:,work_buffer), f_inout4(:,work_buffer), &
+                                    tfft%map_pcfw(:,1), batch_size, ispec, counter, mythread )
 
+!CLR: "Last one to finish" should work here too
           !$  locks_omp_big( mythread+1, ispec, counter, 4 ) = .false.
           !$omp flush( locks_omp_big )
           !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 4 ) ) )
           !$omp flush( locks_omp_big )
           !$  END DO
-
-!          !$  IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
-!          !$     locks_calc_fw( parai%node_me+1, counter ) = .false.
-!          !$omp flush( locks_calc_fw )
-!          !$  END IF
 
        ELSE IF( step .eq. 3 ) THEN
 
@@ -1014,12 +1006,13 @@ CONTAINS
   
           CALL fwfft_z_section( tfft, f_inout1(:,work_buffer), f_inout2, counter, batch_size, remswitch, mythread, tfft%nsw )
 
-!          !$  locks_omp( mythread+1, counter, 11 ) = .false.
-!          !$omp flush( locks_omp )
-!          !$  DO WHILE( ANY( locks_omp( :, counter, 11 ) ) )
-!          !$omp flush( locks_omp )
-!          !$  END DO
-        
+    !$  locks_omp( mythread+1, counter, 11 ) = .false.
+    !$omp flush( locks_omp )
+    !$  DO WHILE( ANY( locks_omp( :, counter, 11 ) ) )
+    !$omp flush( locks_omp )
+    !$  END DO
+
+          !CLR: could be earlier, right after comm_recv gets written off, also "last one..." strategy        
           IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
              IF( cntl%krwfn ) THEN
              !$   locks_calc_2( parai%node_me+1, 1+(counter+fft_numbuff-1)*fft_batchsize:batch_size+(counter+fft_numbuff-1)*fft_batchsize ) = .false.
@@ -1133,15 +1126,19 @@ CONTAINS
        !$OMP end master
        !$OMP barrier
 
-       CALL invfft_y_section( tfft, f, comm_recv(:,1), aux, tfft%map_acinv_pot, tfft%map_acinv_pot, 1, 1, mythread, tfft%nr1p, 1 )
+       CALL invfft_y_section( tfft, comm_recv(:,1), aux(:,1), tfft%map_acinv_pot, mythread, tfft%nr1p, 1 )
 
-       CALL invfft_x_section( tfft, f, 1, mythread )
+       !$OMP barrier
+
+       CALL invfft_x_section( tfft, aux(:,1), f, mythread, tfft%nr1p )
 
     ELSE !! fw fft
 
-       CALL fwfft_x_section( tfft, f, aux, 1, 1, 1, mythread, tfft%nr1p )
+       CALL fwfft_x_section( tfft, f, mythread )
 
-       CALL fwfft_y_section( tfft, aux, comm_send(:,1), comm_recv(:,1), tfft%map_pcfw(:,2), 1, 1, 1, 1, mythread, tfft%nr1p, tfft%nsp )
+       !$OMP barrier
+
+       CALL fwfft_y_section( tfft, f, aux(:,1), comm_send(:,1), comm_recv(:,1), tfft%map_pcfw(:,2), 1, 1, 1, mythread )
     
        !$OMP barrier
        !$OMP master

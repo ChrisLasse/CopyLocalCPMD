@@ -31,6 +31,10 @@ MODULE fftutil_utils
                                              fft_batchsize,&
                                              fft_numbuff
   USE fft_maxfft,                      ONLY: maxfft
+  USE fftnew_utils,                   ONLY: locks_omp,&
+                                             locks_omp_big,&
+                                             locks_calc_1,&
+                                             locks_calc_2
   USE kinds,                           ONLY: real_4,&
                                              real_8
   USE mltfft_utils,                    ONLY: mltfft_fftw_t
@@ -75,14 +79,6 @@ MODULE fftutil_utils
   PUBLIC :: unpack_y2x_n
 !TK
 !CR special routines for improved FFT
-  LOGICAL, ALLOCATABLE, SAVE :: locks_omp(:,:,:)
-  LOGICAL, ALLOCATABLE, SAVE :: locks_omp_big(:,:,:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_1(:,:)
-  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_2(:,:)
-  PUBLIC :: locks_calc_1
-  PUBLIC :: locks_calc_2
-  PUBLIC :: locks_omp
-  PUBLIC :: locks_omp_big
   PUBLIC :: Prepare_Psi
   PUBLIC :: fft_com
   PUBLIC :: invfft_z_section
@@ -1164,12 +1160,13 @@ CONTAINS
     END IF
 
     IF( tfft%which .eq. 1 ) THEN
-    
+
+       !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
        !$omp flush( locks_calc_1 )
        !$  DO WHILE( ANY(locks_calc_1( :, 1+current:fft_batchsize+current ) ) )
        !$omp flush( locks_calc_1 )
        !$  END DO
-    
+
     END IF
   
     !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
@@ -1192,317 +1189,162 @@ CONTAINS
   
   END SUBROUTINE invfft_z_section 
   
-  SUBROUTINE invfft_y_section( tfft, aux, comm_mem_recv, aux2_r, map_acinv, map_acinv_rem, counter, remswitch, mythread, my_nr1s, ispec )
+  SUBROUTINE invfft_y_section( tfft, comm_mem_recv, aux, map_acinv, mythread, my_nr1s, ispec )
     IMPLICIT NONE
   
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) ::tfft 
-    INTEGER, INTENT(IN) :: remswitch, mythread, counter, my_nr1s, ispec
+    INTEGER, INTENT(IN) :: mythread, my_nr1s, ispec
     COMPLEX(real_8), INTENT(IN)  :: comm_mem_recv( * )
-    COMPLEX(real_8), INTENT(INOUT) :: aux ( tfft%my_nr3p * tfft%nr2 * tfft%nr1 , * )
-    COMPLEX(real_8), INTENT(INOUT) :: aux2_r( : , : )
-    INTEGER, INTENT(IN) :: map_acinv( * ), map_acinv_rem( * )
+    COMPLEX(real_8), INTENT(INOUT) :: aux( tfft%nr2 , * )
+    INTEGER, INTENT(IN) :: map_acinv( * )
   
     INTEGER :: i, k, offset, iter
     CHARACTER(*), PARAMETER :: procedureN = 'invfft_y_section'
   
-    IF( remswitch .eq. 1 ) THEN
-       Call First_Part_y_section( aux2_r, map_acinv )
-    ELSE
-       Call First_Part_y_section( aux2_r, map_acinv_rem )
-    END IF
-  
-    !$  locks_omp_big( mythread+1, ispec, counter, 5 ) = .false.
-    !$omp flush( locks_omp_big )
-    !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 5 ) ) )
-    !$omp flush( locks_omp_big )
-    !$  END DO
-  
-    IF( tfft%which .eq. 1 .and. ( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) ) THEN
-       IF( tfft%which_wave .eq. 1 ) THEN
-          !$  locks_calc_1( parai%node_me+1, 1+(counter-1)*fft_batchsize+(fft_batchsize*fft_numbuff): &
-          !$                             ispec+(counter-1)*fft_batchsize+(fft_batchsize*fft_numbuff) ) = .false.
-          !$omp flush( locks_calc_1 )
-       ELSE
-          !$  locks_calc_2( parai%node_me+1, 1+(counter-1)*fft_batchsize:ispec+(counter-1)*fft_batchsize ) = .false.
-          !$omp flush( locks_calc_2 )
-       END IF
-    END IF
+  !------------------------------------------------------
+  !--------After-Com-Copy Start--------------------------
 
-    Call Second_Part_y_section( aux2_r )
-  
-    CONTAINS
-  
-      SUBROUTINE First_Part_y_section( aux2, map )
-        
-        Implicit NONE
-        COMPLEX(real_8), INTENT(INOUT) :: aux2( tfft%nr2 , * ) !nr1s(parai%me+1) * tfft%my_nr3p *  y_group_size )
-        INTEGER, INTENT(IN)        :: map( * )
-  
-  
-        !------------------------------------------------------
-        !--------After-Com-Copy Start--------------------------
-        
-          !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
-
-IF( tfft%which .eq. 2 ) THEN
+    offset = (ispec-1)*tfft%big_chunks( tfft%which )
+     
+    !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
           
-          DO i = tfft%thread_y_start( mythread+1, remswitch, tfft%which ), tfft%thread_y_end( mythread+1, remswitch, tfft%which )
-             iter = mod( i-1, my_nr1s ) + 1
-             offset = ( mod( i-1, my_nr1s * tfft%my_nr3p ) + ( (i-1) / ( my_nr1s * tfft%my_nr3p ) ) * tfft%my_nr3p * my_nr1s ) * tfft%nr2
-             DO k = 1, tfft%zero_acinv_start( iter, tfft%which ) - 1
-                aux2( k, i ) = comm_mem_recv( map( offset + k ) )
-             END DO
-             DO k = tfft%zero_acinv_start( iter, tfft%which ), tfft%zero_acinv_end( iter, tfft%which )
-                aux2( k, i ) = (0.0_real_8,0.0_real_8)
-             END DO
-             DO k = tfft%zero_acinv_end( iter, tfft%which ) + 1, tfft%nr2
-                aux2( k, i ) = comm_mem_recv( map( offset + k ) )
-             END DO
-          END DO
-
-ELSE
-
-          DO i = tfft%thread_y_start( mythread+1, 1, 3 ), tfft%thread_y_end( mythread+1, 1, 3 )
-             iter = mod( i-1, my_nr1s ) + 1
-             offset = ( mod( i-1, my_nr1s * tfft%my_nr3p ) + ( (i-1) / ( my_nr1s * tfft%my_nr3p ) ) * tfft%my_nr3p * my_nr1s ) * tfft%nr2
-             DO k = 1, tfft%zero_acinv_start( iter, tfft%which ) - 1
-                aux2( k, i ) = comm_mem_recv( map( offset + k )  + (ispec-1)*tfft%big_chunks( tfft%which ) )
-             END DO
-             DO k = tfft%zero_acinv_start( iter, tfft%which ), tfft%zero_acinv_end( iter, tfft%which )
-                aux2( k, i ) = (0.0_real_8,0.0_real_8)
-             END DO
-             DO k = tfft%zero_acinv_end( iter, tfft%which ) + 1, tfft%nr2
-                aux2( k, i ) = comm_mem_recv( map( offset + k ) + (ispec-1)*tfft%big_chunks( tfft%which ) )
-             END DO
-          END DO
-
-END IF
+    DO i = tfft%thread_y_start( mythread+1, tfft%which ), tfft%thread_y_end( mythread+1, tfft%which )
+       iter = mod( i-1, my_nr1s ) + 1
+       DO k = 1, tfft%zero_acinv_start( iter, tfft%which ) - 1
+          aux( k, i ) = comm_mem_recv( map_acinv( (i-1) * tfft%nr2 + k ) + offset )
+       END DO
+       DO k = tfft%zero_acinv_start( iter, tfft%which ), tfft%zero_acinv_end( iter, tfft%which )
+          aux( k, i ) = (0.0_real_8,0.0_real_8)
+       END DO
+       DO k = tfft%zero_acinv_end( iter, tfft%which ) + 1, tfft%nr2
+          aux( k, i ) = comm_mem_recv( map_acinv( (i-1) * tfft%nr2 + k ) + offset )
+       END DO
+    END DO
         
-          !CALL mpi_win_unlock_all( tfft%mpi_window( 2 ), ierr )
+    !CALL mpi_win_unlock_all( tfft%mpi_window( 2 ), ierr )
+  
+  !---------After-Com-Copy End---------------------------
+  !------------------------------------------------------
+  !------------------------------------------------------
+  !------------y-FFT Start-------------------------------
+  
+    CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_y_start( mythread+1, tfft%which ) : tfft%thread_y_end( mythread+1, tfft%which ) ), &
+                     tfft%nr2, tfft%thread_y_sticks(mythread+1,tfft%which), &
+                     aux( : , tfft%thread_y_start( mythread+1, tfft%which ) : tfft%thread_y_end( mythread+1, tfft%which ) ), &
+                     tfft%nr2, tfft%thread_y_sticks(mythread+1,tfft%which), &
+                     tfft%nr2, tfft%thread_y_sticks(mythread+1,tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
         
-        !---------After-Com-Copy End---------------------------
-        !------------------------------------------------------
-        !------------------------------------------------------
-        !------------y-FFT Start-------------------------------
+  !-------------y-FFT End--------------------------------
+  !------------------------------------------------------
   
-IF( tfft%which .eq. 2 ) THEN
-
-          CALL mltfft_fftw_t('n','n',aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
-                           aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
-
-ELSE
-
-          CALL mltfft_fftw_t('n','n',aux2( : , tfft%thread_y_start( mythread+1, 1, 3 ) : tfft%thread_y_end( mythread+1, 1, 3 ) ), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,1,3), &
-                           aux2( : , tfft%thread_y_start( mythread+1,1,3) : tfft%thread_y_end( mythread+1, 1, 3 ) ), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,1,3), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,1,3),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
-
-END IF
-        
-        !-------------y-FFT End--------------------------------
-        !------------------------------------------------------
-  
-      END SUBROUTINE First_Part_y_section
-  
-      SUBROUTINE Second_Part_y_section( aux2 )
-  
-        IMPLICIT NONE
-        COMPLEX(real_8), INTENT(INOUT) :: aux2  ( my_nr1s * tfft%my_nr3p * tfft%nr2, * ) !y_group_size
-        INTEGER :: ibatch
-  
-        !------------------------------------------------------
-        !-------------yx-scatter-------------------------------
-        
-IF( tfft%which .eq. 2 ) THEN
-
-          DO i = tfft%thread_x_start( mythread+1, remswitch, tfft%which ), tfft%thread_x_end( mythread+1, remswitch, tfft%which )
-             offset = mod( i-1, tfft%my_nr3p * tfft%nr2 ) * tfft%nr1
-             ibatch = ( ( (i-1) / ( tfft%my_nr3p * tfft%nr2 ) ) + 1 )
-             DO k = 1, tfft%zero_scatter_start( tfft%which ) - 1
-                aux( offset + k, ibatch ) = aux2( tfft%map_scatter_inv( offset + k, tfft%which ), ibatch )
-             END DO
-             DO k = tfft%zero_scatter_start( tfft%which ), tfft%zero_scatter_end( tfft%which )
-                aux( offset + k, ibatch ) = (0.0_real_8, 0.0_real_8)
-             END DO
-             DO k = tfft%zero_scatter_end( tfft%which ) + 1, tfft%nr1
-                aux( offset + k, ibatch ) = aux2( tfft%map_scatter_inv( offset + k, tfft%which ), ibatch )
-             END DO
-          END DO
-
-ELSE
-    
-          DO i = tfft%thread_x_start( mythread+1, 1, 3 ), tfft%thread_x_end( mythread+1, 1, 3 )
-             offset = mod( i-1, tfft%my_nr3p * tfft%nr2 ) * tfft%nr1
-             ibatch = ( ( (i-1) / ( tfft%my_nr3p * tfft%nr2 ) ) + 1 )
-             DO k = 1, tfft%zero_scatter_start( tfft%which ) - 1
-                aux( offset + k, ibatch ) = aux2( tfft%map_scatter_inv( offset + k, tfft%which ), ibatch )
-             END DO
-             DO k = tfft%zero_scatter_start( tfft%which ), tfft%zero_scatter_end( tfft%which )
-                aux( offset + k, ibatch ) = (0.0_real_8, 0.0_real_8)
-             END DO
-             DO k = tfft%zero_scatter_end( tfft%which ) + 1, tfft%nr1
-                aux( offset + k, ibatch ) = aux2( tfft%map_scatter_inv( offset + k, tfft%which ), ibatch )
-             END DO
-          END DO
-
-END IF
-    
-        !-------------yx-scatter-------------------------------
-        !------------------------------------------------------
-  
-      END SUBROUTINE Second_Part_y_section
   
   END SUBROUTINE invfft_y_section
   
-  SUBROUTINE invfft_x_section( tfft, aux, remswitch, mythread )
+  SUBROUTINE invfft_x_section( tfft, aux2, aux_r, mythread, my_nr1s )
     IMPLICIT NONE
   
-    INTEGER, INTENT(IN) :: remswitch, mythread
+    INTEGER, INTENT(IN) :: mythread, my_nr1s
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: tfft
-    COMPLEX(real_8), INTENT(INOUT) :: aux( tfft%nr1, * )
+    COMPLEX(real_8), INTENT(INOUT) :: aux2( * )
+    COMPLEX(real_8), INTENT(INOUT) :: aux_r( : )
   
     CHARACTER(*), PARAMETER :: procedureN = 'invfft_x_section'
-  
-  !------------------------------------------------------
-  !------------x-FFT Start-------------------------------
 
-IF( tfft%which .eq. 2 ) THEN
-  
-    CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
-                     tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
-                     aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
-                     tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
-                     tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
+    INTEGER :: i, k, offset
 
-ELSE
-
-    CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, 1, 3 ) : tfft%thread_x_end( mythread+1, 1, 3 ) ), &
-                     tfft%nr1, tfft%thread_x_sticks(mythread+1,1, 3), &
-                     aux( : , tfft%thread_x_start( mythread+1, 1, 3 ) : tfft%thread_x_end( mythread+1, 1, 3 ) ), &
-                     tfft%nr1, tfft%thread_x_sticks(mythread+1,1, 3), &
-                     tfft%nr1, tfft%thread_x_sticks(mythread+1,1, 3),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
-
-END IF
-  
-  !-------------x-FFT End--------------------------------
-  !------------------------------------------------------
-  
-  END SUBROUTINE invfft_x_section
-  
-  SUBROUTINE fwfft_x_section( tfft, aux_r, aux2, ispec, counter, remswitch, mythread, my_nr1s )
-    IMPLICIT NONE
-  
-    TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: tfft
-    INTEGER, INTENT(IN) :: counter, remswitch, mythread, my_nr1s, ispec
-    COMPLEX(real_8), INTENT(INOUT)  :: aux_r( : )
-    COMPLEX(real_8), INTENT(INOUT) :: aux2( my_nr1s * tfft%my_nr3p * tfft%nr2 , * )
-  
-    CHARACTER(*), PARAMETER :: procedureN = 'fwfft_x_section'
-  
     Call First_Part_x_section( aux_r )
 
-    !$  locks_omp_big( mythread+1, ispec, counter, 1 ) = .false.
-    !$omp flush( locks_omp_big )
-    !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 1 ) ) )
-    !$omp flush( locks_omp_big )
-    !$  END DO
-   
     Call Second_Part_x_section( aux_r )
   
     CONTAINS
-  
-      SUBROUTINE First_Part_x_section( aux )
+
+      SUBROUTINE First_Part_x_section( aux_r )
   
         IMPLICIT NONE
-        COMPLEX(real_8), INTENT(INOUT) :: aux( tfft%nr1 , * )
+        COMPLEX(real_8), INTENT(INOUT) :: aux_r( * )
   
         !------------------------------------------------------
-        !------------x-FFT Start-------------------------------
+        !-------------yx-scatter-------------------------------
 
-!        !$  locks_omp_big( mythread+1, ispec, counter, 2 ) = .false.
-!        !$omp flush( locks_omp_big )
-!        !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 2 ) ) )
-!        !$omp flush( locks_omp_big )
-!        !$  END DO
-
-IF( tfft%which .eq. 2 ) THEN
-  
-          CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
-                           tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
-                           aux( : , tfft%thread_x_start( mythread+1, remswitch, tfft%which ) : tfft%thread_x_end( mythread+1, remswitch, tfft%which ) ), &
-                           tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which), &
-                           tfft%nr1, tfft%thread_x_sticks(mythread+1,remswitch, tfft%which),1,scal,.FALSE.,mythread,parai%ncpus_FFT)
-
-ELSE
-  
-          CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, 1, 3 ) : tfft%thread_x_end( mythread+1, 1, 3 ) ), &
-                           tfft%nr1, tfft%thread_x_sticks(mythread+1,1,3), &
-                           aux( : , tfft%thread_x_start( mythread+1, 1,3) : tfft%thread_x_end( mythread+1, 1, 3 ) ), &
-                           tfft%nr1, tfft%thread_x_sticks(mythread+1,1,3), &
-                           tfft%nr1, tfft%thread_x_sticks(mythread+1,1,3),1,scal,.FALSE.,mythread,parai%ncpus_FFT)
-
-END IF        
-        !-------------x-FFT End--------------------------------
+          DO i = tfft%thread_x_start( mythread+1, tfft%which ), tfft%thread_x_end( mythread+1, tfft%which )
+             offset = (i-1) * tfft%nr1
+             DO k = 1, tfft%zero_scatter_start( tfft%which ) - 1
+                aux_r( offset + k ) = aux2( tfft%map_scatter_inv( offset + k, tfft%which ) )
+             END DO
+             DO k = tfft%zero_scatter_start( tfft%which ), tfft%zero_scatter_end( tfft%which )
+                aux_r( offset + k ) = (0.0_real_8, 0.0_real_8)
+             END DO
+             DO k = tfft%zero_scatter_end( tfft%which ) + 1, tfft%nr1
+                aux_r( offset + k ) = aux2( tfft%map_scatter_inv( offset + k, tfft%which ) )
+             END DO
+          END DO
+    
+        !-------------yx-scatter-------------------------------
         !------------------------------------------------------
   
       END SUBROUTINE First_Part_x_section
   
-      SUBROUTINE Second_Part_x_section( aux )
-  
-        IMPLICIT NONE
-        COMPLEX(real_8), INTENT(INOUT)  :: aux( tfft%my_nr3p * tfft%nr2 * tfft%nr1 , * )
-        INTEGER :: i, j, offset, ibatch
+      SUBROUTINE Second_Part_x_section( aux_r )
+        
+        Implicit NONE
+        COMPLEX(real_8), INTENT(INOUT) :: aux_r( tfft%nr1 , * )
   
         !------------------------------------------------------
-        !------Forward xy-scatter Start------------------------
+        !------------x-FFT Start-------------------------------
 
-IF( tfft%which .eq. 2 ) THEN
-        
-          DO i = tfft%thread_y_start( mythread+1, remswitch, tfft%which ), tfft%thread_y_end( mythread+1, remswitch, tfft%which )
-             ibatch = ( ( (i-1) / ( tfft%my_nr3p * my_nr1s ) ) + 1 )
-             offset = tfft%nr2 * mod( i-1, my_nr1s * tfft%my_nr3p )
-             DO j = 1, tfft%nr2
-                aux2( j + offset , ibatch ) = aux( tfft%map_scatter_fw( j + offset, tfft%which ), ibatch )
-             ENDDO
-          ENDDO
-
-ELSE
-        
-          DO i = tfft%thread_y_start( mythread+1, 1, 3 ), tfft%thread_y_end( mythread+1, 1, 3 )
-!             ibatch = ( ( (i-1) / ( tfft%my_nr3p * my_nr1s ) ) + 1 )
-             offset = tfft%nr2 * mod( i-1, my_nr1s * tfft%my_nr3p )
-             DO j = 1, tfft%nr2
-                aux2( j + offset , 1 ) = aux( tfft%map_scatter_fw( j + offset, tfft%which ), 1 )
-             ENDDO
-          ENDDO
-
-END IF
-
-        !-------Forward xy-scatter End-------------------------
+          CALL mltfft_fftw_t('n','n',aux_r( : , tfft%thread_x_start( mythread+1, tfft%which ) : tfft%thread_x_end( mythread+1, tfft%which ) ), &
+                           tfft%nr1, tfft%thread_x_sticks(mythread+1, tfft%which), &
+                           aux_r( :, tfft%thread_x_start( mythread+1, tfft%which ) : tfft%thread_x_end( mythread+1, tfft%which ) ), &
+                           tfft%nr1, tfft%thread_x_sticks(mythread+1, tfft%which), &
+                           tfft%nr1, tfft%thread_x_sticks(mythread+1, tfft%which),-1,scal,.FALSE.,mythread,parai%ncpus_FFT)
+  
+        !-------------x-FFT End--------------------------------
         !------------------------------------------------------
   
       END SUBROUTINE Second_Part_x_section
   
-  END SUBROUTINE fwfft_x_section
+  END SUBROUTINE invfft_x_section
   
-  SUBROUTINE fwfft_y_section( tfft, aux, comm_mem_send, comm_mem_recv, map_pcfw, batch_size, ispec, counter, remswitch, mythread, my_nr1s, nss )
+  SUBROUTINE fwfft_x_section( tfft, aux, mythread )
     IMPLICIT NONE
   
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: tfft
-    INTEGER, INTENT(IN) :: counter, batch_size, remswitch, mythread, my_nr1s, ispec
+    INTEGER, INTENT(IN) :: mythread
+    COMPLEX(real_8), INTENT(INOUT) :: aux( tfft%nr1 , * )
+  
+    CHARACTER(*), PARAMETER :: procedureN = 'fwfft_x_section'
+
+  !------------------------------------------------------
+  !------------x-FFT Start-------------------------------
+
+    CALL mltfft_fftw_t('n','n',aux( : , tfft%thread_x_start( mythread+1, tfft%which ) : tfft%thread_x_end( mythread+1, tfft%which ) ), &
+                     tfft%nr1, tfft%thread_x_sticks(mythread+1, tfft%which), &
+                     aux( : , tfft%thread_x_start( mythread+1,  tfft%which ) : tfft%thread_x_end( mythread+1, tfft%which ) ), &
+                     tfft%nr1, tfft%thread_x_sticks(mythread+1, tfft%which), &
+                     tfft%nr1, tfft%thread_x_sticks(mythread+1, tfft%which),1,scal,.FALSE.,mythread,parai%ncpus_FFT)
+ 
+  !-------------x-FFT End--------------------------------
+  !------------------------------------------------------
+  
+  END SUBROUTINE fwfft_x_section
+  
+  SUBROUTINE fwfft_y_section( tfft, aux, aux2_r, comm_mem_send, comm_mem_recv, map_pcfw, batch_size, ispec, counter, mythread )
+    IMPLICIT NONE
+  
+    TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: tfft
+    INTEGER, INTENT(IN) :: counter, batch_size, mythread, ispec
     COMPLEX(real_8), INTENT(INOUT)  :: comm_mem_send( * )
     COMPLEX(real_8), INTENT(INOUT)  :: comm_mem_recv( * )
-    COMPLEX(real_8), INTENT(INOUT) :: aux( : , : )
-    INTEGER, INTENT(IN) :: map_pcfw( * ), nss( * )
+    COMPLEX(real_8), INTENT(INOUT) :: aux( * )
+    COMPLEX(real_8), INTENT(INOUT) :: aux2_r( : )
+    INTEGER, INTENT(IN) :: map_pcfw( * )
   
     INTEGER :: l, m, i, offset, j, k, ibatch, jter, offset2
     CHARACTER(*), PARAMETER :: procedureN = 'fwfft_y_section'
   
-    Call First_Part_y_section( aux )
+    Call First_Part_y_section( aux2_r )
+
+    Call Second_Part_y_section( aux2_r )
 
     !$  locks_omp_big( mythread+1, ispec, counter, 3 ) = .false.
     !$omp flush( locks_omp_big )
@@ -1510,105 +1352,59 @@ END IF
     !$omp flush( locks_omp_big )
     !$  END DO
    
-    Call Second_Part_y_section( aux )
+    Call Third_Part_y_section( aux2_r )
   
     CONTAINS
   
       SUBROUTINE First_Part_y_section( aux2 )
-        
         Implicit NONE
-        COMPLEX(real_8), INTENT(INOUT) :: aux2( tfft%nr2 , * )
+        COMPLEX(real_8), INTENT(INOUT) :: aux2( * )
+
+        !------------------------------------------------------
+        !------Forward xy-scatter Start------------------------
+
+          DO i = tfft%thread_y_start( mythread+1, tfft%which ), tfft%thread_y_end( mythread+1, tfft%which )
+             DO j = 1, tfft%nr2
+                aux2( j + (i-1) * tfft%nr2 ) = aux( tfft%map_scatter_fw( j + (i-1) * tfft%nr2, tfft%which ) )
+             ENDDO
+          ENDDO
+
+        !-------Forward xy-scatter End-------------------------
+        !------------------------------------------------------
+      END SUBROUTINE First_Part_y_section
+
+      SUBROUTINE Second_Part_y_section( aux2 )
+        Implicit NONE
+        COMPLEX(real_8), INTENT(INOUT) :: aux2( tfft%nr2, * )
   
         !------------------------------------------------------
         !------------y-FFT Start-------------------------------
   
-IF( tfft%which .eq. 2 ) THEN
-  
-          CALL mltfft_fftw_t('n','n',aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
-                           aux2( : , tfft%thread_y_start( mythread+1, remswitch, tfft%which ) : tfft%thread_y_end( mythread+1, remswitch, tfft%which ) ), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,remswitch,tfft%which),1,scal,.FALSE.,mythread,parai%ncpus_FFT)
+          CALL mltfft_fftw_t('n','n',aux2( : , tfft%thread_y_start( mythread+1, tfft%which ) : tfft%thread_y_end( mythread+1, tfft%which ) ), &
+                           tfft%nr2, tfft%thread_y_sticks(mythread+1,tfft%which), &
+                           aux2( : , tfft%thread_y_start( mythread+1, tfft%which ) : tfft%thread_y_end( mythread+1, tfft%which ) ), &
+                           tfft%nr2, tfft%thread_y_sticks(mythread+1,tfft%which), &
+                           tfft%nr2, tfft%thread_y_sticks(mythread+1,tfft%which),1,scal,.FALSE.,mythread,parai%ncpus_FFT)
 
-ELSE
-
-          CALL mltfft_fftw_t('n','n',aux2( : , tfft%thread_y_start( mythread+1, 1, 3 ) : tfft%thread_y_end( mythread+1, 1, 3 ) ), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,1,3), &
-                           aux2( : , tfft%thread_y_start( mythread+1,1,3 ) : tfft%thread_y_end( mythread+1, 1, 3 ) ), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,1,3), &
-                           tfft%nr2, tfft%thread_y_sticks(mythread+1,1,3),1,scal,.FALSE.,mythread,parai%ncpus_FFT)
-
-END IF
-        
         !-------------y-FFT End--------------------------------
         !------------------------------------------------------
   
-      END SUBROUTINE First_Part_y_section
+      END SUBROUTINE Second_Part_y_section
   
-      SUBROUTINE Second_Part_y_section( aux2 )
+      SUBROUTINE Third_Part_y_section( aux2 )
   
         IMPLICIT NONE
-        COMPLEX(real_8), INTENT(INOUT) :: aux2  ( my_nr1s * tfft%my_nr3p * tfft%nr2, * )
+        COMPLEX(real_8), INTENT(INOUT) :: aux2  ( * )
   
         !------------------------------------------------------
         !---------Pre-Com-Copy Start---------------------------
 
-IF( tfft%which .eq. 2 ) THEN
-        
-          IF( parai%nnode .ne. 1 ) THEN
-        
-             !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 1 ), ierr )
-        
-             i = 0
-             DO l = 1, parai%nnode
-                IF( l .eq. parai%my_node+1 ) THEN 
-                   i = i + parai%node_nproc_overview( l )
-                   CYCLE
-                END IF
-                DO m = 1, parai%node_nproc_overview( l )
-                   i = i + 1
-                   offset = ( parai%node_me + ((l-1)*parai%max_node_nproc+(m-1))*parai%max_node_nproc ) * tfft%small_chunks(tfft%which) + (l-1)*(batch_size-1) * tfft%big_chunks(tfft%which)
-                   DO j = tfft%thread_z_start( mythread+1, remswitch, i, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, i, tfft%which )
-                      jter = mod( j-1, nss( i ) ) 
-                      ibatch = ( (j-1) / nss( i ) )
-                      offset2 =  ibatch * tfft%big_chunks(tfft%which)
-                      DO k = 1, tfft%my_nr3p
-                         comm_mem_send( offset + offset2 + jter*tfft%nr3px + k ) = &
-                         aux2( map_pcfw( (i-1)*tfft%small_chunks(tfft%which) + jter*tfft%nr3px + k ), ibatch+1 )
-                      END DO
-                   END DO
-                END DO
-             END DO
-        
-             !CALL mpi_win_unlock_all( tfft%mpi_window( 1 ), ierr )
-        
-          END IF
-        
-          !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
-        
-          DO m = 1, parai%node_nproc
-             offset = ( parai%node_me + (parai%my_node*parai%max_node_nproc+(m-1))*parai%max_node_nproc ) * tfft%small_chunks(tfft%which) + parai%my_node*(batch_size-1) * tfft%big_chunks(tfft%which)
-             DO j = tfft%thread_z_start( mythread+1, remswitch, parai%node_grpindx(m)+1, tfft%which ), tfft%thread_z_end( mythread+1, remswitch, parai%node_grpindx(m)+1, tfft%which )
-                jter = mod( j-1, nss( parai%node_grpindx(m)+1 ) ) 
-                ibatch = ( (j-1) / nss( parai%node_grpindx(m)+1 ) )
-                offset2 =  ibatch * tfft%big_chunks(tfft%which)
-                DO k = 1, tfft%my_nr3p
-                   comm_mem_recv( offset + offset2 + jter*tfft%nr3px + k ) = &
-                   aux2( map_pcfw( parai%node_grpindx(m)*tfft%small_chunks(tfft%which) + jter*tfft%nr3px + k ), ibatch+1 )
-                END DO
-             END DO
-          END DO
-        
-          !CALL mpi_win_unlock_all( tfft%mpi_window( 2 ), ierr )
-
-ELSE
-
           offset2 =  (ispec-1) * tfft%big_chunks(tfft%which)
-
+        
           IF( parai%nnode .ne. 1 ) THEN
         
              !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 1 ), ierr )
-
+        
              i = 0
              DO l = 1, parai%nnode
                 IF( l .eq. parai%my_node+1 ) THEN 
@@ -1618,10 +1414,10 @@ ELSE
                 DO m = 1, parai%node_nproc_overview( l )
                    i = i + 1
                    offset = ( parai%node_me + ((l-1)*parai%max_node_nproc+(m-1))*parai%max_node_nproc ) * tfft%small_chunks(tfft%which) + (l-1)*(batch_size-1) * tfft%big_chunks(tfft%which)
-                   DO j = tfft%thread_z_start( mythread+1, 1, i, 3 ), tfft%thread_z_end( mythread+1, 1, i, 3 )
+                   DO j = tfft%thread_z_start( mythread+1, 3, i, tfft%which ), tfft%thread_z_end( mythread+1, 3, i, tfft%which )
                       DO k = 1, tfft%my_nr3p
                          comm_mem_send( offset + offset2 + (j-1)*tfft%nr3px + k ) = &
-                         aux2( map_pcfw( (i-1)*tfft%small_chunks(tfft%which) + (j-1)*tfft%nr3px + k ), 1 )
+                         aux2( map_pcfw( (i-1)*tfft%small_chunks(tfft%which) + (j-1)*tfft%nr3px + k ) )
                       END DO
                    END DO
                 END DO
@@ -1630,27 +1426,35 @@ ELSE
              !CALL mpi_win_unlock_all( tfft%mpi_window( 1 ), ierr )
         
           END IF
+
+          IF( tfft%which .eq. 1 ) THEN
+
+             !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
+             !$omp flush( locks_calc_2 )
+             !$  DO WHILE( ANY(locks_calc_2(:,1+(counter-1)*fft_batchsize:ispec+(counter-1)*fft_batchsize ) ) )
+             !$omp flush( locks_calc_2 )
+             !$  END DO
+
+          END IF
         
           !CALL mpi_win_lock_all( MPI_MODE_NOCHECK, tfft%mpi_window( 2 ), ierr )
         
           DO m = 1, parai%node_nproc
              offset = ( parai%node_me + (parai%my_node*parai%max_node_nproc+(m-1))*parai%max_node_nproc ) * tfft%small_chunks(tfft%which) + parai%my_node*(batch_size-1) * tfft%big_chunks(tfft%which)
-             DO j = tfft%thread_z_start( mythread+1, 1, parai%node_grpindx(m)+1, 3 ), tfft%thread_z_end( mythread+1, 1, parai%node_grpindx(m)+1, 3 )
+             DO j = tfft%thread_z_start( mythread+1, 3, parai%node_grpindx(m)+1, tfft%which ), tfft%thread_z_end( mythread+1, 3, parai%node_grpindx(m)+1, tfft%which )
                 DO k = 1, tfft%my_nr3p
                    comm_mem_recv( offset + offset2 + (j-1)*tfft%nr3px + k ) = &
-                   aux2( map_pcfw( parai%node_grpindx(m)*tfft%small_chunks(tfft%which) + (j-1)*tfft%nr3px + k ), 1 )
+                   aux2( map_pcfw( parai%node_grpindx(m)*tfft%small_chunks(tfft%which) + (j-1)*tfft%nr3px + k ) )
                 END DO
              END DO
           END DO
         
           !CALL mpi_win_unlock_all( tfft%mpi_window( 2 ), ierr )
-
-END IF
         
         !----------Pre-Com-Copy End----------------------------
         !------------------------------------------------------
   
-      END SUBROUTINE Second_Part_y_section
+      END SUBROUTINE Third_Part_y_section
         
   END SUBROUTINE fwfft_y_section
   
@@ -1708,12 +1512,6 @@ END IF
   
   !-------------z-FFT End--------------------------------
   !------------------------------------------------------
-  
-          !$  locks_omp( mythread+1, counter, 11 ) = .false.
-          !$omp flush( locks_omp )
-          !$  DO WHILE( ANY( locks_omp( :, counter, 11 ) ) )
-          !$omp flush( locks_omp )
-          !$  END DO
   
   END SUBROUTINE fwfft_z_section
 !CR

@@ -926,24 +926,19 @@ CONTAINS
         INTEGER, INTENT(OUT) :: map_scatter_inv(:), map_scatter_fw(:)
         INTEGER, INTENT(OUT) :: zero_scatter_start, zero_scatter_end
       
-        INTEGER :: ncpx, sendsize, it, m3, i1, m1, icompact, iproc2, i, j, l
+        INTEGER :: sendsize, dest, i, j, l
         LOGICAL :: first
-      
-        ncpx = nr1s * tfft%my_nr3p       ! maximum number of Y columns to be disributed
-        sendsize = ncpx * tfft%nr2       ! dimension of the scattered chunks (safe value)
+
+        sendsize = nr1s * tfft%my_nr3p * tfft%nr2       ! dimension of the scattered chunks (safe value)
       
         map_scatter_inv = 0
       
-        !$omp parallel do private(it,m3,i1,m1,icompact)
-        DO i = 0, ncpx-1
-           it = tfft%nr2 * i
-           m3 = i/nr1s+1
-           i1 = mod(i,nr1s)+1
-           m1 = inds(i1)
-           icompact = m1 + (m3-1)*tfft%nr1*tfft%nr2
+        !$omp parallel do private( dest )
+        DO i = 1, nr1s * tfft%my_nr3p
+           dest = inds(mod((i-1),nr1s)+1) + ((i-1)/nr1s)*tfft%nr1*tfft%nr2
            DO j = 1, tfft%nr2
-              map_scatter_inv( icompact ) = j + it
-              icompact = icompact + tfft%nr1
+              map_scatter_inv( dest ) = j + tfft%nr2 * (i-1)
+              dest = dest + tfft%nr1
            ENDDO
         ENDDO
         !$omp end parallel do
@@ -966,16 +961,12 @@ CONTAINS
         
         end do
       
-        !$omp parallel do private(it,m3,i1,m1,icompact)
-        DO i = 0, ncpx-1
-           it = tfft%nr2 * i
-           m3 = i/nr1s+1
-           i1 = mod(i,nr1s)+1
-           m1 = inds(i1)
-           icompact = m1 + (m3-1)*tfft%nr1*tfft%nr2
+        !$omp parallel do private( dest )
+        DO i = 1, nr1s * tfft%my_nr3p
+           dest = inds(mod((i-1),nr1s)+1) + ((i-1)/nr1s)*tfft%nr1*tfft%nr2
            DO j = 1, tfft%nr2
-              map_scatter_fw( j + it ) = icompact 
-              icompact = icompact + tfft%nr1
+              map_scatter_fw( j + tfft%nr2 * (i-1) ) = dest
+              dest = dest + tfft%nr1
            ENDDO
         ENDDO
         !$omp end parallel do
@@ -989,20 +980,19 @@ CONTAINS
         INTEGER, INTENT(IN)  :: ir1s(:), nss(:)
         INTEGER, INTENT(OUT) :: map_pcfw(:)
       
-        INTEGER :: iproc, i, k, it, mc, m1, m2, i1
+        INTEGER :: j, i, k, m, m1, m2, pos
       
         map_pcfw = 0
       
-        DO iproc = 1, parai%nproc
-           DO i = 1, nss( iproc )
-              it = ( iproc - 1 ) * small_chunks + tfft%nr3px * (i-1)
-              mc = tfft%ismap( i + tfft%iss( iproc ) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
-              m1 = mod(mc-1,tfft%nr1) + 1
-              m2 = (mc-1)/tfft%nr1 + 1
-              i1 = m2 + ( ir1s( m1 ) - 1 ) * tfft%nr2
+        DO j = 1, parai%nproc
+           DO i = 1, nss( j )
+              m = tfft%ismap( i + tfft%iss( j ) )       !number of current pencil
+              m1 = mod(m-1,tfft%nr1) + 1                !coordinate of pencil
+              m2 = (m-1)/tfft%nr1 + 1                   !other coordinate of pencil
+              pos = m2 + ( ir1s( m1 ) - 1 ) * tfft%nr2
               DO k = 1, tfft%my_nr3p
-                 map_pcfw( k + it ) = i1
-                 i1 = i1 + tfft%nr2 * my_nr1s
+                 map_pcfw( k + (j-1) * small_chunks + tfft%nr3px * (i-1) ) = pos
+                 pos = pos + tfft%nr2 * my_nr1s
               ENDDO
            ENDDO
         ENDDO

@@ -20,7 +20,8 @@ MODULE fftnew_utils
        lrxpl, lrxpool, lsrm, mfrays, mg, msp, msqf, msqfpool, msqs, msqspool, &
        msrays, mz, ngrm, nhrm, nr1m, nzff, nzffp, nzfs, nzfsp, qr1, qr1s, &
        qr2, qr2max, qr2min, qr2s, qr3, qr3max, qr3min, qr3s, sp5, sp8, sp9, &
-       spm, FFT_TYPE_DESCRIPTOR
+       spm, FFT_TYPE_DESCRIPTOR, fft_batchsize, fft_residual, fft_numbatches, &
+       fft_numbuff
   USE fft_maxfft,                      ONLY: maxfft,&
                                              maxfftn
   USE fftchk_utils,                    ONLY: fftchk
@@ -28,6 +29,7 @@ MODULE fftnew_utils
   USE loadpa_utils,                    ONLY: leadim
   USE mp_interface,                    ONLY: mp_bcast,&
                                              mp_sum,&
+                                             mp_win_alloc_shared_mem,&
                                              mp_send_init_COMPLEX,&
                                              mp_recv_init_COMPLEX
   USE parac,                           ONLY: parai,&
@@ -42,6 +44,8 @@ MODULE fftnew_utils
   USE utils,                           ONLY: icopy
   USE zeroing_utils,                   ONLY: zeroing
 
+  USE iso_c_binding
+
   IMPLICIT NONE
 
   PRIVATE
@@ -50,9 +54,36 @@ MODULE fftnew_utils
   !public :: rmfftnset
   PUBLIC :: addfftnset
   !public :: setrays
+  PUBLIC :: Pre_fft_setup
   PUBLIC :: Prep_fft_com
   PUBLIC :: Make_Manual_Maps
   PUBLIC :: Make_inv_yzCOM_Maps
+
+  COMPLEX(real_8), POINTER, SAVE, CONTIGUOUS :: comm_send(:,:)
+  PUBLIC :: comm_send
+  COMPLEX(real_8), POINTER, SAVE, CONTIGUOUS :: comm_recv(:,:)
+  PUBLIC :: comm_recv
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_inv(:,:)
+  PUBLIC :: locks_calc_inv
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_inv(:,:)
+  PUBLIC :: locks_com_inv
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_fw(:,:)
+  PUBLIC :: locks_calc_fw
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_com_fw(:,:)
+  PUBLIC :: locks_com_fw
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_sing_1(:,:)
+  PUBLIC :: locks_sing_1
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_sing_2(:,:)
+  PUBLIC :: locks_sing_2
+  LOGICAL, ALLOCATABLE, SAVE :: locks_omp(:,:,:)
+  PUBLIC :: locks_omp
+  LOGICAL, ALLOCATABLE, SAVE :: locks_omp_big(:,:,:,:)
+  PUBLIC :: locks_omp_big
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_1(:,:)
+  PUBLIC :: locks_calc_1
+  LOGICAL, POINTER, SAVE, CONTIGUOUS :: locks_calc_2(:,:)
+  PUBLIC :: locks_calc_2
+
 
 CONTAINS
 
@@ -630,6 +661,277 @@ CONTAINS
     ! ==--------------------------------------------------------------==
   END SUBROUTINE setrays
   ! ==================================================================
+  SUBROUTINE Pre_fft_setup( tfft, nstate, sendsize, sendsize_rem, spin )
+    IMPLICIT NONE
+  
+    TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: tfft
+    INTEGER, INTENT(IN)  :: nstate
+    INTEGER, INTENT(OUT) :: sendsize, sendsize_rem
+    INTEGER, ALLOCATABLE, INTENT(INOUT) :: spin(:)
+
+    INTEGER :: ierr, Com_in_locks, sendsize_pot, irun, i, j
+    INTEGER, SAVE :: remember_batch = 0
+    LOGICAL, SAVE :: first, DEBUG_shared_mem = .false.
+    TYPE(C_PTR) :: baseptr( 0:parai%node_nproc-1 )
+    INTEGER :: arrayshape(3,4), needed_size(4)
+    CHARACTER(*), PARAMETER                  :: procedureN = 'Pre_fft_setup'
+    COMPLEX(real_8), SAVE, POINTER, CONTIGUOUS   :: Big_Com_Pointer(:,:,:)
+    LOGICAL,         SAVE, POINTER, CONTIGUOUS   :: Big_1Log_Pointer(:,:,:)
+    LOGICAL,         SAVE, POINTER, CONTIGUOUS   :: Big_2Log_Pointer(:,:,:)
+    LOGICAL,         SAVE, POINTER, CONTIGUOUS   :: Big_3Log_Pointer(:,:,:)
+    LOGICAL :: war(4)
+
+    fft_numbuff = 3
+    IF( cntl%krwfn ) fft_numbuff = 2
+    IF( .not. ( cntl%overlapp_comm_comp .and. fft_numbatches .gt. 1 ) ) fft_numbuff = 1
+
+    IF( remember_batch .ne. fft_batchsize ) THEN
+
+       remember_batch = fft_batchsize
+     
+       IF( ALLOCATED( tfft%map_acinv_wave ) )        DEALLOCATE( tfft%map_acinv_wave )
+       ALLOCATE( tfft%map_acinv_wave( tfft%my_nr3p * tfft%nr1w * tfft%nr2 * fft_batchsize ) )
+       CALL Make_inv_yzCOM_Maps( tfft, tfft%map_acinv_wave, fft_batchsize, tfft%ir1w, tfft%nsw, tfft%nr1w, tfft%small_chunks(1), tfft%big_chunks(1), tfft%zero_acinv_start(:,1), tfft%zero_acinv_end(:,1) ) 
+       
+       IF( ALLOCATED( tfft%map_acinv_wave_rem ) )    DEALLOCATE( tfft%map_acinv_wave_rem )
+       IF( fft_residual .ne. 0 ) THEN
+          ALLOCATE( tfft%map_acinv_wave_rem( tfft%my_nr3p * tfft%nr1w * tfft%nr2 * fft_residual ) )
+          CALL Make_inv_yzCOM_Maps( tfft, tfft%map_acinv_wave_rem, fft_residual, tfft%ir1w, tfft%nsw, tfft%nr1w, tfft%small_chunks(1), tfft%big_chunks(1) )
+       ELSE
+          ALLOCATE( tfft%map_acinv_wave_rem( 1 ) )
+       END IF   
+       
+       sendsize     = MAXVAL( tfft%nr3p ) * MAXVAL ( tfft%nsw ) * parai%max_node_nproc * parai%max_node_nproc * fft_batchsize
+       sendsize_rem = MAXVAL( tfft%nr3p ) * MAXVAL ( tfft%nsw ) * parai%max_node_nproc * parai%max_node_nproc * fft_residual
+       sendsize_pot = MAXVAL( tfft%nr3p ) * MAXVAL(  tfft%nsp ) * parai%max_node_nproc * parai%max_node_nproc
+
+       !IF( parai%me .eq. 0 ) WRITE(6,'(A15,2X,I10,4X,A10,2X,I4,4X,A16,2X,I10)') "SINGLE SENDSIZE", sendsize/fft_batchsize, "BATCHSIZE", fft_batchsize, "BATCHED SENDSIZE", sendsize
+       
+       DO irun = 1, 2
+
+          IF( irun .eq. 2 ) CALL mp_win_alloc_shared_mem( 'c', needed_size(4), 1, baseptr, parai%node_nproc, parai%node_me, parai%node_grp )
+
+
+          arrayshape(1,1) = MAX( sendsize*parai%nnode, sendsize_pot*parai%nnode )
+          arrayshape(2,1) = fft_numbuff
+          arrayshape(3,1) = 2
+          needed_size(1) = MAX( arrayshape(1,1) * arrayshape(2,1) * arrayshape(3,1), sendsize_pot*parai%nnode * 2 )
+          IF( irun .eq. 2 ) THEN
+             CALL C_F_POINTER( baseptr(0), Big_Com_Pointer, arrayshape(:,1) )
+             comm_send => Big_Com_Pointer(:,:,1) 
+             comm_recv => Big_Com_Pointer(:,:,2) 
+    
+             CALL Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, parai%nnode, parai%me, parai%my_node, parai%node_me, &
+                                parai%node_nproc, parai%max_node_nproc, parai%cp_overview, fft_numbuff, tfft%comm_sendrecv(:,1), tfft%do_comm(1), 1 )
+             CALL Prep_fft_com( comm_send, comm_recv, sendsize_pot, 0, parai%nnode, parai%me, parai%my_node, parai%node_me, &
+                                parai%node_nproc, parai%max_node_nproc, parai%cp_overview, 1, tfft%comm_sendrecv(:,2), tfft%do_comm(2), 2 )
+          END IF
+
+          Com_in_locks = ( needed_size(1) / REAL( ( parai%node_nproc * ( ( nstate / fft_batchsize ) + 1 ) ) / 4.0 ) ) + 1
+          arrayshape(1,2) = parai%node_nproc
+          arrayshape(2,2) = ( nstate / fft_batchsize ) + 1
+          arrayshape(3,2) = Com_in_locks + 4
+          needed_size(2) = ( arrayshape(1,2) * arrayshape(2,2) * arrayshape(3,2) / 4 ) + 1
+          IF( irun .eq. 2. ) THEN
+             CALL C_F_POINTER( baseptr(0), Big_1Log_Pointer, arrayshape(:,2) )
+             locks_calc_inv => Big_1Log_Pointer(:,:,Com_in_locks+1)
+             locks_calc_fw  => Big_1Log_Pointer(:,:,Com_in_locks+2)
+             locks_com_inv  => Big_1Log_Pointer(:,:,Com_in_locks+3)
+             locks_com_fw   => Big_1Log_Pointer(:,:,Com_in_locks+4)
+          END IF
+
+          Com_in_locks = ( needed_size(2) / REAL( ( parai%node_nproc * ( nstate + fft_batchsize + (fft_numbuff-1)*fft_batchsize ) ) / 4.0 ) ) + 1
+          arrayshape(1,3) = parai%node_nproc
+          arrayshape(2,3) = nstate + fft_batchsize + (fft_numbuff-1)*fft_batchsize
+          arrayshape(3,3) = Com_in_locks + 2
+          needed_size(3) = ( arrayshape(1,3) * arrayshape(2,3) * arrayshape(3,3) / 4 ) + 1
+          IF( irun .eq. 2 ) THEN
+             CALL C_F_POINTER( baseptr(0), Big_2Log_Pointer, arrayshape(:,3) )
+             locks_calc_1   => Big_2Log_Pointer(:,:,Com_in_locks+1)
+             locks_calc_2   => Big_2Log_Pointer(:,:,Com_in_locks+2)
+          END IF 
+   
+          Com_in_locks = ( needed_size(3) / REAL( ( parai%node_nproc * ( fft_numbatches + 3 ) ) / 4.0 ) ) + 1
+          arrayshape(1,4) = parai%node_nproc
+          arrayshape(2,4) = fft_numbatches + 4
+          arrayshape(3,4) = Com_in_locks + 2
+          needed_size(4) = ( arrayshape(1,4) * arrayshape(2,4) * arrayshape(3,4) / 4 ) + 1
+          IF( irun .eq. 2 ) THEN
+             CALL C_F_POINTER( baseptr(0), Big_3Log_Pointer, arrayshape(:,4) )
+             locks_sing_1   => Big_3Log_Pointer(:,:,Com_in_locks+1)
+             locks_sing_2   => Big_3Log_Pointer(:,:,Com_in_locks+2)
+          END IF
+
+       ENDDO
+     
+       IF( allocated( locks_omp ) ) DEALLOCATE( locks_omp )
+       ALLOCATE( locks_omp( parai%ncpus_FFT, fft_numbatches+3, 20 ) )
+
+       IF( allocated( locks_omp_big ) ) DEALLOCATE( locks_omp_big )
+       ALLOCATE( locks_omp_big( parai%ncpus_FFT, fft_batchsize, fft_numbatches+3, 20 ) )
+     
+       CALL Make_Manual_Maps( tfft, fft_batchsize, fft_residual, tfft%nsw, tfft%nr1w, tfft%ngw, tfft%which, nstate ) 
+
+       first = .true.
+
+       IF( DEBUG_shared_mem ) THEN
+
+          IF( parai%me .eq. 0 ) THEN
+
+             write(6,*) "*********************************************"
+             write(6,*) "DEBUG SHARED MEMORY OUTPUT"
+             write(6,*) "---------------------------------------------"
+             write(6,*) "COM_SEND / COM_RECV"
+             write(6,'(A7,23X,I16)') "DIM 1: ", arrayshape(1,1)
+             write(6,'(A7,23X,I16)') "DIM 2: ", arrayshape(2,1)
+             write(6,'(A7,23X,I16)') "DIM 3: ", arrayshape(3,1)
+             write(6,'(A18,12X,I16)') "WAVE SIZE NEEDED: ", arrayshape(1,1) * arrayshape(2,1) * arrayshape(3,1)
+             write(6,'(A23,7X,I16)') "POTENTIAL SIZE NEEDED: ", sendsize_pot*parai%nnode * 2
+             write(6,'(A15,15X,I16)') "SIZE RESERVED: ", needed_size(1)
+             write(6,*) "---------------------------------------------"
+             write(6,*) "CALC / COM LOCKS"
+             write(6,'(A7,23X,I16)') "DIM 1: ", arrayshape(1,2)
+             write(6,'(A7,23X,I16)') "DIM 2: ", arrayshape(2,2)
+             write(6,'(A7,23X,15X,A1)') "DIM 3: ", "4"
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN LOGICAL): ", arrayshape(1,2) * arrayshape(2,2) * 4
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN COMPLEX): ", arrayshape(1,2) * arrayshape(2,2)
+             write(6,'(A26,4X,I16)') "PREVIOUS RESERVATION END: ", needed_size(1)
+             write(6,'(A24,6X,I16)') "THIS RESERVATION START: ", ( ( arrayshape(3,2) - 4 ) * arrayshape(1,2) * arrayshape(2,2) ) / 4
+             write(6,'(A22,8X,I16)') "THIS RESERVATION END: ", needed_size(2)
+             write(6,'(A16,14X,I16)') "SIZE DIFFERENZ: ", needed_size(2) - ( ( arrayshape(3,2) - 4 ) * arrayshape(1,2) * arrayshape(2,2) ) / 4
+             write(6,'(A15,15X,I16)') "SIZE RESERVED: ", needed_size(2) - needed_size(1)
+             write(6,*) "---------------------------------------------"
+             write(6,*) "CALC ONLY LOCKS"
+             write(6,'(A7,23X,I16)') "DIM 1: ", arrayshape(1,3)
+             write(6,'(A7,23X,I16)') "DIM 2: ", arrayshape(2,3)
+             write(6,'(A7,23X,15X,A1)') "DIM 3: ", "2"
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN LOGICAL): ", arrayshape(1,3) * arrayshape(2,3) * 2
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN COMPLEX): ", ( arrayshape(1,3) * arrayshape(2,3) ) / 2
+             write(6,'(A26,4X,I16)') "PREVIOUS RESERVATION END: ", needed_size(2)
+             write(6,'(A24,6X,I16)') "THIS RESERVATION START: ", ( ( arrayshape(3,3) - 2 ) * arrayshape(1,3) * arrayshape(2,3) ) / 4
+             write(6,'(A22,8X,I16)') "THIS RESERVATION END: ", needed_size(3)
+             write(6,'(A16,14X,I16)') "SIZE DIFFERENZ: ", needed_size(3) - ( ( arrayshape(3,3) - 2 ) * arrayshape(1,3) * arrayshape(2,3) ) / 4
+             write(6,'(A15,15X,I16)') "SIZE RESERVED: ", needed_size(3) - needed_size(2)
+             write(6,*) "---------------------------------------------"
+             write(6,*) "SINGLE LOCKS"
+             write(6,'(A7,23X,I16)') "DIM 1: ", arrayshape(1,4)
+             write(6,'(A7,23X,I16)') "DIM 2: ", arrayshape(2,4)
+             write(6,'(A7,23X,15X,A1)') "DIM 3: ", "2"
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN LOGICAL): ", arrayshape(1,4) * arrayshape(2,4) * 2
+             write(6,'(A26,4X,I16)') "SIZE NEEDED (IN COMPLEX): ", ( arrayshape(1,4) * arrayshape(2,4) ) / 2
+             write(6,'(A26,4X,I16)') "PREVIOUS RESERVATION END: ", needed_size(3)
+             write(6,'(A24,6X,I16)') "THIS RESERVATION START: ", ( ( arrayshape(3,4) - 2 ) * arrayshape(1,4) * arrayshape(2,4) ) / 4
+             write(6,'(A22,8X,I16)') "THIS RESERVATION END: ", needed_size(4)
+             write(6,'(A16,14X,I16)') "SIZE DIFFERENZ: ", needed_size(4) - ( ( arrayshape(3,4) - 2 ) * arrayshape(1,4) * arrayshape(2,4) ) / 4
+             write(6,'(A15,15X,I16)') "SIZE RESERVED: ", needed_size(4) - needed_size(3)
+             write(6,*) "---------------------------------------------"
+
+             war = .false.
+
+             DO i = 1, arrayshape(1,1)
+                DO j = 1, arrayshape(2,1)
+                   comm_send(i,j) = (1,1)
+                   comm_recv(i,j) = (1,1)
+                ENDDO
+             ENDDO
+             locks_sing_1 = .true.
+             locks_sing_2 = .true.
+             locks_calc_inv = .true.
+             locks_calc_fw  = .true.
+             locks_com_inv  = .true.
+             locks_com_fw   = .true.
+             locks_calc_1 = .true.
+             locks_calc_2 = .true.
+             DO i = 1, arrayshape(1,1)
+                DO j = 1, arrayshape(2,1)
+                   IF( REAL(comm_send(i,j)) .lt. 0.9 ) war(1) = .true.
+                   IF( REAL(comm_recv(i,j)) .lt. 0.9 ) war(1) = .true.
+                ENDDO
+             ENDDO
+
+             locks_calc_inv = .false.
+             locks_calc_fw  = .false.
+             locks_com_inv  = .false.
+             locks_com_fw   = .false.
+             comm_send = (1,1)
+             comm_recv = (1,1)
+             locks_calc_1 = .true.
+             locks_calc_2 = .true.
+             locks_sing_1 = .true.
+             locks_sing_2 = .true.
+             DO i = 1, arrayshape(1,2)
+                DO j = 1, arrayshape(2,2)
+                   IF( locks_calc_inv(i,j) ) war(2) = .true.
+                   IF( locks_calc_fw(i,j)  ) war(2) = .true.
+                   IF( locks_com_inv(i,j)  ) war(2) = .true.
+                   IF( locks_com_fw(i,j)   ) war(2) = .true.
+                ENDDO
+             ENDDO
+
+             locks_calc_1 = .false.
+             locks_calc_2 = .false.
+             locks_calc_inv = .true.
+             locks_calc_fw  = .true.
+             locks_com_inv  = .true.
+             locks_com_fw   = .true.
+             comm_send = (1,1)
+             comm_recv = (1,1)
+             locks_sing_1 = .true.
+             locks_sing_2 = .true.
+             DO i = 1, arrayshape(1,3)
+                DO j = 1, arrayshape(2,3)
+                   IF( locks_calc_1(i,j) ) war(3) = .true.
+                   IF( locks_calc_2(i,j) ) war(3) = .true.
+                ENDDO
+             ENDDO
+
+             locks_sing_1 = .false.
+             locks_sing_2 = .false.
+             locks_calc_inv = .true.
+             locks_calc_fw  = .true.
+             locks_com_inv  = .true.
+             locks_com_fw   = .true.
+             comm_send = (1,1)
+             comm_recv = (1,1)
+             locks_calc_1 = .true.
+             locks_calc_2 = .true.
+             DO i = 1, arrayshape(1,4)
+                DO j = 1, arrayshape(2,4)
+                   IF( locks_sing_1(i,j) ) war(4) = .true.
+                   IF( locks_sing_2(i,j) ) war(4) = .true.
+                ENDDO
+             ENDDO
+
+             IF( ANY(war) ) THEN
+                write(6,*) "OVERLAPP CHECKS FAILED"
+                IF( war(1) ) write(6,*) "COM_SEND / COM_RECV"
+                IF( war(2) ) write(6,*) "CALC / COM LOCKS"
+                IF( war(3) ) write(6,*) "CALC ONLY LOCKS"
+                IF( war(4) ) write(6,*) "SINGLE LOCKS"
+             ELSE
+                write(6,*) "OVERLAPP CHECKS PASSED"
+             END IF
+             write(6,*) "*********************************************"
+        
+          END IF  
+        
+          CALL MPI_BARRIER(parai%allgrp, ierr)
+
+       END IF
+
+    END IF
+
+    IF( first .or. .not. allocated( spin ) ) THEN
+       IF( allocated( spin ) ) DEALLOCATE( spin )
+       ALLOCATE( spin( 2 ), STAT=ierr )
+       IF(ierr/=0) CALL stopgm(procedureN,'allocation problem', &
+            __LINE__,__FILE__)
+       first = .false.
+    END IF
+
+
+  END SUBROUTINE Pre_fft_setup
+
   SUBROUTINE Prep_fft_com( comm_send, comm_recv, sendsize, sendsize_rem, nodes_numb, mype, my_node, my_node_rank, node_task_size, &
                            max_node_task_size, cp_overview, buffer_size, comm_sendrecv, do_comm, WAVE )
     IMPLICIT NONE
@@ -721,24 +1023,11 @@ CONTAINS
        ENDDO s_l
   
     ENDDO
-  
-!    IF( WAVE .eq. 1 ) THEN
-!       IF( first ) THEN
-!          first = .false.
-!          DO j = 1, comm_sendrecv(1)
-!             CALL MPI_REQUEST_FREE( parai%send_handle( j , 1 , 1, 2 ) )
-!          ENDDO
-!          DO j = 1, comm_sendrecv(2)
-!             CALL MPI_REQUEST_FREE( parai%recv_handle( j , 1 , 1, 2 ) )
-!          ENDDO
-!       END IF
-!    END IF
     
+    !CLR: Do the requests have to be freed before deallocation? Currently not done!
     IF( ALLOCATED( parai%sendrecv_handle ) .and. WAVE .eq. 1 )       DEALLOCATE( parai%sendrecv_handle )
-!    IF( ALLOCATED( parai%recv_handle ) .and. WAVE .eq. 1 )       DEALLOCATE( parai%recv_handle )
    
     IF( .not. ALLOCATED(parai%sendrecv_handle) ) ALLOCATE( parai%sendrecv_handle( comm_sendrecv(1)+comm_sendrecv(2), buffer_size, 2, 2 ) )
-!    IF( .not. ALLOCATED(parai%recv_handle) ) ALLOCATE( parai%recv_handle( comm_sendrecv(2), buffer_size, 2, 2 ) )
     
     DO i = 1, buffer_size !INITIALIZE SENDING AND RECEIVING
   
@@ -852,28 +1141,24 @@ CONTAINS
   
     ENDDO
 
-    IF( tfft%which .eq. 1 ) THEN
+    DO j = 1, parai%nproc
     
-       DO j = 1, parai%nproc
-     
-          DO i = 1+overlap_cor, parai%ncpus_FFT
-             tfft%thread_z_sticks( i, 1, j, 3 ) = ( nss( j ) ) / eff_nthreads
-          ENDDO
-          DO i = 1+overlap_cor, mod( nss( j ), eff_nthreads ) + overlap_cor
-             tfft%thread_z_sticks( i, 1, j, 3 ) = tfft%thread_z_sticks( i, 1, j, 3 ) + 1
-          ENDDO
-         
-          tfft%thread_z_start( 1+overlap_cor, 1, j, 3 ) = 1
-          DO i = 2+overlap_cor, parai%ncpus_FFT
-             tfft%thread_z_start( i, 1, j, 3 ) = tfft%thread_z_start( i-1, 1, j, 3 ) + tfft%thread_z_sticks( i-1, 1, j, 3 )
-          ENDDO
-          DO i = 1+overlap_cor, parai%ncpus_FFT
-             tfft%thread_z_end( i, 1, j, 3 ) = tfft%thread_z_start( i, 1, j, 3 ) + tfft%thread_z_sticks( i, 1, j, 3 ) - 1
-          ENDDO
-   
+       DO i = 1+overlap_cor, parai%ncpus_FFT
+          tfft%thread_z_sticks( i, 3, j, which ) = ( nss( j ) ) / eff_nthreads
        ENDDO
-
-    END IF
+       DO i = 1+overlap_cor, mod( nss( j ), eff_nthreads ) + overlap_cor
+          tfft%thread_z_sticks( i, 3, j, which ) = tfft%thread_z_sticks( i, 3, j, which ) + 1
+       ENDDO
+       
+       tfft%thread_z_start( 1+overlap_cor, 3, j, which ) = 1
+       DO i = 2+overlap_cor, parai%ncpus_FFT
+          tfft%thread_z_start( i, 3, j, which ) = tfft%thread_z_start( i-1, 3, j, which ) + tfft%thread_z_sticks( i-1, 3, j, which )
+       ENDDO
+       DO i = 1+overlap_cor, parai%ncpus_FFT
+          tfft%thread_z_end( i, 3, j, which ) = tfft%thread_z_start( i, 3, j, which ) + tfft%thread_z_sticks( i, 3, j, which ) - 1
+       ENDDO
+    
+    ENDDO
 
     IF( mod( nstate, 2 ) .ne. 0 ) THEN
 
@@ -953,108 +1238,36 @@ CONTAINS
   ! y things
   
     DO i = 1+overlap_cor, parai%ncpus_FFT
-       tfft%thread_y_sticks( i, 1, which ) = ( nr1s * tfft%my_nr3p * batch_size ) / eff_nthreads
+       tfft%thread_y_sticks( i, which ) = ( nr1s * tfft%my_nr3p ) / eff_nthreads
     ENDDO
-    DO i = 1+overlap_cor, mod( nr1s * tfft%my_nr3p * batch_size, eff_nthreads ) + overlap_cor
-       tfft%thread_y_sticks( i, 1, which ) = tfft%thread_y_sticks( i, 1, which ) + 1
+    DO i = 1+overlap_cor, mod( nr1s * tfft%my_nr3p, eff_nthreads ) + overlap_cor
+       tfft%thread_y_sticks( i, which ) = tfft%thread_y_sticks( i, which ) + 1
     ENDDO
   
-    tfft%thread_y_start( 1+overlap_cor, 1, which ) = 1
+    tfft%thread_y_start( 1+overlap_cor, which ) = 1
     DO i = 2+overlap_cor, parai%ncpus_FFT
-       tfft%thread_y_start( i, 1, which ) = tfft%thread_y_start( i-1, 1, which ) + tfft%thread_y_sticks( i-1, 1, which )
+       tfft%thread_y_start( i, which ) = tfft%thread_y_start( i-1, which ) + tfft%thread_y_sticks( i-1, which )
     ENDDO
     DO i = 1+overlap_cor, parai%ncpus_FFT
-       tfft%thread_y_end( i, 1, which ) = tfft%thread_y_start( i, 1, which ) + tfft%thread_y_sticks( i, 1, which ) - 1
+       tfft%thread_y_end( i, which ) = tfft%thread_y_start( i, which ) + tfft%thread_y_sticks( i, which ) - 1
     ENDDO
-  
-    IF( rem_size .ne. 0 ) THEN
-       DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_y_sticks( i, 2, which ) = ( nr1s * tfft%my_nr3p * rem_size ) / eff_nthreads
-       ENDDO
-       DO i = 1+overlap_cor, mod( nr1s * tfft%my_nr3p * rem_size, eff_nthreads ) + overlap_cor
-          tfft%thread_y_sticks( i, 2, which ) = tfft%thread_y_sticks( i, 2, which ) + 1
-       ENDDO
-     
-       tfft%thread_y_start( 1+overlap_cor, 2, which ) = 1
-       DO i = 2+overlap_cor, parai%ncpus_FFT
-          tfft%thread_y_start( i, 2, which ) = tfft%thread_y_start( i-1, 2, which ) + tfft%thread_y_sticks( i-1, 2, which )
-       ENDDO
-       DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_y_end( i, 2, which ) = tfft%thread_y_start( i, 2, which ) + tfft%thread_y_sticks( i, 2, which ) - 1
-       ENDDO
-    END IF
-
-    IF( tfft%which .eq. 1 ) THEN
-
-       DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_y_sticks( i, 1, 3 ) = ( nr1s * tfft%my_nr3p ) / eff_nthreads
-       ENDDO
-       DO i = 1+overlap_cor, mod( nr1s * tfft%my_nr3p, eff_nthreads ) + overlap_cor
-          tfft%thread_y_sticks( i, 1, 3 ) = tfft%thread_y_sticks( i, 1, 3 ) + 1
-       ENDDO
-     
-       tfft%thread_y_start( 1+overlap_cor, 1, 3 ) = 1
-       DO i = 2+overlap_cor, parai%ncpus_FFT
-          tfft%thread_y_start( i, 1, 3 ) = tfft%thread_y_start( i-1, 1, 3 ) + tfft%thread_y_sticks( i-1, 1, 3 )
-       ENDDO
-       DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_y_end( i, 1, 3 ) = tfft%thread_y_start( i, 1, 3 ) + tfft%thread_y_sticks( i, 1, 3 ) - 1
-       ENDDO
- 
-    END IF
  
   ! x things
     
     DO i = 1+overlap_cor, parai%ncpus_FFT
-       tfft%thread_x_sticks( i, 1, which ) = ( tfft%my_nr3p * tfft%nr2 * batch_size ) / eff_nthreads
+       tfft%thread_x_sticks( i, which ) = ( tfft%my_nr3p * tfft%nr2 ) / eff_nthreads
     ENDDO
-    DO i = 1+overlap_cor, mod( tfft%my_nr3p * tfft%nr2 * batch_size, eff_nthreads ) + overlap_cor
-       tfft%thread_x_sticks( i, 1, which ) = tfft%thread_x_sticks( i, 1, which ) + 1
+    DO i = 1+overlap_cor, mod( tfft%my_nr3p * tfft%nr2, eff_nthreads ) + overlap_cor
+       tfft%thread_x_sticks( i, which ) = tfft%thread_x_sticks( i, which ) + 1
     ENDDO
   
-    tfft%thread_x_start( 1+overlap_cor, 1, which ) = 1
+    tfft%thread_x_start( 1+overlap_cor, which ) = 1
     DO i = 2+overlap_cor, parai%ncpus_FFT
-       tfft%thread_x_start( i, 1, which ) = tfft%thread_x_start( i-1, 1, which ) + tfft%thread_x_sticks( i-1, 1, which )
+       tfft%thread_x_start( i, which ) = tfft%thread_x_start( i-1, which ) + tfft%thread_x_sticks( i-1, which )
     ENDDO
     DO i = 1+overlap_cor, parai%ncpus_FFT
-       tfft%thread_x_end( i, 1, which ) = tfft%thread_x_start( i, 1, which ) + tfft%thread_x_sticks( i, 1, which ) - 1
+       tfft%thread_x_end( i, which ) = tfft%thread_x_start( i, which ) + tfft%thread_x_sticks( i, which ) - 1
     ENDDO
-  
-    IF( rem_size .ne. 0 ) THEN
-       DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_x_sticks( i, 2, which ) = ( tfft%my_nr3p * tfft%nr2 * rem_size ) / eff_nthreads
-       ENDDO
-       DO i = 1+overlap_cor, mod( tfft%my_nr3p * tfft%nr2 * rem_size, eff_nthreads ) + overlap_cor
-          tfft%thread_x_sticks( i, 2, which ) = tfft%thread_x_sticks( i, 2, which ) + 1
-       ENDDO
-     
-       tfft%thread_x_start( 1+overlap_cor, 2, which ) = 1
-       DO i = 2+overlap_cor, parai%ncpus_FFT
-          tfft%thread_x_start( i, 2, which ) = tfft%thread_x_start( i-1, 2, which ) + tfft%thread_x_sticks( i-1, 2, which )
-       ENDDO
-       DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_x_end( i, 2, which ) = tfft%thread_x_start( i, 2, which ) + tfft%thread_x_sticks( i, 2, which ) - 1
-       ENDDO
-    END IF
-
-    IF( tfft%which .eq. 1 ) THEN
-
-       DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_x_sticks( i, 1, 3 ) = ( tfft%my_nr3p * tfft%nr2 ) / eff_nthreads
-       ENDDO
-       DO i = 1+overlap_cor, mod( tfft%my_nr3p * tfft%nr2, eff_nthreads ) + overlap_cor
-          tfft%thread_x_sticks( i, 1, 3 ) = tfft%thread_x_sticks( i, 1, 3 ) + 1
-       ENDDO
-     
-       tfft%thread_x_start( 1+overlap_cor, 1, 3 ) = 1
-       DO i = 2+overlap_cor, parai%ncpus_FFT
-          tfft%thread_x_start( i, 1, 3 ) = tfft%thread_x_start( i-1, 1, 3 ) + tfft%thread_x_sticks( i-1, 1, 3 )
-       ENDDO
-       DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_x_end( i, 1, 3 ) = tfft%thread_x_start( i, 1, 3 ) + tfft%thread_x_sticks( i, 1, 3 ) - 1
-       ENDDO
-
-    END IF
  
     IF( tfft%which .eq. 1 ) THEN
  
@@ -1077,48 +1290,12 @@ CONTAINS
              tfft%thread_ngms_end( i ) = tfft%thread_ngms_start( i ) + tfft%thread_ngms( i ) - 1
           ENDDO
 
-       ELSE
-     
-!          DO j = 1, parai%cp_nogrp
-!
-!             DO i = 1+overlap_cor, parai%ncpus_FFT
-!                tfft%cg_thread_ngms( i, j ) = ( cp_ngws(j) ) / eff_nthreads
-!             ENDDO
-!             DO i = 1+overlap_cor, mod( cp_ngws(j), eff_nthreads ) + overlap_cor
-!                tfft%cg_thread_ngms( i, j ) = tfft%cg_thread_ngms( i, j ) + 1
-!             ENDDO
-!           
-!             tfft%thread_ngms_start( 1+overlap_cor, j ) = 1
-!             DO i = 2+overlap_cor, parai%ncpus_FFT
-!                tfft%thread_ngms_start( i ) = tfft%thread_ngms_start( i-1 ) + tfft%thread_ngms( i-1 )
-!             ENDDO
-!             DO i = 1+overlap_cor, parai%ncpus_FFT
-!                tfft%thread_ngms_end( i ) = tfft%thread_ngms_start( i ) + tfft%thread_ngms( i ) - 1
-!             ENDDO
-!
-!          ENDDO
-
        END IF
      
      ! rspace things
        
-!       DO i = 1+overlap_cor, parai%ncpus_FFT
-!          tfft%thread_rspace( i ) = ( tfft%my_nr3p * tfft%nr2 * tfft%nr1 ) / eff_nthreads
-!       ENDDO
-!       DO i = 1+overlap_cor, mod( tfft%my_nr3p * tfft%nr2 * tfft%nr1, eff_nthreads ) + overlap_cor
-!          tfft%thread_rspace( i ) = tfft%thread_rspace( i ) + 1
-!       ENDDO
-!     
-!       tfft%thread_rspace_start( 1+overlap_cor ) = 1
-!       DO i = 2+overlap_cor, parai%ncpus_FFT
-!          tfft%thread_rspace_start( i ) = tfft%thread_rspace_start( i-1 ) + tfft%thread_rspace( i-1 )
-!       ENDDO
-!       DO i = 1+overlap_cor, parai%ncpus_FFT
-!          tfft%thread_rspace_end( i ) = tfft%thread_rspace_start( i ) + tfft%thread_rspace( i ) - 1
-!       ENDDO
-
        DO i = 1+overlap_cor, parai%ncpus_FFT
-          tfft%thread_rspace( i ) =  tfft%thread_x_sticks( i, 1, 3 ) * tfft%nr1
+          tfft%thread_rspace( i ) =  tfft%thread_x_sticks( i, 1 ) * tfft%nr1
        ENDDO
      
        tfft%thread_rspace_start( 1+overlap_cor ) = 1
@@ -1128,8 +1305,6 @@ CONTAINS
        DO i = 1+overlap_cor, parai%ncpus_FFT
           tfft%thread_rspace_end( i ) = tfft%thread_rspace_start( i ) + tfft%thread_rspace( i ) - 1
        ENDDO
-
-
 
     END IF
     
@@ -1146,35 +1321,59 @@ CONTAINS
   
     LOGICAL :: l_map( tfft%my_nr3p * my_nr1s * tfft%nr2 )
     LOGICAL :: first
-    INTEGER :: ibatch, j, l, i, k
-    INTEGER :: iproc, offset, it, mc, m1, m2, i1
+    INTEGER :: j, l, i, k
+    INTEGER :: offset, m, m1, m2, ip, pos
     INTEGER :: ierr
   
     l_map = .false.
     map_acinv = 0
-    
-    !$omp parallel private( ibatch, j, l, iproc, offset, i, it, mc, m1, m2, i1, k)
-    DO ibatch = 1, 1 !batch_size
-       iproc = 0
-       DO j = 1, parai%nnode
-          DO l = 1, parai%node_nproc_overview( j )
-             iproc = iproc + 1
-             offset = ( parai%node_me*parai%max_node_nproc + (l-1) ) * small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * big_chunks
-             !$omp do
-             DO i = 1, nss( iproc )
-                it = offset + tfft%nr3px * (i-1) 
-                mc = tfft%ismap( i + tfft%iss(iproc) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
-                m1 = mod ( mc-1, tfft%nr1 ) + 1
-                m2 = (mc-1)/tfft%nr1 + 1
-                i1 = m2 + ( ir1s(m1) - 1 ) * tfft%nr2 + (ibatch-1)*tfft%my_nr3p*my_nr1s*tfft%nr2
-                DO k = 1, tfft%my_nr3p
-                   IF( ibatch .eq. 1 ) l_map( i1 ) = .true.
-                   map_acinv( i1 ) = k + it
-                   i1 = i1 + tfft%nr2*my_nr1s
-                ENDDO
+
+!CLR: create map with a batch size ; currently not needed    
+!    !$omp parallel private( ibatch, j, l, iproc, offset, i, it, mc, m1, m2, i1, k)
+!    DO ibatch = 1, batch_size
+!       iproc = 0
+!       DO j = 1, parai%nnode
+!          DO l = 1, parai%node_nproc_overview( j )
+!             iproc = iproc + 1
+!             offset = ( parai%node_me*parai%max_node_nproc + (l-1) ) * small_chunks + ( (j-1)*batch_size + (ibatch-1) ) * big_chunks
+!             !$omp do
+!             DO i = 1, nss( iproc )
+!                it = offset + tfft%nr3px * (i-1) 
+!                mc = tfft%ismap( i + tfft%iss(iproc) ) ! this is  m1+(m2-1)*nr1x  of the  current pencil
+!                m1 = mod ( mc-1, tfft%nr1 ) + 1
+!                m2 = (mc-1)/tfft%nr1 + 1
+!                i1 = m2 + ( ir1s(m1) - 1 ) * tfft%nr2 + (ibatch-1)*tfft%my_nr3p*my_nr1s*tfft%nr2
+!                DO k = 1, tfft%my_nr3p
+!                   IF( ibatch .eq. 1 ) l_map( i1 ) = .true.
+!                   map_acinv( i1 ) = k + it
+!                   i1 = i1 + tfft%nr2*my_nr1s
+!                ENDDO
+!             ENDDO
+!             !$omp end do
+!          ENDDO
+!       ENDDO
+!    ENDDO
+!    !$omp end parallel
+
+    !$omp parallel private( j, l, ip, offset, i, m, m1, m2, pos, k)
+    ip = 0
+    DO j = 1, parai%nnode
+       DO l = 1, parai%node_nproc_overview( j )
+          ip = ip + 1
+          offset = ( parai%node_me*parai%max_node_nproc + (l-1) ) * small_chunks + (j-1) * batch_size * big_chunks
+          !$omp do
+          DO i = 1, nss( ip )
+             m = tfft%ismap( i + tfft%iss(ip) ) !number of current pencil
+             m1 = mod ( m-1, tfft%nr1 ) + 1     !coordinate of pencil
+             m2 = (m-1)/tfft%nr1 + 1            !other coordinate of pencil
+             pos = m2 + ( ir1s(m1) - 1 ) * tfft%nr2
+             DO k = 1, tfft%my_nr3p
+                l_map( pos ) = .true.
+                map_acinv( pos ) = k + offset + tfft%nr3px * (i-1)
+                pos = pos + tfft%nr2 * my_nr1s
              ENDDO
-             !$omp end do
           ENDDO
+          !$omp end do
        ENDDO
     ENDDO
     !$omp end parallel
@@ -1185,32 +1384,24 @@ CONTAINS
        zero_end = tfft%nr2
        first = .true.
        
-!       IF( parai%me .eq. 0 ) THEN 
-          DO j = 1, my_nr1s
-             first = .true.
-             DO l = 1, tfft%nr2
+       DO j = 1, my_nr1s
+          first = .true.
+          DO l = 1, tfft%nr2
        
-                IF( l_map( (j-1)*tfft%nr2 + l ) .eqv. .true. ) THEN
-                   IF( first .eqv. .false. ) THEN
-                      zero_end( j ) = l-1
-                      first = .true.
-                   END IF
-                ELSE
-                   IF( first .eqv. .true. ) THEN
-                      zero_start( j ) = l
-                      first = .false.
-                   END IF
+             IF( l_map( (j-1)*tfft%nr2 + l ) .eqv. .true. ) THEN
+                IF( first .eqv. .false. ) THEN
+                   zero_end( j ) = l-1
+                   first = .true.
                 END IF
+             ELSE
+                IF( first .eqv. .true. ) THEN
+                   zero_start( j ) = l
+                   first = .false.
+                END IF
+             END IF
        
-             ENDDO
           ENDDO
-!       END IF
-!       IF( parai%node_me .eq. 0 .and. parai%nnode .ne. 1 ) THEN
-!          CALL MP_BCAST( zero_start, my_nr1s, 0, tfft%inter_node_comm )
-!          CALL MP_BCAST( zero_end  , my_nr1s, 0, tfft%inter_node_comm )
-!       END IF
-!       CALL MP_BCAST( zero_start, my_nr1s, 0, tfft%node_comm )
-!       CALL MP_BCAST( zero_end  , my_nr1s, 0, tfft%node_comm )
+       ENDDO
   
     END IF
     
