@@ -2412,8 +2412,9 @@ CONTAINS
                     i_start2=i_start2+njump
 
                     IF( ispec .eq. bsize ) THEN
-!CLR: Could be earlier with "Last one finished"-strategy
-                       !$  IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
+                       !$  locks_omp( mythread+1, counter(4), 13 ) = .false.
+                       !$omp flush( locks_omp )
+                       !$  IF( parai%ncpus_FFT .eq. 1 .or. .not. ANY( locks_omp( :, counter(4), 13 ) ) ) THEN
                        !$     locks_calc_fw( parai%node_me+1, counter(4) ) = .false.
                        !$omp flush( locks_calc_fw )
                        !$  END IF

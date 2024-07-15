@@ -978,13 +978,6 @@ CONTAINS
           CALL fwfft_y_section( tfft, f_inout1(:,1), f_inout2(:,1), f_inout3(:,work_buffer), f_inout4(:,work_buffer), &
                                     tfft%map_pcfw(:,1), batch_size, ispec, counter, mythread )
 
-!CLR: "Last one to finish" should work here too
-          !$  locks_omp_big( mythread+1, ispec, counter, 4 ) = .false.
-          !$omp flush( locks_omp_big )
-          !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 4 ) ) )
-          !$omp flush( locks_omp_big )
-          !$  END DO
-
        ELSE IF( step .eq. 3 ) THEN
 
           !$omp flush( locks_calc_fw )
@@ -1002,6 +995,12 @@ CONTAINS
           !$omp flush( locks_com_fw )
           !$  DO WHILE( ANY( locks_com_fw( :, counter ) ) .and. parai%nnode .ne. 1 )
           !$omp flush( locks_com_fw )
+          !$  END DO
+
+          !$  locks_omp( mythread+1, counter, 14 ) = .false.
+          !$omp flush( locks_omp )
+          !$  DO WHILE( ANY( locks_omp( :, counter, 14 ) ) )
+          !$omp flush( locks_omp )
           !$  END DO
   
           CALL fwfft_z_section( tfft, f_inout1(:,work_buffer), f_inout2, counter, batch_size, remswitch, mythread, tfft%nsw )
