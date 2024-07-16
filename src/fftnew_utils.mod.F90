@@ -685,6 +685,8 @@ CONTAINS
     IF( cntl%krwfn ) fft_numbuff = 2
     IF( .not. ( cntl%overlapp_comm_comp .and. fft_numbatches .gt. 1 ) ) fft_numbuff = 1
 
+!    fft_numbuff = fft_numbuff + 1
+
     IF( remember_batch .ne. fft_batchsize ) THEN
 
        remember_batch = fft_batchsize

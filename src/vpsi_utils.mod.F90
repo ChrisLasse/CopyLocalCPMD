@@ -1862,11 +1862,11 @@ CONTAINS
   !---------Accumulate_Psi End---------------------------
   !------------------------------------------------------
   
-    !$  locks_omp( mythread+1, counter, 5 ) = .false. 
-    !$omp flush( locks_omp )
-    !$  DO WHILE( ANY( locks_omp( :, counter, 5 ) ) )
-    !$omp flush( locks_omp )
-    !$  END DO 
+!    !$  locks_omp( mythread+1, counter, 5 ) = .false. 
+!    !$omp flush( locks_omp )
+!    !$  DO WHILE( ANY( locks_omp( :, counter, 5 ) ) )
+!    !$omp flush( locks_omp )
+!    !$  END DO 
   
   END SUBROUTINE Calc_c2_improved
 
@@ -2031,7 +2031,7 @@ CONTAINS
       ist,states_fft,  bsize, ibatch, istate, ir1, first_state, end_loop2, &
       i_start2, i_start3, me_grp, n_grp, start_loop1, end_loop1,&
       offset_state, nthreads, nested_threads, methread, count, swap,&
-      start_loop3, end_loop3, i_start4
+      start_loop3, end_loop3, i_start4, swap2
     INTEGER(int_8)                           :: il_wfng(2), il_wfnr(2), il_wfnr1(1), il_xf(2), il_c2_array(3)
     REAL(real_8)                             :: chksum, csmult, fi, fip1,&
                                                 xskin, temp_time
@@ -2192,8 +2192,8 @@ CONTAINS
     locks_omp_big  = .true.
     IF( cntl%overlapp_comm_comp .and. tfft%do_comm(1) ) locks_omp_big( 1, :, :, : ) = .false.
 
-    il_aux_array(1) = tfft%nr1w * tfft%my_nr3p * tfft%nr2
-    il_aux_array(2) = fft_batchsize
+    il_aux_array(1) = MAX( tfft%nsw(parai%me+1) * tfft%nr3 * fft_batchsize, tfft%nr1w * tfft%my_nr3p * tfft%nr2 )
+    il_aux_array(2) = 2
     il_rs_array(1)  = tfft%nr1 * tfft%my_nr3p * tfft%nr2
     il_rs_array(2)  = fft_batchsize
     il_c2_array(1)  = tfft%max_ngw
@@ -2236,12 +2236,13 @@ CONTAINS
     END IF
 #endif
 
+
     CALL MPI_BARRIER(parai%allgrp, ierr)
 
     IF(.NOT.rsactive) rs_wave=>rs_array
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
     !$OMP parallel num_threads( parai%ncpus_FFT ) &
-    !$omp private(mythread,ibatch,bsize,r_bsize,ispec,count,ist,is1,is2,ir,offset_state,swap,remswitch,counter,remove) &
+    !$omp private(mythread,ibatch,bsize,r_bsize,ispec,count,ist,is1,is2,ir,offset_state,swap,remswitch,counter,remove,swap2) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
 
@@ -2359,6 +2360,7 @@ CONTAINS
                 END IF
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop1,fft_numbuff)+1
+                   swap2=mod(ibatch-start_loop1, 2)+1
                    start  = ispec+(ibatch-1)*fft_batchsize
                    IF(rsactive) rs_wave=>wfn_r(:,start:start)
                    
@@ -2407,7 +2409,7 @@ CONTAINS
                 ! ==------------------------------------------------------------==
                     CALL fwfft_batch( tfft, 1, bsize, ispec, remswitch, mythread, counter(4), swap, f_inout1=rs_wave(:,1:1) )
                     CALL fwfft_batch( tfft, 2, bsize, ispec, remswitch, mythread, counter(4), swap, & 
-                                      f_inout1=rs_wave(:,1:1), f_inout2=aux_array, f_inout3=comm_send, f_inout4=comm_recv )
+                                      f_inout1=rs_wave(:,1:1), f_inout2=aux_array(:,swap2:swap2), f_inout3=comm_send, f_inout4=comm_recv )
 
                     i_start2=i_start2+njump
 
@@ -2466,9 +2468,10 @@ CONTAINS
              END IF
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop2,fft_numbuff)+1
+                swap2=mod(ibatch-start_loop2, 2)+1
                 counter(6) = counter(6) + 1
-                CALL fwfft_batch( tfft, 4, bsize, 1, remswitch, mythread, counter(6), swap, f_inout1=comm_recv, f_inout2=aux_array )
-                CALL calc_c2_improved( aux_array, c2(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2), &
+                CALL fwfft_batch( tfft, 4, bsize, 1, remswitch, mythread, counter(6), swap, f_inout1=comm_recv, f_inout2=aux_array(:,swap2:swap2) )
+                CALL calc_c2_improved( aux_array(:,swap2), c2(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2), &
                                        c0(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2 ), &
                                        f, mythread, bsize, counter(6), njump, nostat, last_single )
              END IF
@@ -2702,7 +2705,7 @@ CONTAINS
        IF( .not. allocated( parai%c2_recv_handle_counter ) ) ALLOCATE( parai%c2_recv_handle_counter( nstate ) )
    
        IF( allocated( c2_com_num ) ) DEALLOCATE( c2_com_num )
-       ALLOCATE( c2_com_num( fft_numbatches+1, 3 ) )
+       ALLOCATE( c2_com_num( fft_numbatches+1, 4 ) )
      
        c2_com_num = 0
    
@@ -2770,6 +2773,30 @@ CONTAINS
        ENDDO
        c2_com_num(2,2) = counter
 
+       IF( allocated( parai%c2_comb_handle ) ) DEALLOCATE( parai%c2_comb_handle )
+       ALLOCATE( parai%c2_comb_handle( c2_com_num(1,1)+c2_com_num(1,3) , fft_numbatches+1  ) )
+       
+       DO i = 1, fft_numbatches+1
+          c2_com_num(i,4) = c2_com_num(i,1) + c2_com_num(i,3)
+          DO j = 1, c2_com_num(i,1)
+             parai%c2_comb_handle( j, i ) = parai%c2_send_handle( j, i )
+          ENDDO
+          DO j = 1, c2_com_num(i,3)
+             parai%c2_comb_handle( j + c2_com_num(i,1), i ) = parai%c2_recv_handle( j, i )
+          ENDDO
+       ENDDO
+
+       IF( allocated( parai%c2_comb_handle_counter ) ) DEALLOCATE( parai%c2_comb_handle_counter )
+       ALLOCATE( parai%c2_comb_handle_counter( nstate * 2 ) )
+       
+       c2_com_num(3,2) = c2_com_num(1,2) + c2_com_num(2,2)
+       DO j = 1, c2_com_num(1,2)
+          parai%c2_comb_handle_counter( j ) = parai%c2_send_handle_counter( j )
+       ENDDO
+       DO j = 1, c2_com_num(2,2)
+          parai%c2_comb_handle_counter( j + c2_com_num(1,2) ) = parai%c2_recv_handle_counter( j )
+       ENDDO
+
     END IF
 
   END SUBROUTINE Pre_Initialize_C2_Com
@@ -2787,12 +2814,14 @@ CONTAINS
        CALL MP_STARTALL( tfft%c2_com_num( 2, 2 ), parai%c2_recv_handle_counter(1:tfft%c2_com_num( 2, 2 )) )
     END IF
 
-    CALL MP_WAITALL( tfft%c2_com_num( counter(7), 1 ), parai%c2_send_handle( 1:tfft%c2_com_num( counter(7), 1 ), counter(7) ) )
-    CALL MP_WAITALL( tfft%c2_com_num( counter(7), 3 ), parai%c2_recv_handle( 1:tfft%c2_com_num( counter(7), 3 ), counter(7) ) )
+    CALL MP_WAITALL( tfft%c2_com_num( counter(7), 4 ), parai%c2_comb_handle( 1:tfft%c2_com_num( counter(7), 4 ), counter(7) ) )
+!    CALL MP_WAITALL( tfft%c2_com_num( counter(7), 1 ), parai%c2_send_handle( 1:tfft%c2_com_num( counter(7), 1 ), counter(7) ) )
+!    CALL MP_WAITALL( tfft%c2_com_num( counter(7), 3 ), parai%c2_recv_handle( 1:tfft%c2_com_num( counter(7), 3 ), counter(7) ) )
 
     IF( (ibatch .eq. end_loop3) .or. (ibatch-start_loop3 .eq. fft_numbatches .and. fft_residual .eq. 0) ) THEN
-       CALL MP_WAITALL( tfft%c2_com_num( 1, 2 ), parai%c2_send_handle_counter(1:tfft%c2_com_num( 1, 2 )) )
-       CALL MP_WAITALL( tfft%c2_com_num( 2, 2 ), parai%c2_recv_handle_counter(1:tfft%c2_com_num( 2, 2 )) )
+       CALL MP_WAITALL( tfft%c2_com_num( 3, 2 ), parai%c2_comb_handle_counter(1:tfft%c2_com_num( 3, 2 )) )
+!       CALL MP_WAITALL( tfft%c2_com_num( 1, 2 ), parai%c2_send_handle_counter(1:tfft%c2_com_num( 1, 2 )) )
+!       CALL MP_WAITALL( tfft%c2_com_num( 2, 2 ), parai%c2_recv_handle_counter(1:tfft%c2_com_num( 2, 2 )) )
     END IF
 
   END SUBROUTINE Communicate_C2

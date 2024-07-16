@@ -1501,6 +1501,23 @@ CONTAINS
   
   !---------After-Com-Copy End---------------------------
   !------------------------------------------------------
+
+    IF( tfft%which .eq. 1 ) THEN
+
+       !$  locks_omp( mythread+1, counter, 15 ) = .false.
+       !$omp flush( locks_omp )
+
+       IF( parai%ncpus_FFT .eq. 1 .or. .not. ANY( locks_omp( :, counter, 15 ) ) ) THEN
+          IF( cntl%krwfn ) THEN
+          !$   locks_calc_2( parai%node_me+1, 1+(counter+fft_numbuff-1)*fft_batchsize:batch_size+(counter+fft_numbuff-1)*fft_batchsize ) = .false.
+          !$omp flush( locks_calc_2 )
+          ELSE
+          !$   locks_calc_1( parai%node_me+1, 1+(counter+fft_numbuff-1)*fft_batchsize:fft_batchsize+(counter+fft_numbuff-1)*fft_batchsize ) = .false.
+          !$omp flush( locks_calc_1 )
+          END IF
+       END IF
+
+    END IF
   !------------------------------------------------------
   !------------z-FFT Start-------------------------------
   

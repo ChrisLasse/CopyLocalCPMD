@@ -997,31 +997,20 @@ CONTAINS
           !$omp flush( locks_com_fw )
           !$  END DO
 
-          !$  locks_omp( mythread+1, counter, 14 ) = .false.
-          !$omp flush( locks_omp )
-          !$  DO WHILE( ANY( locks_omp( :, counter, 14 ) ) )
-          !$omp flush( locks_omp )
-          !$  END DO
+!          !$  locks_omp( mythread+1, counter, 14 ) = .false.
+!          !$omp flush( locks_omp )
+!          !$  DO WHILE( ANY( locks_omp( :, counter, 14 ) ) )
+!          !$omp flush( locks_omp )
+!          !$  END DO
   
           CALL fwfft_z_section( tfft, f_inout1(:,work_buffer), f_inout2, counter, batch_size, remswitch, mythread, tfft%nsw )
 
-    !$  locks_omp( mythread+1, counter, 11 ) = .false.
-    !$omp flush( locks_omp )
-    !$  DO WHILE( ANY( locks_omp( :, counter, 11 ) ) )
-    !$omp flush( locks_omp )
-    !$  END DO
+          !$  locks_omp( mythread+1, counter, 11 ) = .false.
+          !$omp flush( locks_omp )
+          !$  DO WHILE( ANY( locks_omp( :, counter, 11 ) ) )
+          !$omp flush( locks_omp )                                                                   
+          !$  END DO
 
-          !CLR: could be earlier, right after comm_recv gets written off, also "last one..." strategy        
-          IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
-             IF( cntl%krwfn ) THEN
-             !$   locks_calc_2( parai%node_me+1, 1+(counter+fft_numbuff-1)*fft_batchsize:batch_size+(counter+fft_numbuff-1)*fft_batchsize ) = .false.
-             !$omp flush( locks_calc_2 )
-             ELSE 
-             !$   locks_calc_1( parai%node_me+1, 1+(counter+fft_numbuff-1)*fft_batchsize:fft_batchsize+(counter+fft_numbuff-1)*fft_batchsize ) = .false.
-             !$omp flush( locks_calc_1 )
-             END IF
-          END IF
- 
        END IF
   
     END IF
