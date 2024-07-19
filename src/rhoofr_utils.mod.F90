@@ -1350,7 +1350,7 @@ CONTAINS
                                                 first_state, offset_state, nstates(2,1), &
                                                 i_start2, i_start3,  me_grp, n_grp, &
                                                 methread, count, &
-                                                swap, start_loop, end_loop
+                                                swap, start_loop, end_loop, swap2
     INTEGER(int_8)                           :: il_wfng(2), il_wfnr(2), il_xf(2)
     REAL(real_8)                             :: chksum, ral, rbe, rsp, rsum, rsum1, &
                                                 rsum1abs, rsumv, rto, temp(4), inv_omega, temp_time, &
@@ -1360,7 +1360,7 @@ CONTAINS
     INTEGER :: sendsize, sendsize_rem
     INTEGER :: start, ending, nstate_local, fir, las
     INTEGER :: counter(3)
-    INTEGER :: remswitch, mythread, ispec, r_bsize
+    INTEGER :: remswitch, mythread, ispec, r_bsize, aux_dimension
     INTEGER, SAVE :: first_dim1, first_dim2, first_dim3
     COMPLEX(real_8), POINTER, SAVE           :: psi_work(:,:)
     INTEGER :: priv(10)
@@ -1368,13 +1368,12 @@ CONTAINS
     LOGICAL :: last_single
 
 #ifdef _USE_SCRATCHLIBRARY
-!    COMPLEX(real_8), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux_array(:,:)
+    COMPLEX(real_8), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: aux_array(:,:)
     COMPLEX(real_8), POINTER, SAVE __CONTIGUOUS, ASYNCHRONOUS :: psi_nors (:,:)
 #else
     COMPLEX(real_8), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux_array(:,:)
     COMPLEX(real_8), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: psi_nors (:,:)
 #endif
-    COMPLEX(real_8), ALLOCATABLE, SAVE, TARGET, ASYNCHRONOUS  :: aux_array(:,:)
     INTEGER(int_8) :: il_aux_array(2)
     INTEGER(int_8) :: il_psi_both (2)
 
@@ -1417,6 +1416,7 @@ CONTAINS
     inv_omega=1.0_real_8/parm%omega
     start_loop=1
     end_loop=fft_numbatches+2
+    aux_dimension=2
 
     IF(cntl%overlapp_comm_comp.AND.fft_numbatches.GT.1)THEN
 #if !defined(_INTEL_MKL)
@@ -1427,6 +1427,7 @@ CONTAINS
     ELSE
        start_loop=0
        end_loop=fft_numbatches+1
+       aux_dimension=1
     END IF
 
     CALL part_1d_get_blk_bounds( nstate, parai%cp_inter_me, parai%cp_nogrp, fir, las )
@@ -1458,15 +1459,15 @@ CONTAINS
 
     CALL MPI_BARRIER(parai%allgrp, ierr)
 
-    il_aux_array(1) = tfft%nr1w * tfft%my_nr3p * tfft%nr2
-    il_aux_array(2) = fft_batchsize
+    il_aux_array(1) = MAX( tfft%nsw(parai%me+1) * tfft%nr3 * fft_batchsize, tfft%nr1w * tfft%my_nr3p * tfft%nr2 )
+    il_aux_array(2) = aux_dimension
     il_psi_both (1) = tfft%my_nr3p * tfft%nr2 * tfft%nr1
     il_psi_both (2) = (nstate_local/2)+1
 
 #ifdef _USE_SCRATCHLIBRARY
-!    CALL request_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
-!         __LINE__,__FILE__)
+    CALL request_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
+         __LINE__,__FILE__)
     IF( .not. rsactive ) THEN
        CALL request_scratch(il_psi_both,psi_nors,procedureN//'psi_nors',ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate psi_nors', &
@@ -1499,17 +1500,12 @@ CONTAINS
        psi_work => wfn_r
     END IF
 #endif
-IF( .not. allocated(aux_array) ) THEN
-    ALLOCATE(aux_array(il_aux_array(1),il_aux_array(2)),STAT=ierr)
-    IF(ierr/=0) CALL stopgm(procedureN,'cannot allocate aux_array', &
-         __LINE__,__FILE__)
-END IF
 
     ! 
     IF(cntl%fft_tune_batchsize) temp_time=m_walltime()
 
     !$OMP parallel num_threads( parai%ncpus_FFT ) &
-    !$omp private(mythread,ibatch,bsize,r_bsize,ispec,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending,last_single) &
+    !$omp private(mythread,ibatch,bsize,r_bsize,ispec,offset_state,swap,count,is1,is2,remswitch,counter,coef3,coef4,ispin,i_start2,start,ending,last_single,swap2) &
     !$omp proc_bind(close)
     !$ mythread = omp_get_thread_num()
 
@@ -1533,8 +1529,9 @@ END IF
              END IF
              IF(bsize.NE.0)THEN
                 counter(1) = counter(1) + 1
+                swap2=mod(ibatch,il_aux_array(2))+1
                 ! Loop over the electronic states of this batch
-                CALL Prepare_Psi( tfft, c0( :, i_start3+1+(counter(1)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread, last_single, counter(1) )
+                CALL Prepare_Psi( tfft, c0( :, i_start3+1+(counter(1)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array(:,swap2), remswitch, mythread, last_single, counter(1) )
 !                ! ==--------------------------------------------------------------==
 !                ! ==  Fourier transform the wave functions to real space.         ==
 !                ! ==  In the array PSI was used also the fact that the wave       ==
@@ -1550,7 +1547,7 @@ END IF
 !                ! ==  to swap                                                     ==
 !                ! ==--------------------------------------------------------------==
                 swap=mod(ibatch,fft_numbuff)+1
-                CALL invfft_batch( tfft, 1, bsize, 1, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
+                CALL invfft_batch( tfft, 1, bsize, 1, remswitch, mythread, counter(1), swap, f_inout1=aux_array(:,swap2:swap2), f_inout2=comm_send, f_inout3=comm_recv ) 
              END IF
           END IF
        END IF
@@ -1597,12 +1594,13 @@ END IF
                 END IF
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop,fft_numbuff)+1
+                   swap2=mod(ibatch-start_loop,il_aux_array(2))+1
                    IF( ispec .eq. 1 ) counter(3) = counter(3) + 1
                    start = (ispec+((counter(3)-1)*fft_batchsize))
                    CALL invfft_batch( tfft, 3, bsize, ispec, remswitch, mythread, counter(3), swap, &
-                                      f_inout1=comm_recv, f_inout2=aux_array( : , 1 : 1 ) )
+                                      f_inout1=comm_recv, f_inout2=aux_array( : , swap2 : swap2 ) )
                    CALL invfft_batch( tfft, 4, bsize, ispec, remswitch, mythread, counter(3), swap, &
-                                      f_inout1=aux_array( : , 1 : 1 ), f_inout2=psi_work(:,start:start) )
+                                      f_inout1=aux_array( : , swap2 : swap2 ), f_inout2=psi_work(:,start:start) )
                    ! Compute the charge density from the wave functions
                    ! in real space
                    ! Decode fft batch, setup (lsd) spin settings                     
@@ -1640,9 +1638,9 @@ END IF
 
     IF(cntl%fft_tune_batchsize) fft_time_total(fft_tune_num_it)=m_walltime()-temp_time
 #ifdef _USE_SCRATCHLIBRARY
-!    CALL free_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
-!         __LINE__,__FILE__)
+    CALL free_scratch(il_aux_array,aux_array,procedureN//'aux_array',ierr)
+    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
+         __LINE__,__FILE__)
     IF( .not. rsactive ) THEN
        CALL free_scratch(il_psi_both,psi_nors,procedureN//'psi_nors',ierr)
        IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate psi_nors', &
@@ -1658,9 +1656,6 @@ END IF
             __LINE__,__FILE__)
     END IF
 #endif
-!    DEALLOCATE(aux_array,STAT=ierr)
-!    IF(ierr/=0) CALL stopgm(procedureN,'cannot deallocate aux_array', &
-!         __LINE__,__FILE__)
 
     ! ==--------------------------------------------------------------==
     ! redistribute RHOE over the groups if needed

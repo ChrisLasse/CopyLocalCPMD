@@ -1058,9 +1058,9 @@ CONTAINS
 
        ENDDO
 
-       !$  locks_omp( mythread+1, counter, 12 ) = .false.
+       !$  locks_omp( mythread+1, counter, 4 ) = .false.
        !$omp flush( locks_omp )
-       !$  DO WHILE( ANY( locks_omp( :, counter, 12 ) ) )
+       !$  DO WHILE( ANY( locks_omp( :, counter, 4 ) ) )
        !$omp flush( locks_omp )
        !$  END DO
 
@@ -1105,10 +1105,10 @@ CONTAINS
   
   END SUBROUTINE fft_com
   
-  SUBROUTINE invfft_z_section( tfft, aux, comm_mem_send, comm_mem_recv, batch_size, remswitch, mythread, nss, current )
+  SUBROUTINE invfft_z_section( tfft, aux, comm_mem_send, comm_mem_recv, batch_size, remswitch, mythread, nss, counter )
     IMPLICIT NONE
   
-    INTEGER, INTENT(IN) :: batch_size, remswitch, mythread, current
+    INTEGER, INTENT(IN) :: batch_size, remswitch, mythread, counter
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) :: tfft 
     COMPLEX(real_8), INTENT(INOUT) :: comm_mem_send( * ), comm_mem_recv( * )
     COMPLEX(real_8), INTENT(INOUT)  :: aux ( tfft%nr3 , * )
@@ -1163,7 +1163,7 @@ CONTAINS
 
        !In theory, locks could be made faster by checking each iset individually for non-remainder cases 
        !$omp flush( locks_calc_1 )
-       !$  DO WHILE( ANY(locks_calc_1( :, 1+current:fft_batchsize+current ) ) )
+       !$  DO WHILE( ANY(locks_calc_1( :, 1+(counter-1)*fft_batchsize:fft_batchsize+(counter-1)*fft_batchsize ) ) )
        !$omp flush( locks_calc_1 )
        !$  END DO
 
@@ -1189,11 +1189,11 @@ CONTAINS
   
   END SUBROUTINE invfft_z_section 
   
-  SUBROUTINE invfft_y_section( tfft, comm_mem_recv, aux, map_acinv, mythread, my_nr1s, ispec )
+  SUBROUTINE invfft_y_section( tfft, comm_mem_recv, aux, map_acinv, mythread, my_nr1s, ispec, counter )
     IMPLICIT NONE
   
     TYPE(FFT_TYPE_DESCRIPTOR), INTENT(INOUT) ::tfft 
-    INTEGER, INTENT(IN) :: mythread, my_nr1s, ispec
+    INTEGER, INTENT(IN) :: mythread, my_nr1s, ispec, counter
     COMPLEX(real_8), INTENT(IN)  :: comm_mem_recv( * )
     COMPLEX(real_8), INTENT(INOUT) :: aux( tfft%nr2 , * )
     INTEGER, INTENT(IN) :: map_acinv( * )
@@ -1225,6 +1225,20 @@ CONTAINS
   
   !---------After-Com-Copy End---------------------------
   !------------------------------------------------------
+    IF( tfft%which .eq. 1 ) THEN
+       !$  locks_omp_big( mythread+1, ispec, counter, 5 ) = .false.
+       !$omp flush( locks_omp_big )
+       IF( parai%ncpus_FFT .eq. 1 .or. .not. ANY( locks_omp_big( :, ispec, counter, 5 ) ) ) THEN
+          IF( tfft%which_wave .eq. 1 ) THEN
+             !$  locks_calc_1( parai%node_me+1, 1+(counter-1)*fft_batchsize+(fft_batchsize*fft_numbuff): &
+             !$                             ispec+(counter-1)*fft_batchsize+(fft_batchsize*fft_numbuff) ) = .false.
+             !$omp flush( locks_calc_1 )
+          ELSE
+             !$  locks_calc_2( parai%node_me+1, 1+(counter-1)*fft_batchsize:ispec+(counter-1)*fft_batchsize ) = .false.
+             !$omp flush( locks_calc_2 )
+          END IF
+       END IF
+    END IF
   !------------------------------------------------------
   !------------y-FFT Start-------------------------------
   
@@ -1346,9 +1360,9 @@ CONTAINS
 
     Call Second_Part_y_section( aux2_r )
 
-    !$  locks_omp_big( mythread+1, ispec, counter, 3 ) = .false.
+    !$  locks_omp_big( mythread+1, ispec, counter, 6 ) = .false.
     !$omp flush( locks_omp_big )
-    !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 3 ) ) )
+    !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 6 ) ) )
     !$omp flush( locks_omp_big )
     !$  END DO
    
@@ -1503,11 +1517,9 @@ CONTAINS
   !------------------------------------------------------
 
     IF( tfft%which .eq. 1 ) THEN
-
-       !$  locks_omp( mythread+1, counter, 15 ) = .false.
+       !$  locks_omp( mythread+1, counter, 5 ) = .false.
        !$omp flush( locks_omp )
-
-       IF( parai%ncpus_FFT .eq. 1 .or. .not. ANY( locks_omp( :, counter, 15 ) ) ) THEN
+       IF( parai%ncpus_FFT .eq. 1 .or. .not. ANY( locks_omp( :, counter, 5 ) ) ) THEN
           IF( cntl%krwfn ) THEN
           !$   locks_calc_2( parai%node_me+1, 1+(counter+fft_numbuff-1)*fft_batchsize:batch_size+(counter+fft_numbuff-1)*fft_batchsize ) = .false.
           !$omp flush( locks_calc_2 )
@@ -1516,7 +1528,6 @@ CONTAINS
           !$omp flush( locks_calc_1 )
           END IF
        END IF
-
     END IF
   !------------------------------------------------------
   !------------z-FFT Start-------------------------------

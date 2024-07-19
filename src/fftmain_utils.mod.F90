@@ -886,16 +886,11 @@ CONTAINS
   
        IF( step .eq. 1 ) THEN
 
-          CALL invfft_z_section( tfft, f_inout1, f_inout2(:,work_buffer), f_inout3(:,work_buffer), batch_size, remswitch, mythread, tfft%nsw, current )
+          CALL invfft_z_section( tfft, f_inout1(:,1), f_inout2(:,work_buffer), f_inout3(:,work_buffer), batch_size, remswitch, mythread, tfft%nsw, counter )!current )
 
-!CLR: technically dont need to stop, right? Last thread finished opens the door
-          !$  locks_omp( mythread+1, counter, 1 ) = .false.
+          !$  locks_omp( mythread+1, counter, 2 ) = .false.
           !$omp flush( locks_omp )
-          !$  DO WHILE( ANY( locks_omp( :, counter, 1 ) ) )
-          !$omp flush( locks_omp )
-          !$  END DO
-
-          !$  IF( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) THEN
+          !$  IF( parai%ncpus_FFT .eq. 1 .or. .not. ANY( locks_omp( :, counter, 2 ) ) ) THEN
           !$     locks_calc_inv( parai%node_me+1, counter ) = .false.
           !$omp flush( locks_calc_inv )
           !$  END IF
@@ -919,31 +914,30 @@ CONTAINS
           !$omp flush( locks_com_inv )
           !$  END DO
 
-          IF( remswitch .eq. 1 ) THEN
-             CALL invfft_y_section( tfft, f_inout1(:,work_buffer), f_inout2(:,1), &
-                                    tfft%map_acinv_wave, mythread, tfft%nr1w, ispec )
-          ELSE
-             CALL invfft_y_section( tfft, f_inout1(:,work_buffer), f_inout2(:,1), &
-                                    tfft%map_acinv_wave_rem, mythread, tfft%nr1w, ispec )
+          IF( tfft%which_wave .eq. 2 ) THEN
+
+             !$  locks_omp_big( mythread+1, ispec, counter, 1 ) = .false.
+             !$omp flush( locks_omp_big )
+             !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 1 ) ) )
+             !$omp flush( locks_omp_big )
+             !$  END DO
+
           END IF
 
-          !$  locks_omp_big( mythread+1, ispec, counter, 5 ) = .false.
+          IF( remswitch .eq. 1 ) THEN
+             CALL invfft_y_section( tfft, f_inout1(:,work_buffer), f_inout2(:,1), &
+                                    tfft%map_acinv_wave, mythread, tfft%nr1w, ispec, counter )
+          ELSE
+             CALL invfft_y_section( tfft, f_inout1(:,work_buffer), f_inout2(:,1), &
+                                    tfft%map_acinv_wave_rem, mythread, tfft%nr1w, ispec, counter )
+          END IF
+
+          !$  locks_omp_big( mythread+1, ispec, counter, 2 ) = .false.
           !$omp flush( locks_omp_big )
-          !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 5 ) ) )
+          !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 2 ) ) )
           !$omp flush( locks_omp_big )
           !$  END DO
 
-!CLR: Could be earlier with "Last one finished"-strategy
-          IF( tfft%which .eq. 1 .and. ( parai%ncpus_FFT .eq. 1 .or. mythread .eq. 1 ) ) THEN
-             IF( tfft%which_wave .eq. 1 ) THEN
-                !$  locks_calc_1( parai%node_me+1, 1+current+(fft_batchsize*fft_numbuff): &
-                !$                             ispec+current+(fft_batchsize*fft_numbuff) ) = .false.
-                !$omp flush( locks_calc_1 )
-             ELSE
-                !$  locks_calc_2( parai%node_me+1, 1+current:ispec+current ) = .false.
-                !$omp flush( locks_calc_2 )
-             END IF
-          END IF
 
        ELSE IF( step .eq. 4 ) THEN
 
@@ -951,9 +945,9 @@ CONTAINS
 
           IF( tfft%which_wave .eq. 1 ) THEN
 
-             !$  locks_omp_big( mythread+1, ispec, counter, 6 ) = .false.
+             !$  locks_omp_big( mythread+1, ispec, counter, 3 ) = .false.
              !$omp flush( locks_omp_big )
-             !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 6 ) ) )
+             !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 3 ) ) )
              !$omp flush( locks_omp_big )
              !$  END DO
 
@@ -967,9 +961,9 @@ CONTAINS
 
           CALL fwfft_x_section( tfft, f_inout1(:,1), mythread )
 
-          !$  locks_omp_big( mythread+1, ispec, counter, 1 ) = .false.
+          !$  locks_omp_big( mythread+1, ispec, counter, 4 ) = .false.
           !$omp flush( locks_omp_big )
-          !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 1 ) ) )
+          !$  DO WHILE( ANY( locks_omp_big( :, ispec, counter, 4 ) ) )
           !$omp flush( locks_omp_big )
           !$  END DO
 
@@ -996,18 +990,12 @@ CONTAINS
           !$  DO WHILE( ANY( locks_com_fw( :, counter ) ) .and. parai%nnode .ne. 1 )
           !$omp flush( locks_com_fw )
           !$  END DO
-
-!          !$  locks_omp( mythread+1, counter, 14 ) = .false.
-!          !$omp flush( locks_omp )
-!          !$  DO WHILE( ANY( locks_omp( :, counter, 14 ) ) )
-!          !$omp flush( locks_omp )
-!          !$  END DO
   
           CALL fwfft_z_section( tfft, f_inout1(:,work_buffer), f_inout2, counter, batch_size, remswitch, mythread, tfft%nsw )
 
-          !$  locks_omp( mythread+1, counter, 11 ) = .false.
+          !$  locks_omp( mythread+1, counter, 3 ) = .false.
           !$omp flush( locks_omp )
-          !$  DO WHILE( ANY( locks_omp( :, counter, 11 ) ) )
+          !$  DO WHILE( ANY( locks_omp( :, counter, 3 ) ) )
           !$omp flush( locks_omp )                                                                   
           !$  END DO
 
@@ -1114,7 +1102,7 @@ CONTAINS
        !$OMP end master
        !$OMP barrier
 
-       CALL invfft_y_section( tfft, comm_recv(:,1), aux(:,1), tfft%map_acinv_pot, mythread, tfft%nr1p, 1 )
+       CALL invfft_y_section( tfft, comm_recv(:,1), aux(:,1), tfft%map_acinv_pot, mythread, tfft%nr1p, 1, 1 )
 
        !$OMP barrier
 

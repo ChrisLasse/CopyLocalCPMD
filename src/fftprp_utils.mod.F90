@@ -474,9 +474,9 @@ CONTAINS
        !if autotuning is requested, we use this batchsize to set fft_max_numbatches
        a2a_msgsize=a2a_msgsize*1024/(parai%nproc*16)
        fft_batchsize=FLOOR(REAL(a2a_msgsize,KIND=real_8)/REAL(lda,KIND=real_8))
-       fft_batchsize=MIN( fft_batchsize, nstate/4 )
-       fft_batchsize=MIN( fft_batchsize, 60 )
-       IF( parai%nnode .eq. 1 ) fft_batchsize=MIN( fft_batchsize, 10 )
+!       fft_batchsize=MIN( fft_batchsize, nstate/4 )
+!       fft_batchsize=MIN( fft_batchsize, 60 )
+!       IF( parai%nnode .eq. 1 ) fft_batchsize=MIN( fft_batchsize, 10 )
        IF( cntl%fft_prescribe_batchsize ) fft_batchsize = cnti%fft_prescribed_batchsize
        IF(fft_batchsize.LE.0) fft_batchsize=1
        fft_residual=MOD(fft_total,fft_batchsize)

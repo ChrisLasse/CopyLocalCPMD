@@ -1862,12 +1862,6 @@ CONTAINS
   !---------Accumulate_Psi End---------------------------
   !------------------------------------------------------
   
-!    !$  locks_omp( mythread+1, counter, 5 ) = .false. 
-!    !$omp flush( locks_omp )
-!    !$  DO WHILE( ANY( locks_omp( :, counter, 5 ) ) )
-!    !$omp flush( locks_omp )
-!    !$  END DO 
-  
   END SUBROUTINE Calc_c2_improved
 
 !  SUBROUTINE calc_c2_improved_strat3( psi, c2, c0, f, mythread, batch_size, counter, njump, nostat, last, c2_com_send )
@@ -2039,7 +2033,7 @@ CONTAINS
     REAL(real_8), POINTER __CONTIGUOUS       :: VPOTX(:),vpotdg(:,:,:),extf_p(:,:)
     INTEGER, SAVE, ALLOCATABLE               :: lspin(:)
  
-    INTEGER                                  :: rem, i1, j1, remove, ispec, r_bsize
+    INTEGER                                  :: rem, i1, j1, remove, ispec, r_bsize, aux_dimension
     INTEGER(INT64) :: time(10)
 
 #ifdef _USE_SCRATCHLIBRARY
@@ -2109,6 +2103,7 @@ CONTAINS
     end_loop2=fft_numbatches+3
     start_loop3=3
     end_loop3=fft_numbatches+4
+    aux_dimension=4
 
     IF(rsactive)THEN
        start_loop1=0
@@ -2117,6 +2112,7 @@ CONTAINS
        end_loop2=fft_numbatches+2
        start_loop3=2
        end_loop3=fft_numbatches+3
+       aux_dimension=2
     END IF
 
     IF(cntl%overlapp_comm_comp.AND.fft_numbatches.GT.1)THEN
@@ -2132,6 +2128,11 @@ CONTAINS
        end_loop1=fft_numbatches+1
        end_loop2=fft_numbatches+1
        end_loop3=fft_numbatches+1
+       IF( rsactive ) THEN
+          aux_dimension=1
+       ELSE
+          aux_dimension=2
+       END IF
     END IF
 
     njump=2
@@ -2156,7 +2157,7 @@ CONTAINS
 
     CALL Pre_fft_setup( tfft, nstate_local, sendsize, sendsize_rem, lspin )
 
-    IF( remember_batch .ne. fft_batchsize ) THEN
+    IF( cnti%C2_strat .ne. 1 .and. parai%cp_nogrp .gt. 1 .and. remember_batch .ne. fft_batchsize ) THEN
        remember_batch = fft_batchsize
        CALL Pre_Initialize_C2_Com( C2, nstate, las, nstate_local, i_start3, tfft%c2_com_num, tfft%c2_com_recv, fft_batchsize, fft_residual, &
                                    fft_numbatches, tfft%cp_ngws, tfft%cp_nstates, tfft%max_ngw, tfft%max_nstates )
@@ -2193,7 +2194,7 @@ CONTAINS
     IF( cntl%overlapp_comm_comp .and. tfft%do_comm(1) ) locks_omp_big( 1, :, :, : ) = .false.
 
     il_aux_array(1) = MAX( tfft%nsw(parai%me+1) * tfft%nr3 * fft_batchsize, tfft%nr1w * tfft%my_nr3p * tfft%nr2 )
-    il_aux_array(2) = 2
+    il_aux_array(2) = aux_dimension
     il_rs_array(1)  = tfft%nr1 * tfft%my_nr3p * tfft%nr2
     il_rs_array(2)  = fft_batchsize
     il_c2_array(1)  = tfft%max_ngw
@@ -2266,8 +2267,9 @@ CONTAINS
                 END IF
                 IF(bsize.NE.0)THEN
                    counter(1) = counter(1) + 1
+                   swap2=mod(ibatch,il_aux_array(2))+1
                    ! Loop over the electronic states of this batch
-                   CALL Prepare_Psi( tfft, c0( :, i_start3+1+(counter(1)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array, remswitch, mythread, last_single, counter(1) )
+                   CALL Prepare_Psi( tfft, c0( :, i_start3+1+(counter(1)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(1)-1)*fft_batchsize*2 ), aux_array(:,swap2), remswitch, mythread, last_single, counter(1) )
                    ! ==--------------------------------------------------------------==
                    ! ==  Fourier transform the wave functions to real space.         ==
                    ! ==  In the array PSI was used also the fact that the wave       ==
@@ -2283,7 +2285,7 @@ CONTAINS
                    ! ==  to swap                                                     ==
                    ! ==--------------------------------------------------------------==
                    swap=mod(ibatch,fft_numbuff)+1
-                   CALL invfft_batch( tfft, 1, bsize, 1, remswitch, mythread, counter(1), swap, f_inout1=aux_array, f_inout2=comm_send, f_inout3=comm_recv ) 
+                   CALL invfft_batch( tfft, 1, bsize, 1, remswitch, mythread, counter(1), swap, f_inout1=aux_array(:,swap2:swap2), f_inout2=comm_send, f_inout3=comm_recv ) 
                 END IF
              END IF
           END IF
@@ -2334,11 +2336,12 @@ CONTAINS
                    END IF
                    IF(bsize.NE.0)THEN
                       swap=mod(ibatch-start_loop1,fft_numbuff)+1
+                      swap2=mod(ibatch-start_loop1,il_aux_array(2))+1
                       IF( ispec .eq. 1 ) counter(3) = counter(3) + 1
                       CALL invfft_batch( tfft, 3, bsize, ispec, remswitch, mythread, counter(3), swap, &
-                                         f_inout1=comm_recv, f_inout2=aux_array( : , 1 : 1 ) )
+                                         f_inout1=comm_recv, f_inout2=aux_array(:,swap2:swap2) )
                       CALL invfft_batch( tfft, 4, bsize, ispec, remswitch, mythread, counter(3), swap, &
-                                         f_inout1=aux_array( : , 1 : 1 ), f_inout2=rs_wave(:,1:1) )
+                                         f_inout1=aux_array(:,swap2:swap2), f_inout2=rs_wave(:,1:1) )
                    END IF
                 END IF
              END IF
@@ -2360,7 +2363,7 @@ CONTAINS
                 END IF
                 IF(bsize.NE.0)THEN
                    swap=mod(ibatch-start_loop1,fft_numbuff)+1
-                   swap2=mod(ibatch-start_loop1, 2)+1
+                   swap2=mod(ibatch-start_loop1,il_aux_array(2))+1
                    start  = ispec+(ibatch-1)*fft_batchsize
                    IF(rsactive) rs_wave=>wfn_r(:,start:start)
                    
@@ -2414,9 +2417,9 @@ CONTAINS
                     i_start2=i_start2+njump
 
                     IF( ispec .eq. bsize ) THEN
-                       !$  locks_omp( mythread+1, counter(4), 13 ) = .false.
+                       !$  locks_omp( mythread+1, counter(4), 1 ) = .false.
                        !$omp flush( locks_omp )
-                       !$  IF( parai%ncpus_FFT .eq. 1 .or. .not. ANY( locks_omp( :, counter(4), 13 ) ) ) THEN
+                       !$  IF( parai%ncpus_FFT .eq. 1 .or. .not. ANY( locks_omp( :, counter(4), 1 ) ) ) THEN
                        !$     locks_calc_fw( parai%node_me+1, counter(4) ) = .false.
                        !$omp flush( locks_calc_fw )
                        !$  END IF
@@ -2468,7 +2471,7 @@ CONTAINS
              END IF
              IF(bsize.NE.0)THEN
                 swap=mod(ibatch-start_loop2,fft_numbuff)+1
-                swap2=mod(ibatch-start_loop2, 2)+1
+                swap2=mod(ibatch-start_loop2,il_aux_array(2))+1
                 counter(6) = counter(6) + 1
                 CALL fwfft_batch( tfft, 4, bsize, 1, remswitch, mythread, counter(6), swap, f_inout1=comm_recv, f_inout2=aux_array(:,swap2:swap2) )
                 CALL calc_c2_improved( aux_array(:,swap2), c2(:, i_start3+1+(counter(6)-1)*fft_batchsize*2 : i_start3+bsize*2+(counter(6)-1)*fft_batchsize*2), &
@@ -2481,9 +2484,9 @@ CONTAINS
        !CLR: In case of CP_GRP > 1: Communicate necessary parts of c0 already during the loop; right now: strat 2
        !     Should work, but needs some refining
        IF(ibatch.GT.start_loop3.AND.ibatch.LE.end_loop3.AND.cnti%C2_strat.eq.2)THEN
-          IF( parai%cp_nogrp .gt. 0 ) THEN
+          IF( parai%cp_nogrp .gt. 1 ) THEN
              counter(7) = counter(7) + 1
-             !$  locks_omp( mythread+1, counter(7), 13 ) = .false.
+             !$  locks_omp( mythread+1, counter(7), 16 ) = .false.
              IF(  mythread .eq. 0 ) THEN
                 IF(ibatch-start_loop3.LE.fft_numbatches)THEN
                    bsize=fft_batchsize
@@ -2498,7 +2501,7 @@ CONTAINS
                    IF (redist_c2) THEN
 
                       !$omp flush( locks_omp )
-                      !$  DO WHILE( ANY( locks_omp( :, counter(7), 13 ) ) )
+                      !$  DO WHILE( ANY( locks_omp( :, counter(7), 16 ) ) )
                       !$omp flush( locks_omp )
                       !$  END DO
 
